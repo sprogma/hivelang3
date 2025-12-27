@@ -8,8 +8,9 @@ $id = @{
     S=1;
     Sn=2;
     identifer=3;
-    integer=4;
-    float=5;
+    identifer_or_number=4;
+    integer=5;
+    float=6;
 }
 $special = $id.Keys
 $unbound = $special + (
@@ -38,8 +39,8 @@ let mkTok (s:string) =
     if s.StartsWith(prefix) then NonTerminal (s.Substring(prefix.Length))
     else Terminal s
 
-let cvt xs = xs |> List.map mkTok
-let v p per s = (cvt p, cvt per, cvt s)
+let convertToTypes xs = xs |> List.map mkTok
+let v p per s = (convertToTypes p, convertToTypes per, convertToTypes s)
 let rule name variants = name, variants
 
 let grammar =

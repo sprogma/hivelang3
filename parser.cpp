@@ -47,22 +47,27 @@ pair<Node *, int64_t> parseAtom(Atom &atom, char *content, int64_t position)
 
 pair<Node *, int64_t> parseVariant(Rule *rule, int64_t variantId, RuleVariant &var, char *content, int64_t position)
 {
+    int64_t max_parsed = position;
     vector<Node *> childs;
     /* apply prefix */
     for (Atom x : var.prefix)
     {
         auto [res, pos] = parseAtom(x, content, position);
-        if (!res) { return {NULL, pos}; }
+        max_parsed = max(max_parsed, pos);
+        if (!res) { return {NULL, max_parsed}; }
         childs.push_back(res);
         position = pos;
     }
     /* apply period */
+    int64_t start_position;
     while (var.period.size() > 0)
     {
+        start_position = position;
         vector<Node *> period;
         for (Atom x : var.period)
         {
             auto [res, pos] = parseAtom(x, content, position);
+            max_parsed = max(max_parsed, pos);
             if (!res) { break; }
             period.push_back(res);
             position = pos;
@@ -73,6 +78,7 @@ pair<Node *, int64_t> parseVariant(Rule *rule, int64_t variantId, RuleVariant &v
         }
         else
         {
+            position = start_position;
             break;
         }
     }
@@ -80,7 +86,8 @@ pair<Node *, int64_t> parseVariant(Rule *rule, int64_t variantId, RuleVariant &v
     for (Atom x : var.suffix)
     {
         auto [res, pos] = parseAtom(x, content, position);
-        if (!res) { return {NULL, pos}; }
+        max_parsed = max(max_parsed, pos);
+        if (!res) { return {NULL, max_parsed}; }
         childs.push_back(res);
         position = pos;
     }

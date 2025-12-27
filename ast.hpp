@@ -40,6 +40,7 @@ struct Node
 pair<Node *, int64_t>grammar_fn_spaces(char *content, int64_t position);
 pair<Node *, int64_t>grammar_fn_spaces_or_no(char *content, int64_t position);
 pair<Node *, int64_t>grammar_fn_identifer(char *content, int64_t position);
+pair<Node *, int64_t>grammar_fn_identifer_or_number(char *content, int64_t position);
 pair<Node *, int64_t>grammar_fn_integer(char *content, int64_t position);
 pair<Node *, int64_t>grammar_fn_float(char *content, int64_t position);
 

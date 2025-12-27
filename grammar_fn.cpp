@@ -29,13 +29,25 @@ pair<Node *, int64_t>grammar_fn_spaces_or_no(char *content, int64_t position)
 
 pair<Node *, int64_t>grammar_fn_identifer(char *content, int64_t position)
 {
+    int64_t start = position;
     if (!isalpha(content[position]) && content[position] != '_')
     {
         return {NULL, position};
     }
     position++;
-    int64_t start = position;
     while (isalpha(content[position]) || isdigit(content[position]) || content[position] == '_') { position++; }
+    return {new Node(grammar + 3, 0, start, position, 0, NULL), position};
+}
+
+
+pair<Node *, int64_t>grammar_fn_identifer_or_number(char *content, int64_t position)
+{
+    int64_t start = position;
+    while (isalpha(content[position]) || isdigit(content[position]) || content[position] == '_' || content[position] == '/' || content[position] == '\\' || content[position] == '.' || content[position] == '-') { position++; }
+    if (position == start)
+    {
+        return {NULL, position};
+    }
     return {new Node(grammar + 3, 0, start, position, 0, NULL), position};
 }
 

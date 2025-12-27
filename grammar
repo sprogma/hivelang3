@@ -1,11 +1,122 @@
 rule "Global" [
     v [S] [] []
-    v [Expr] [] []
+    v [_record] [] []
+    v [_union] [] []
+    v [_class] [] []
+    v [worker] [] []
+    v [worker_decl] [] []
 ]
-rule "Expr" [
-    v ["a"; Term; "b"] [] []
+rule "_record" [
+    v [Sn; "struct"; S; identifer; Sn; "{"] [var_type; S; identifer; Sn; ";"] [Sn; "}"]
 ]
-rule "Term" [
-    v ["t"] [] []
-    v ["v"] [] []
+rule "_union" [
+    v [Sn; "union"; S; identifer; Sn; "{"] [var_type; S; identifer; Sn; ";"] [Sn; "}"]
+]
+rule "_class" [
+    v [Sn; "class"; S; identifer; Sn; "{"] [var_type; S; identifer; Sn; ";"] [Sn; "}"]
+]
+rule "var_type" [
+    v [Sn; identifer] [var_type_moditifer] []
+]
+rule "var_type_moditifer" [
+    v [Sn; "[]"] [] []
+    v [Sn; "|"] [] []
+    v [Sn; "?"] [] []
+]
+rule "worker" [
+    v [attribute_list; Sn; "("; arguments_list; Sn; ")"; Sn; identifer; Sn; "("; arguments_list; Sn; ")"; code_block] [] []
+]
+rule "worker_decl" [
+    v [attribute_list; Sn; "("; arguments_list; Sn; ")"; Sn; identifer; Sn; "("; arguments_list; Sn; ")"; Sn; ";"] [] []
+]
+rule "attribute_list" [
+    v [] [Sn; "["; Sn; identifer_or_number; Sn; ":"; Sn; identifer_or_number; Sn; "]"] []
+]
+rule "arguments_list" [
+    v [] [var_type; S; identifer; Sn; ","] [var_type; S; identifer]
+    v [] [var_type; S; identifer; Sn; ","] []
+]
+rule "code_block" [
+    v [Sn; "{"] [statement] [Sn; "}"]
+]
+rule "statement" [
+    v [var_declaration; Sn; ";"] [] []
+    v [expression; Sn; ";"] [] []
+    v [Sn; "while"; expression; code_block] [] []
+    v [Sn; "match"; expression; Sn; "{"] [case_branch] [Sn; "}"]
+]
+rule "case_branch" [
+    v [expression; code_block] [] []
+]
+rule "var_declaration" [
+    v [var_type; S; identifer] [Sn; ","; Sn; identifer] [Sn; ","]
+    v [var_type; S; identifer] [Sn; ","; Sn; identifer] []
+]
+rule "expression" [
+    v [SetOperation] [] []
+]
+rule "call_arg_list" [
+    v [] [expression; Sn; ","] [expression]
+    v [] [expression; Sn; ","] []
+]
+rule "call_result_list" [
+    v [] [result_list_identifer; Sn; ","] [result_list_identifer]
+    v [] [result_list_identifer; Sn; ","] []
+]
+rule "result_list_identifer" [
+    v [Sn; "*"] [] []
+    v [Sn; identifer] [] []
+]
+rule "SetOperation" [
+    v [IndexOperation; Sn; "<-"] [IndexOperation; Sn; "<-"] [CompareOperation]
+    v [CompareOperation] [] []
+]
+rule "CompareOperation" [
+    v [AddOperation; cmp_op] [AddOperation; cmp_op] [AddOperation]
+    v [AddOperation] [] []
+]
+rule "cmp_op" [
+    v [Sn; ">"] [] []
+    v [Sn; ">="] [] []
+    v [Sn; "<"] [] []
+    v [Sn; "<="] [] []
+    v [Sn; "="] [] []
+    v [Sn; "<>"] [] []
+]
+rule "AddOperation" [
+    v [MulOperation; add_op] [MulOperation; add_op] [MulOperation]
+    v [MulOperation] [] []
+]
+rule "add_op" [
+    v [Sn; "+"] [] []
+    v [Sn; "-"] [] []
+]
+rule "MulOperation" [
+    v [QueryOperation; mul_op] [QueryOperation; mul_op] [QueryOperation]
+    v [QueryOperation] [] []
+]
+rule "mul_op" [
+    v [Sn; "*"] [] []
+    v [Sn; "/"] [] []
+]
+rule "QueryOperation" [
+    v [Sn; "?"; IndexOperation] [] []
+    v [IndexOperation; Sn; "?"; Sn; IndexOperation] [] []
+    v [IndexOperation] [] []
+]
+rule "IndexOperation" [
+    v [SimpleTerm; Sn; "["; expression; Sn; "]"] [] []
+    v [SimpleTerm] [] []
+]
+rule "SimpleTerm" [
+    v [Sn; new_operator] [] []
+    v [Sn; float] [] []
+    v [Sn; integer] [] []
+    v [Sn; identifer] ["."; identifer] []
+    v [Sn; "("; call_arg_list; Sn; ")"; Sn; identifer; attribute_list; Sn; "("; call_result_list; Sn; ")"] [] []
+    v [Sn; "("; expression; Sn; ")"] [] []
+]
+rule "new_operator" [
+    v [Sn; "new"; attribute_list; Sn; identifer; Sn; "("; call_arg_list; Sn; ")"] [] []
+    v [Sn; "new"; S; identifer; Sn; "("; call_arg_list; Sn; ")"] [] []
 ]

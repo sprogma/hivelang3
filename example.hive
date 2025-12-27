@@ -1,4 +1,55 @@
-atb
-atb
-atb
-avb
+struct pair 
+{
+    i32 x;
+    i32 y;
+}
+
+union one_or_pair
+{
+    i32 one;
+    pair two;
+}
+
+class someState
+{
+    i32 length;
+    i32[] buffer;
+}
+
+(i32 x, i32 y)add(i32? z)
+{
+    z <- x + y;
+}
+
+(i32 x, i32 y)multiply(i32? res)
+{
+    i32 sum, t;
+    sum <- 0;
+    t <- 0;
+    while t < y
+    {
+        sum <- ?(1, 2)add[on:0](*);
+    }
+    res <- sum;
+}
+
+(i32 argc)main(i32? errorCode)
+{
+    someState cls;
+    cls <- new[transferPreference:0]someState();
+    errorCode <- (4, 5)multiply[on:0](*);
+    match 4
+    {
+        2 {(4)printint();}
+        3 {(3)printint();}
+        4 {(2)printint();}
+    }
+}
+
+[DLLImport:libc.dll]
+(i8[] cmd)system(i32? res);
+
+(i8[] cmd, i32 ip)runRemote(i32? res)
+{
+    res <- 5.0?(cmd)system[on:ip](*);
+}
