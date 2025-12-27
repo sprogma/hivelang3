@@ -7,18 +7,18 @@ rule "Global" [
     v [worker_decl] [] []
 ]
 rule "_record" [
-    v [Sn; "struct"; S; identifer; Sn; "{"] [var_type; S; identifer; Sn; ";"] [Sn; "}"]
+    v [Sn; "struct"; S; identifer; Sn; "{"] [var_declaration; Sn; ";"] [Sn; "}"]
 ]
 rule "_union" [
-    v [Sn; "union"; S; identifer; Sn; "{"] [var_type; S; identifer; Sn; ";"] [Sn; "}"]
+    v [Sn; "union"; S; identifer; Sn; "{"] [var_declaration; Sn; ";"] [Sn; "}"]
 ]
 rule "_class" [
-    v [Sn; "class"; S; identifer; Sn; "{"] [var_type; S; identifer; Sn; ";"] [Sn; "}"]
+    v [Sn; "class"; S; identifer; Sn; "{"] [var_declaration; Sn; ";"] [Sn; "}"]
 ]
 rule "var_type" [
     v [Sn; identifer] [var_type_moditifer] []
 ]
-rule "var_type_moditifer" [
+rule "var_type_moditifer" [ // array indexes are fixed, not change this rule
     v [Sn; "[]"] [] []
     v [Sn; "|"] [] []
     v [Sn; "?"] [] []
@@ -46,6 +46,7 @@ rule "statement" [
     v [Sn; "match"; expression; Sn; "{"] [case_branch] [Sn; "}"]
 ]
 rule "case_branch" [
+    v [Sn; "default"; code_block] [] []
     v [expression; code_block] [] []
 ]
 rule "var_declaration" [
@@ -68,8 +69,17 @@ rule "result_list_identifer" [
     v [Sn; identifer] [] []
 ]
 rule "SetOperation" [
-    v [IndexOperation; Sn; "<-"] [IndexOperation; Sn; "<-"] [CompareOperation]
+    v [IndexOperation; Sn; "<-"] [IndexOperation; Sn; "<-"] [LogicOperation]
+    v [LogicOperation] [] []
+]
+rule "LogicOperation" [
+    v [CompareOperation; logic_op] [CompareOperation; logic_op] [CompareOperation]
     v [CompareOperation] [] []
+]
+rule "logic_op" [
+    v [Sn; "&&"] [] []
+    v [Sn; "||"] [] []
+    v [Sn; "^^"] [] []
 ]
 rule "CompareOperation" [
     v [AddOperation; cmp_op] [AddOperation; cmp_op] [AddOperation]
@@ -92,16 +102,38 @@ rule "add_op" [
     v [Sn; "-"] [] []
 ]
 rule "MulOperation" [
-    v [QueryOperation; mul_op] [QueryOperation; mul_op] [QueryOperation]
-    v [QueryOperation] [] []
+    v [BinOperation; mul_op] [BinOperation; mul_op] [BinOperation]
+    v [BinOperation] [] []
 ]
 rule "mul_op" [
     v [Sn; "*"] [] []
     v [Sn; "/"] [] []
+    v [Sn; "%"] [] []
+]
+rule "BinOperation" [
+    v [PrefixOperation; bin_op] [PrefixOperation; bin_op] [PrefixOperation]
+    v [PrefixOperation] [] []
+]
+rule "bin_op" [
+    v [Sn; "|"] [] []
+    v [Sn; "&"] [] []
+    v [Sn; "^"] [] []
+    v [Sn; "<<"] [] []
+    v [Sn; ">>"] [] []
+]
+rule "PrefixOperation" [
+    v [Sn; prefix_op; PrefixOperation] [] []
+    v [QueryOperation] [] []
+]
+rule "prefix_op" [
+    v [Sn; "+"] [] []
+    v [Sn; "-"] [] []
+    v [Sn; "!"] [] []
+    v [Sn; "~"] [] []
 ]
 rule "QueryOperation" [
-    v [Sn; "?"; IndexOperation] [] []
-    v [IndexOperation; Sn; "?"; Sn; IndexOperation] [] []
+    v [Sn; "?"; PrefixOperation] [] []
+    v [IndexOperation; Sn; "?"; Sn; PrefixOperation] [] []
     v [IndexOperation] [] []
 ]
 rule "IndexOperation" [

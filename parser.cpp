@@ -37,7 +37,7 @@ pair<Node *, int64_t> parseAtom(Atom &atom, char *content, int64_t position)
         [&](const char *const &literal) -> pair<Node*,int64_t> { 
             int64_t end = position + strlen(literal);
             if (strncmp(content + position, literal, end - position) == 0)
-                return {new Node(NULL, 0, position, end, 0, NULL), end};
+                return {new Node(NULL, 0, position, end, {}), end};
             return {NULL, position};
         },
         [&](pair<Node*, int64_t>(*function)(char *, int64_t)){ return function(content, position); }
@@ -93,17 +93,15 @@ pair<Node *, int64_t> parseVariant(Rule *rule, int64_t variantId, RuleVariant &v
     }
     if (childs.size() == 0)
     {
-        return {new Node(rule, variantId, position, position, 0, NULL), position};
+        return {new Node(rule, variantId, position, position, {}), position};
     }
-    Node **array = (Node **)malloc(sizeof(*array) * childs.size());
-    memcpy(array, childs.data(), sizeof(*array) * childs.size());
-    return {new Node(rule, variantId, childs.front()->start, childs.back()->end, childs.size(), array), position};
+    return {new Node(rule, variantId, childs.front()->start, childs.back()->end, childs), position};
 }
 
 
 pair<Node *, int64_t> parseRule(Rule *rule, char *content, int64_t position)
 {
-    printf("apply %s to %lld\n", rule->name, position);
+    // printf("apply %s to %lld\n", rule->name, position);
     map<pair<int64_t, int64_t>, pair<Node *, int64_t>>::iterator it;
     if ((it = cache.find({rule->id, position})) == cache.end())
     {
@@ -126,7 +124,7 @@ pair<Node *, int64_t> parseRule(Rule *rule, char *content, int64_t position)
             it = cache.insert({{rule->id, position}, {NULL, max_parsed_position}}).first;
         }
     }
-    printf("apply [%s] res: %p %lld\n", rule->name, it->second.first, it->second.second);
+    // printf("apply [%s] res: %p %lld\n", rule->name, it->second.first, it->second.second);
     return it->second;
 }
 

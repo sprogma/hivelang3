@@ -24,9 +24,9 @@ class someState
 (i32 x, i32 y)multiply(i32? res)
 {
     i32 sum, t;
-    sum <- 0;
+    sum <- +-+-0 | (1 & 2 ^ 3);
     t <- 0;
-    while t < y
+    while t < y || 1
     {
         sum <- ?(1, 2)add[on:0](*);
     }

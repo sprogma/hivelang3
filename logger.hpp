@@ -5,6 +5,7 @@
 #include "inttypes.h"
 
 
+void logError(const char *filename, char *content, int64_t start, int64_t end);
 void logError(const char *filename, char *content, int64_t position);
 
 

@@ -6,6 +6,12 @@ using namespace std;
 #include "logger.hpp"
 
 
+void logError(const char *filename, char *content, int64_t start, int64_t end)
+{
+    logError(filename, content, (start + end) / 2);
+}
+
+
 void logError(const char *filename, char *content, int64_t position)
 {
     char *prev_newline = content + position;

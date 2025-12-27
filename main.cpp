@@ -47,6 +47,19 @@ int main()
     
     printf("Ast builded\n");
 
+    for (auto &fn : Code->workers)
+    {
+        printf("Worker %s\n", fn->name.c_str());
+        if (fn->content)
+        {
+            printf("code:\n");
+            for (auto &x : fn->content->code)
+            {
+                printf("%d [%p]\n", x.type, x.data);
+            }
+        }
+    }
+
     free(code);
     return 0;
 }

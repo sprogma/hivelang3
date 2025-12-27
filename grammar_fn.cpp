@@ -15,7 +15,7 @@ pair<Node *, int64_t>grammar_fn_spaces(char *content, int64_t position)
     }
     int64_t start = position;
     while (isspace(content[position])) { position++; }
-    return {new Node(grammar + 1, 0, start, position, 0, NULL), position};
+    return {new Node(grammar + 1, 0, start, position, {}), position};
 }
 
 
@@ -23,7 +23,7 @@ pair<Node *, int64_t>grammar_fn_spaces_or_no(char *content, int64_t position)
 {
     int64_t start = position;
     while (isspace(content[position])) { position++; }
-    return {new Node(grammar + 2, 0, start, position, 0, NULL), position};
+    return {new Node(grammar + 2, 0, start, position, {}), position};
 }
 
 
@@ -36,7 +36,7 @@ pair<Node *, int64_t>grammar_fn_identifer(char *content, int64_t position)
     }
     position++;
     while (isalpha(content[position]) || isdigit(content[position]) || content[position] == '_') { position++; }
-    return {new Node(grammar + 3, 0, start, position, 0, NULL), position};
+    return {new Node(grammar + 3, 0, start, position, {}), position};
 }
 
 
@@ -48,7 +48,7 @@ pair<Node *, int64_t>grammar_fn_identifer_or_number(char *content, int64_t posit
     {
         return {NULL, position};
     }
-    return {new Node(grammar + 3, 0, start, position, 0, NULL), position};
+    return {new Node(grammar + 3, 0, start, position, {}), position};
 }
 
 
@@ -63,7 +63,7 @@ pair<Node *, int64_t>grammar_fn_integer(char *content, int64_t position)
         return {NULL, position};
     }
     int64_t endvalue = end - content;
-    return {new Node(grammar + 4, 0, position, endvalue, 0, NULL), endvalue};
+    return {new Node(grammar + 4, 0, position, endvalue, {}), endvalue};
 }
 
 
@@ -79,7 +79,7 @@ pair<Node *, int64_t>grammar_fn_float(char *content, int64_t position)
         return {NULL, position};
     }
     int64_t endvalue = end - content;
-    return {new Node(grammar + 5, 0, position, endvalue, 0, NULL), endvalue};
+    return {new Node(grammar + 5, 0, position, endvalue, {}), endvalue};
 }
 
 

@@ -1,6 +1,7 @@
 #ifndef AST_HPP
 #define AST_HPP
 
+#include <assert.h>
 #include <variant>
 #include <vector>
 #include <inttypes.h>
@@ -32,8 +33,23 @@ struct Node
     Rule *rule;
     int64_t variant;
     int64_t start, end;
-    int64_t childs_len;
-    Node **childs;
+    vector<Node *> childs;
+
+    Node *nonTerm(int64_t index)
+    {
+        for (auto i : childs)
+        {
+            // TODO: move 3 to const
+            if (i->rule && i->rule->id >= 3)
+            {
+                if (!index--)
+                {
+                    return i;
+                }
+            }
+        }
+        return NULL;
+    }
 };
 
 

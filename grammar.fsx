@@ -1,13 +1,13 @@
 // this file was generated using grammar_gen.ps1
 
-let prefix = "<RULE:2029986196>"
+let prefix = "<RULE:1183222092>"
 
 let Sn = prefix + "Sn"
-let float = prefix + "float"
-let integer = prefix + "integer"
-let identifer = prefix + "identifer"
 let identifer_or_number = prefix + "identifer_or_number"
 let S = prefix + "S"
+let integer = prefix + "integer"
+let identifer = prefix + "identifer"
+let float = prefix + "float"
 let Global = prefix + "Global"
 let _record = prefix + "_record"
 let _union = prefix + "_union"
@@ -27,12 +27,18 @@ let call_arg_list = prefix + "call_arg_list"
 let call_result_list = prefix + "call_result_list"
 let result_list_identifer = prefix + "result_list_identifer"
 let SetOperation = prefix + "SetOperation"
+let LogicOperation = prefix + "LogicOperation"
+let logic_op = prefix + "logic_op"
 let CompareOperation = prefix + "CompareOperation"
 let cmp_op = prefix + "cmp_op"
 let AddOperation = prefix + "AddOperation"
 let add_op = prefix + "add_op"
 let MulOperation = prefix + "MulOperation"
 let mul_op = prefix + "mul_op"
+let BinOperation = prefix + "BinOperation"
+let bin_op = prefix + "bin_op"
+let PrefixOperation = prefix + "PrefixOperation"
+let prefix_op = prefix + "prefix_op"
 let QueryOperation = prefix + "QueryOperation"
 let IndexOperation = prefix + "IndexOperation"
 let SimpleTerm = prefix + "SimpleTerm"
@@ -64,18 +70,18 @@ let grammar =
             v [worker_decl] [] []
         ]
         rule "_record" [
-            v [Sn; "struct"; S; identifer; Sn; "{"] [var_type; S; identifer; Sn; ";"] [Sn; "}"]
+            v [Sn; "struct"; S; identifer; Sn; "{"] [var_declaration; Sn; ";"] [Sn; "}"]
         ]
         rule "_union" [
-            v [Sn; "union"; S; identifer; Sn; "{"] [var_type; S; identifer; Sn; ";"] [Sn; "}"]
+            v [Sn; "union"; S; identifer; Sn; "{"] [var_declaration; Sn; ";"] [Sn; "}"]
         ]
         rule "_class" [
-            v [Sn; "class"; S; identifer; Sn; "{"] [var_type; S; identifer; Sn; ";"] [Sn; "}"]
+            v [Sn; "class"; S; identifer; Sn; "{"] [var_declaration; Sn; ";"] [Sn; "}"]
         ]
         rule "var_type" [
             v [Sn; identifer] [var_type_moditifer] []
         ]
-        rule "var_type_moditifer" [
+        rule "var_type_moditifer" [ // array indexes are fixed, not change this rule
             v [Sn; "[]"] [] []
             v [Sn; "|"] [] []
             v [Sn; "?"] [] []
@@ -103,6 +109,7 @@ let grammar =
             v [Sn; "match"; expression; Sn; "{"] [case_branch] [Sn; "}"]
         ]
         rule "case_branch" [
+            v [Sn; "default"; code_block] [] []
             v [expression; code_block] [] []
         ]
         rule "var_declaration" [
@@ -125,8 +132,17 @@ let grammar =
             v [Sn; identifer] [] []
         ]
         rule "SetOperation" [
-            v [IndexOperation; Sn; "<-"] [IndexOperation; Sn; "<-"] [CompareOperation]
+            v [IndexOperation; Sn; "<-"] [IndexOperation; Sn; "<-"] [LogicOperation]
+            v [LogicOperation] [] []
+        ]
+        rule "LogicOperation" [
+            v [CompareOperation; logic_op] [CompareOperation; logic_op] [CompareOperation]
             v [CompareOperation] [] []
+        ]
+        rule "logic_op" [
+            v [Sn; "&&"] [] []
+            v [Sn; "||"] [] []
+            v [Sn; "^^"] [] []
         ]
         rule "CompareOperation" [
             v [AddOperation; cmp_op] [AddOperation; cmp_op] [AddOperation]
@@ -149,16 +165,38 @@ let grammar =
             v [Sn; "-"] [] []
         ]
         rule "MulOperation" [
-            v [QueryOperation; mul_op] [QueryOperation; mul_op] [QueryOperation]
-            v [QueryOperation] [] []
+            v [BinOperation; mul_op] [BinOperation; mul_op] [BinOperation]
+            v [BinOperation] [] []
         ]
         rule "mul_op" [
             v [Sn; "*"] [] []
             v [Sn; "/"] [] []
+            v [Sn; "%"] [] []
+        ]
+        rule "BinOperation" [
+            v [PrefixOperation; bin_op] [PrefixOperation; bin_op] [PrefixOperation]
+            v [PrefixOperation] [] []
+        ]
+        rule "bin_op" [
+            v [Sn; "|"] [] []
+            v [Sn; "&"] [] []
+            v [Sn; "^"] [] []
+            v [Sn; "<<"] [] []
+            v [Sn; ">>"] [] []
+        ]
+        rule "PrefixOperation" [
+            v [Sn; prefix_op; PrefixOperation] [] []
+            v [QueryOperation] [] []
+        ]
+        rule "prefix_op" [
+            v [Sn; "+"] [] []
+            v [Sn; "-"] [] []
+            v [Sn; "!"] [] []
+            v [Sn; "~"] [] []
         ]
         rule "QueryOperation" [
-            v [Sn; "?"; IndexOperation] [] []
-            v [IndexOperation; Sn; "?"; Sn; IndexOperation] [] []
+            v [Sn; "?"; PrefixOperation] [] []
+            v [IndexOperation; Sn; "?"; Sn; PrefixOperation] [] []
             v [IndexOperation] [] []
         ]
         rule "IndexOperation" [
@@ -185,7 +223,7 @@ let keyToIndexMap inputMap =
     |> Seq.mapi (fun i (k, _) -> (k, i + 20))
     |> Map.ofSeq
 
-let indexMap = keyToIndexMap grammar  |> Map.add "Sn" 2  |> Map.add "float" 6  |> Map.add "integer" 5  |> Map.add "identifer" 3  |> Map.add "identifer_or_number" 4  |> Map.add "S" 1
+let indexMap = keyToIndexMap grammar  |> Map.add "Sn" 2  |> Map.add "identifer_or_number" 4  |> Map.add "S" 1  |> Map.add "integer" 5  |> Map.add "identifer" 3  |> Map.add "float" 6
 
 let printTerm = function 
     | Terminal s -> sprintf "\"%s\"" s 
