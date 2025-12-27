@@ -1,0 +1,7 @@
+rule "Expr" [
+    v ["a"; Term; "b"] [] []
+]
+rule "Term" [
+    v ["t"] [] []
+    v ["v"] [] []
+]
