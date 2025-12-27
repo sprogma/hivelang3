@@ -4,7 +4,15 @@ pushd $PSScriptRoot
 
 Write-Host "Generating f# code..." -Foreground green
 
-$unbound = @("S", "Sn", "identifer", "integer", "float") + (
+$id = @{
+    S=1;
+    Sn=2;
+    identifer=3;
+    integer=4;
+    float=5;
+}
+$special = $id.Keys
+$unbound = $special + (
     gc $Path -raw | sls "\b\s*rule\s*""(\w+)""\s*\[" -AllMatches | % Matches | % {$_.Groups[1].Value}
 ) | %{Write-Host $_; $_}
 
@@ -45,7 +53,7 @@ let keyToIndexMap inputMap =
     |> Seq.mapi (fun i (k, _) -> (k, i + 20))
     |> Map.ofSeq
 
-let indexMap = keyToIndexMap grammar |> Map.add "S" 1
+let indexMap = keyToIndexMap grammar $(($special | %{" |> Map.add ""$_"" $($id[$_])"})-join" ")
 
 let printTerm = function 
     | Terminal s -> sprintf "\"%s\"" s 
@@ -65,10 +73,12 @@ let code = "// this sourse file was generated using grammar.fsx\n\
             using namespace std;\n\
             #include \"ast.hpp\"\n\
             Rule *grammar;\n\
+            int64_t grammar_len;\n\
             Rule *generateGrammar()\n\
             {\n\
                 // allocate memory for all elements\n\
-                Rule *array = (Rule *)malloc(sizeof(*array) * " + (grammar.Count + 21).ToString() + ");\n\
+                grammar_len = " + (grammar.Count + 21).ToString() + ";\n\
+                Rule *array = (Rule *)malloc(sizeof(*array) * grammar_len);\n\
             " + File.ReadAllText("grammar.inc") + codegen + "\n\
             return array;\n\
             }"

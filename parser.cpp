@@ -8,6 +8,7 @@
 
 using namespace std;
 
+#include "logger.hpp"
 #include "ast.hpp"
 
 template<class... Fs> struct overload : Fs... { using Fs::operator()...; };
@@ -83,6 +84,10 @@ pair<Node *, int64_t> parseVariant(Rule *rule, int64_t variantId, RuleVariant &v
         childs.push_back(res);
         position = pos;
     }
+    if (childs.size() == 0)
+    {
+        return {new Node(rule, variantId, position, position, 0, NULL), position};
+    }
     Node **array = (Node **)malloc(sizeof(*array) * childs.size());
     memcpy(array, childs.data(), sizeof(*array) * childs.size());
     return {new Node(rule, variantId, childs.front()->start, childs.back()->end, childs.size(), array), position};
@@ -118,6 +123,7 @@ pair<Node *, int64_t> parseRule(Rule *rule, char *content, int64_t position)
     return it->second;
 }
 
+
 pair<vector<Node *>, bool>parse(const char *filename, Rule *baseRule, char *content)
 {
     cache.clear();
@@ -131,18 +137,7 @@ pair<vector<Node *>, bool>parse(const char *filename, Rule *baseRule, char *cont
         {
             if (!prev_was_error)
             {
-                char *prev_newline = content + pos;
-                while (prev_newline > content && *prev_newline != '\n') { prev_newline--; }
-                char *next_newline = strchr(content + pos, '\n') ?: content + strlen(content);
-                int64_t line = count(content, content + pos, '\n');
-                int64_t col = (content + pos) - prev_newline;
-                int64_t len = printf("Error: can't parse near %s:%lld:%lld> %.*s\n", filename, 
-                                                                        line, 
-                                                                        col+1, 
-                                                                        (int)(next_newline - prev_newline),
-                                                                        prev_newline);
-                for (int64_t i = 0; i < len + col - (next_newline - prev_newline) - 1; ++i) { putchar(' '); }
-                printf("^\n");
+                logError(filename, content, pos);
             }
             position = pos + 1;
             prev_was_error = true;
@@ -150,7 +145,16 @@ pair<vector<Node *>, bool>parse(const char *filename, Rule *baseRule, char *cont
         }
         else
         {
-            position = pos;
+            if (pos == position)
+            {
+                printf("Error: parsing global rule don't moved position - this is infinite loop [empty pattern matched] - skipping next simbol\n");
+                logError(filename, content, position);
+                position++;
+            }
+            else
+            {
+                position = pos;
+            }
             prev_was_error = false;
             result.push_back(res);
         }

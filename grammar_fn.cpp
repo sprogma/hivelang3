@@ -22,7 +22,7 @@ pair<Node *, int64_t>grammar_fn_spaces(char *content, int64_t position)
 pair<Node *, int64_t>grammar_fn_spaces_or_no(char *content, int64_t position)
 {
     int64_t start = position;
-    while (isalpha(content[position])) { position++; }
+    while (isspace(content[position])) { position++; }
     return {new Node(grammar + 2, 0, start, position, 0, NULL), position};
 }
 
@@ -68,4 +68,18 @@ pair<Node *, int64_t>grammar_fn_float(char *content, int64_t position)
     }
     int64_t endvalue = end - content;
     return {new Node(grammar + 5, 0, position, endvalue, 0, NULL), endvalue};
+}
+
+
+
+Rule *grammarGetRule(const char *name)
+{
+    for (int64_t i = 20; i < grammar_len; ++i)
+    {
+        if (strcmp(name, grammar[i].name) == 0)
+        {
+            return grammar + i;
+        }
+    }
+    return NULL;
 }

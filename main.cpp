@@ -4,6 +4,7 @@ using namespace std;
 
 
 #include "ast.hpp"
+#include "ir.hpp"
 
 
 int main()
@@ -16,7 +17,14 @@ int main()
 
     grammar = generateGrammar();
 
-    auto [nodes, error] = parse(filename, grammar + 20, code);
+    Rule *rule = grammarGetRule("Global");
+    if (rule == NULL)
+    {
+        printf("Error: no rule named \"Global\"");
+        return 1;
+    }
+
+    auto [nodes, error] = parse(filename, rule, code);
 
     if (error)
     {
@@ -25,6 +33,19 @@ int main()
     }
 
     printf("Parsed\n");
+    
+    printf("Convering...\n");
+    /* convert to intermediate language */
+
+    auto [Code, error2] = buildAst(filename, code, nodes);
+
+    if (error2)
+    {
+        printf("Error: building ast failed\n");
+        return 2;
+    }
+    
+    printf("Ast builded\n");
 
     free(code);
     return 0;

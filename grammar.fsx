@@ -1,12 +1,13 @@
 // this file was generated using grammar_gen.ps1
 
-let prefix = "<RULE:189848912>"
+let prefix = "<RULE:1502599581>"
 
-let S = prefix + "S"
-let Sn = prefix + "Sn"
 let identifer = prefix + "identifer"
-let integer = prefix + "integer"
 let float = prefix + "float"
+let Sn = prefix + "Sn"
+let integer = prefix + "integer"
+let S = prefix + "S"
+let Global = prefix + "Global"
 let Expr = prefix + "Expr"
 let Term = prefix + "Term"
     
@@ -27,6 +28,10 @@ let rule name variants = name, variants
 
 let grammar =
     [
+        rule "Global" [
+            v [S] [] []
+            v [Expr] [] []
+        ]
         rule "Expr" [
             v ["a"; Term; "b"] [] []
         ]
@@ -42,7 +47,7 @@ let keyToIndexMap inputMap =
     |> Seq.mapi (fun i (k, _) -> (k, i + 20))
     |> Map.ofSeq
 
-let indexMap = keyToIndexMap grammar |> Map.add "S" 1
+let indexMap = keyToIndexMap grammar  |> Map.add "identifer" 3  |> Map.add "float" 5  |> Map.add "Sn" 2  |> Map.add "integer" 4  |> Map.add "S" 1
 
 let printTerm = function 
     | Terminal s -> sprintf "\"%s\"" s 
@@ -62,10 +67,12 @@ let code = "// this sourse file was generated using grammar.fsx\n\
             using namespace std;\n\
             #include \"ast.hpp\"\n\
             Rule *grammar;\n\
+            int64_t grammar_len;\n\
             Rule *generateGrammar()\n\
             {\n\
                 // allocate memory for all elements\n\
-                Rule *array = (Rule *)malloc(sizeof(*array) * " + (grammar.Count + 21).ToString() + ");\n\
+                grammar_len = " + (grammar.Count + 21).ToString() + ";\n\
+                Rule *array = (Rule *)malloc(sizeof(*array) * grammar_len);\n\
             " + File.ReadAllText("grammar.inc") + codegen + "\n\
             return array;\n\
             }"

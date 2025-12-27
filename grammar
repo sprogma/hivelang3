@@ -1,3 +1,7 @@
+rule "Global" [
+    v [S] [] []
+    v [Expr] [] []
+]
 rule "Expr" [
     v ["a"; Term; "b"] [] []
 ]
