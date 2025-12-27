@@ -56,7 +56,7 @@ pair<Node *, int64_t> parseVariant(Rule *rule, int64_t variantId, RuleVariant &v
         position = pos;
     }
     /* apply period */
-    while (1)
+    while (var.period.size() > 0)
     {
         vector<Node *> period;
         for (Atom x : var.period)
@@ -91,6 +91,7 @@ pair<Node *, int64_t> parseVariant(Rule *rule, int64_t variantId, RuleVariant &v
 
 pair<Node *, int64_t> parseRule(Rule *rule, char *content, int64_t position)
 {
+    printf("apply %s to %lld\n", rule->name, position);
     map<pair<int64_t, int64_t>, pair<Node *, int64_t>>::iterator it;
     if ((it = cache.find({rule->id, position})) == cache.end())
     {
@@ -113,10 +114,11 @@ pair<Node *, int64_t> parseRule(Rule *rule, char *content, int64_t position)
             it = cache.insert({{rule->id, position}, {NULL, max_parsed_position}}).first;
         }
     }
+    printf("apply [%s] res: %p %lld\n", rule->name, it->second.first, it->second.second);
     return it->second;
 }
 
-pair<vector<Node *>, bool>parse(Rule *baseRule, char *content)
+pair<vector<Node *>, bool>parse(const char *filename, Rule *baseRule, char *content)
 {
     cache.clear();
     vector<Node *> result;
@@ -133,10 +135,14 @@ pair<vector<Node *>, bool>parse(Rule *baseRule, char *content)
                 while (prev_newline > content && *prev_newline != '\n') { prev_newline--; }
                 char *next_newline = strchr(content + pos, '\n') ?: content + strlen(content);
                 int64_t line = count(content, content + pos, '\n');
-                printf("Error: can't parse near file:%lld:%lld> %.*s\n", line, 
-                                                                        (content + pos) - prev_newline, 
+                int64_t col = (content + pos) - prev_newline;
+                int64_t len = printf("Error: can't parse near %s:%lld:%lld> %.*s\n", filename, 
+                                                                        line, 
+                                                                        col+1, 
                                                                         (int)(next_newline - prev_newline),
                                                                         prev_newline);
+                for (int64_t i = 0; i < len + col - (next_newline - prev_newline) - 1; ++i) { putchar(' '); }
+                printf("^\n");
             }
             position = pos + 1;
             prev_was_error = true;
@@ -144,6 +150,7 @@ pair<vector<Node *>, bool>parse(Rule *baseRule, char *content)
         }
         else
         {
+            position = pos;
             prev_was_error = false;
             result.push_back(res);
         }

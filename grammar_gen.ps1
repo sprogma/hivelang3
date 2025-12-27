@@ -51,7 +51,7 @@ let printTerm = function
     | Terminal s -> sprintf "\"%s\"" s 
     | NonTerminal s -> sprintf "array + %d" (indexMap[s])
 let printAtom xs = xs |> List.map printTerm |> String.concat ", "
-let printVariant (prf,per,suf) = $"RuleVariant(vector<Atom>{{{printAtom prf}}}, vector<Atom>{{{printAtom prf}}}, vector<Atom>{{{printAtom prf}}})"
+let printVariant (prf,per,suf) = $"RuleVariant(vector<Atom>{{{printAtom prf}}}, vector<Atom>{{{printAtom per}}}, vector<Atom>{{{printAtom suf}}})"
 let codegen = 
     grammar 
     |> Map.toList 

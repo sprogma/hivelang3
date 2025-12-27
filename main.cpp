@@ -8,14 +8,15 @@ using namespace std;
 
 int main()
 {
-    FILE *f = fopen("example.hive", "r");
+    const char *filename = "example.hive";
+    FILE *f = fopen(filename, "r");
     char *code = (char *)malloc(1024 * 1024);
     code[fread(code, 1, 1024 * 1024, f)] = 0;
     fclose(f);
 
     grammar = generateGrammar();
 
-    auto [nodes, error] = parse(grammar + 20, code);
+    auto [nodes, error] = parse(filename, grammar + 20, code);
 
     if (error)
     {

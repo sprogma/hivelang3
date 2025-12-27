@@ -48,6 +48,6 @@ extern Rule *grammar;
 
 
 Rule *generateGrammar();
-pair<vector<Node *>, bool>parse(Rule *baseRule, char *content);
+pair<vector<Node *>, bool>parse(const char *filename, Rule *baseRule, char *content);
 
 #endif
