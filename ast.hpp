@@ -16,6 +16,7 @@ using Atom = variant<const char *, Rule *, pair<Node *, int64_t>(*)(char *, int6
 
 struct RuleVariant
 {
+    bool pass;
     vector<Atom> prefix;
     vector<Atom> period;
     vector<Atom> suffix;
@@ -69,5 +70,6 @@ extern int64_t grammar_len;
 
 Rule *generateGrammar();
 pair<vector<Node *>, bool>parse(const char *filename, Rule *baseRule, char *content);
+void dumpAst(Node *x, int t = 0);
 
 #endif

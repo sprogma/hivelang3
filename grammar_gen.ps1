@@ -31,7 +31,7 @@ $(
 open System.IO
 
 type Expr = Terminal of string | NonTerminal of string
-type Variant = Expr list * Expr list * Expr list
+type Variant = int * Expr list * Expr list * Expr list
 type Rule = Variant list
 type Grammar = Map<string, Rule>
 
@@ -40,7 +40,8 @@ let mkTok (s:string) =
     else Terminal s
 
 let convertToTypes xs = xs |> List.map mkTok
-let v p per s = (convertToTypes p, convertToTypes per, convertToTypes s)
+let v p per s = (0, convertToTypes p, convertToTypes per, convertToTypes s)
+let p p per s = (1, convertToTypes p, convertToTypes per, convertToTypes s)
 let rule name variants = name, variants
 
 let grammar =
@@ -60,7 +61,7 @@ let printTerm = function
     | Terminal s -> sprintf "\"%s\"" s 
     | NonTerminal s -> sprintf "array + %d" (indexMap[s])
 let printAtom xs = xs |> List.map printTerm |> String.concat ", "
-let printVariant (prf,per,suf) = $"RuleVariant(vector<Atom>{{{printAtom prf}}}, vector<Atom>{{{printAtom per}}}, vector<Atom>{{{printAtom suf}}})"
+let printVariant (t,prf,per,suf) = $"RuleVariant({t}, vector<Atom>{{{printAtom prf}}}, vector<Atom>{{{printAtom per}}}, vector<Atom>{{{printAtom suf}}})"
 let codegen = 
     grammar 
     |> Map.toList 

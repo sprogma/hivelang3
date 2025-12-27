@@ -69,33 +69,32 @@ rule "result_list_identifer" [
     v [Sn; identifer] [] []
 ]
 rule "SetOperation" [
-    v [IndexOperation; Sn; "<-"] [IndexOperation; Sn; "<-"] [LogicOperation]
-    v [LogicOperation] [] []
+    v [QueryOperation; Sn; "<-"] [QueryOperation; Sn; "<-"] [LogicOperation]
+    p [LogicOperation] [] []
 ]
 rule "LogicOperation" [
     v [CompareOperation; logic_op] [CompareOperation; logic_op] [CompareOperation]
-    v [CompareOperation] [] []
+    p [CompareOperation] [] []
 ]
 rule "logic_op" [
     v [Sn; "&&"] [] []
     v [Sn; "||"] [] []
-    v [Sn; "^^"] [] []
 ]
 rule "CompareOperation" [
     v [AddOperation; cmp_op] [AddOperation; cmp_op] [AddOperation]
-    v [AddOperation] [] []
+    p [AddOperation] [] []
 ]
 rule "cmp_op" [
-    v [Sn; ">"] [] []
-    v [Sn; ">="] [] []
-    v [Sn; "<"] [] []
-    v [Sn; "<="] [] []
-    v [Sn; "="] [] []
     v [Sn; "<>"] [] []
+    v [Sn; ">="] [] []
+    v [Sn; "<="] [] []
+    v [Sn; ">"] [] []
+    v [Sn; "<"] [] []
+    v [Sn; "="] [] []
 ]
 rule "AddOperation" [
     v [MulOperation; add_op] [MulOperation; add_op] [MulOperation]
-    v [MulOperation] [] []
+    p [MulOperation] [] []
 ]
 rule "add_op" [
     v [Sn; "+"] [] []
@@ -103,7 +102,7 @@ rule "add_op" [
 ]
 rule "MulOperation" [
     v [BinOperation; mul_op] [BinOperation; mul_op] [BinOperation]
-    v [BinOperation] [] []
+    p [BinOperation] [] []
 ]
 rule "mul_op" [
     v [Sn; "*"] [] []
@@ -112,7 +111,7 @@ rule "mul_op" [
 ]
 rule "BinOperation" [
     v [PrefixOperation; bin_op] [PrefixOperation; bin_op] [PrefixOperation]
-    v [PrefixOperation] [] []
+    p [PrefixOperation] [] []
 ]
 rule "bin_op" [
     v [Sn; "|"] [] []
@@ -122,8 +121,8 @@ rule "bin_op" [
     v [Sn; ">>"] [] []
 ]
 rule "PrefixOperation" [
-    v [Sn; prefix_op; PrefixOperation] [] []
-    v [QueryOperation] [] []
+    v [prefix_op; PrefixOperation] [] []
+    p [QueryOperation] [] []
 ]
 rule "prefix_op" [
     v [Sn; "+"] [] []
@@ -132,21 +131,21 @@ rule "prefix_op" [
     v [Sn; "~"] [] []
 ]
 rule "QueryOperation" [
-    v [Sn; "?"; PrefixOperation] [] []
+    v [Sn; "?"; QueryOperation] [] []
     v [IndexOperation; Sn; "?"; Sn; PrefixOperation] [] []
-    v [IndexOperation] [] []
+    p [IndexOperation] [] []
 ]
 rule "IndexOperation" [
     v [SimpleTerm; Sn; "["; expression; Sn; "]"] [] []
-    v [SimpleTerm] [] []
+    p [SimpleTerm] [] []
 ]
 rule "SimpleTerm" [
     v [Sn; new_operator] [] []
-    v [Sn; float] [] []
     v [Sn; integer] [] []
+    v [Sn; float] [] []
     v [Sn; identifer] ["."; identifer] []
     v [Sn; "("; call_arg_list; Sn; ")"; Sn; identifer; attribute_list; Sn; "("; call_result_list; Sn; ")"] [] []
-    v [Sn; "("; expression; Sn; ")"] [] []
+    p [Sn; "("; expression; Sn; ")"] [] []
 ]
 rule "new_operator" [
     v [Sn; "new"; attribute_list; Sn; identifer; Sn; "("; call_arg_list; Sn; ")"] [] []

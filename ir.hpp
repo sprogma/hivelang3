@@ -83,15 +83,35 @@ struct TypeContext
     }
 };
 
-
 enum OperationType
 {
     OP_LOAD_INPUT,
     OP_LOAD_OUTPUT,
     OP_FREE_TEMP,
-    OP_NEW, OP_QUERY, OP_PUSH,
+    
+    OP_NEW_INT, // format is [dest, value]
+    OP_NEW_FLOAT, // format is [dest, value[int64_t encoded]]
+    OP_NEW_ARRAY, // format is [dest, length]
+    OP_NEW_PIPE, // format is [dest]
+    OP_NEW_PROMISE, // format is [dest]
+    OP_NEW_CLASS, // format is [dest]
+    
+    OP_PUSH_VAR, // format is [path to field, source]
+    OP_PUSH_ARRAY, // format is [array, index, path to field, source]
+    OP_PUSH_PIPE, // format is [pipe, source]
+    OP_PUSH_PROMISE, // format is [promise, source]
+    OP_PUSH_CLASS, // format is [class, path to field, source]
+    
+    OP_QUERY_VAR, 
+    OP_QUERY_ARRAY, 
+    OP_QUERY_INDEX, 
+    OP_QUERY_PIPE, 
+    OP_QUERY_PROMISE, 
+    OP_QUERY_CLASS, 
+    
     OP_JMP, OP_JZ, OP_JNZ,
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD,
+    OP_BOR, OP_BAND, OP_BXOR, OP_SHL, OP_SHR, OP_BNOT,
     OP_EQ, OP_LT, OP_LE, OP_GT, OP_GE,
 };
 
@@ -99,7 +119,7 @@ enum OperationType
 struct Operation
 {
     OperationType type;
-    int64_t *data;
+    vector<int64_t> data;
 };
 
 
@@ -135,7 +155,6 @@ struct BuildContext
     vector<TypeContext *> types;
     map<string, int64_t> names;
     map<int64_t, TypeContext *> variables;
-    map<int64_t, TypeContext *> temporaries;
     int64_t nextVarId;
     int64_t nextTempId;
     BuildResult *result;

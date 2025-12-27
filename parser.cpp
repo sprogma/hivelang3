@@ -166,3 +166,12 @@ pair<vector<Node *>, bool>parse(const char *filename, Rule *baseRule, char *cont
     }
     return {result, any_errors};
 }
+
+void dumpAst(Node *x, int t)
+{
+    for (int i = 0; i < t; ++i) { printf("   "); }
+    if (x->rule) { printf("Node [%s]\n", x->rule->name); }
+    else { printf("Literal\n"); }
+    for (auto Z : x->childs) { dumpAst(Z, t + 1); }
+}
+

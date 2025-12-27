@@ -1,6 +1,6 @@
 // this file was generated using grammar_gen.ps1
 
-let prefix = "<RULE:1183222092>"
+let prefix = "<RULE:1728113469>"
 
 let Sn = prefix + "Sn"
 let identifer_or_number = prefix + "identifer_or_number"
@@ -47,7 +47,7 @@ let new_operator = prefix + "new_operator"
 open System.IO
 
 type Expr = Terminal of string | NonTerminal of string
-type Variant = Expr list * Expr list * Expr list
+type Variant = int * Expr list * Expr list * Expr list
 type Rule = Variant list
 type Grammar = Map<string, Rule>
 
@@ -56,7 +56,8 @@ let mkTok (s:string) =
     else Terminal s
 
 let convertToTypes xs = xs |> List.map mkTok
-let v p per s = (convertToTypes p, convertToTypes per, convertToTypes s)
+let v p per s = (0, convertToTypes p, convertToTypes per, convertToTypes s)
+let p p per s = (1, convertToTypes p, convertToTypes per, convertToTypes s)
 let rule name variants = name, variants
 
 let grammar =
@@ -132,33 +133,32 @@ let grammar =
             v [Sn; identifer] [] []
         ]
         rule "SetOperation" [
-            v [IndexOperation; Sn; "<-"] [IndexOperation; Sn; "<-"] [LogicOperation]
-            v [LogicOperation] [] []
+            v [QueryOperation; Sn; "<-"] [QueryOperation; Sn; "<-"] [LogicOperation]
+            p [LogicOperation] [] []
         ]
         rule "LogicOperation" [
             v [CompareOperation; logic_op] [CompareOperation; logic_op] [CompareOperation]
-            v [CompareOperation] [] []
+            p [CompareOperation] [] []
         ]
         rule "logic_op" [
             v [Sn; "&&"] [] []
             v [Sn; "||"] [] []
-            v [Sn; "^^"] [] []
         ]
         rule "CompareOperation" [
             v [AddOperation; cmp_op] [AddOperation; cmp_op] [AddOperation]
-            v [AddOperation] [] []
+            p [AddOperation] [] []
         ]
         rule "cmp_op" [
-            v [Sn; ">"] [] []
-            v [Sn; ">="] [] []
-            v [Sn; "<"] [] []
-            v [Sn; "<="] [] []
-            v [Sn; "="] [] []
             v [Sn; "<>"] [] []
+            v [Sn; ">="] [] []
+            v [Sn; "<="] [] []
+            v [Sn; ">"] [] []
+            v [Sn; "<"] [] []
+            v [Sn; "="] [] []
         ]
         rule "AddOperation" [
             v [MulOperation; add_op] [MulOperation; add_op] [MulOperation]
-            v [MulOperation] [] []
+            p [MulOperation] [] []
         ]
         rule "add_op" [
             v [Sn; "+"] [] []
@@ -166,7 +166,7 @@ let grammar =
         ]
         rule "MulOperation" [
             v [BinOperation; mul_op] [BinOperation; mul_op] [BinOperation]
-            v [BinOperation] [] []
+            p [BinOperation] [] []
         ]
         rule "mul_op" [
             v [Sn; "*"] [] []
@@ -175,7 +175,7 @@ let grammar =
         ]
         rule "BinOperation" [
             v [PrefixOperation; bin_op] [PrefixOperation; bin_op] [PrefixOperation]
-            v [PrefixOperation] [] []
+            p [PrefixOperation] [] []
         ]
         rule "bin_op" [
             v [Sn; "|"] [] []
@@ -186,7 +186,7 @@ let grammar =
         ]
         rule "PrefixOperation" [
             v [Sn; prefix_op; PrefixOperation] [] []
-            v [QueryOperation] [] []
+            p [QueryOperation] [] []
         ]
         rule "prefix_op" [
             v [Sn; "+"] [] []
@@ -197,11 +197,11 @@ let grammar =
         rule "QueryOperation" [
             v [Sn; "?"; PrefixOperation] [] []
             v [IndexOperation; Sn; "?"; Sn; PrefixOperation] [] []
-            v [IndexOperation] [] []
+            p [IndexOperation] [] []
         ]
         rule "IndexOperation" [
             v [SimpleTerm; Sn; "["; expression; Sn; "]"] [] []
-            v [SimpleTerm] [] []
+            p [SimpleTerm] [] []
         ]
         rule "SimpleTerm" [
             v [Sn; new_operator] [] []
@@ -209,7 +209,7 @@ let grammar =
             v [Sn; integer] [] []
             v [Sn; identifer] ["."; identifer] []
             v [Sn; "("; call_arg_list; Sn; ")"; Sn; identifer; attribute_list; Sn; "("; call_result_list; Sn; ")"] [] []
-            v [Sn; "("; expression; Sn; ")"] [] []
+            p [Sn; "("; expression; Sn; ")"] [] []
         ]
         rule "new_operator" [
             v [Sn; "new"; attribute_list; Sn; identifer; Sn; "("; call_arg_list; Sn; ")"] [] []
@@ -229,7 +229,7 @@ let printTerm = function
     | Terminal s -> sprintf "\"%s\"" s 
     | NonTerminal s -> sprintf "array + %d" (indexMap[s])
 let printAtom xs = xs |> List.map printTerm |> String.concat ", "
-let printVariant (prf,per,suf) = $"RuleVariant(vector<Atom>{{{printAtom prf}}}, vector<Atom>{{{printAtom per}}}, vector<Atom>{{{printAtom suf}}})"
+let printVariant (t,prf,per,suf) = $"RuleVariant({t}, vector<Atom>{{{printAtom prf}}}, vector<Atom>{{{printAtom per}}}, vector<Atom>{{{printAtom suf}}})"
 let codegen = 
     grammar 
     |> Map.toList 

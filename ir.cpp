@@ -15,22 +15,23 @@ using namespace std;
 
 #define is(node, str) (node->rule && strcmp(node->rule->name, str) == 0)
 
-#define assert_type(node, str) assert(is(node, str))
-#define switch_type(x) switch (x->rule ? x->rule->id : 0) 
-#define switch_var(x) switch (x->variant)
+#define assert_type(node, str) do{if (!is((node), str)){if((node)->rule){printf("[Have <%s> instead]\n", (node)->rule->name);}assert(is((node), str));}}while(0)
+#define switch_type(x) switch ((x)->rule ? (x)->rule->id : 0) 
+#define switch_var(x) switch ((x)->variant)
 
+pair<vector<Operation>, int64_t> buildExpression(BuildContext *ctx, Node *node);
+vector<Operation> buildCodeBlock(BuildContext *ctx, Node *node);
 
-template<typename... Args>
-int64_t* data(Args... args) 
+void append(vector<Operation> &a, vector<Operation> &b)
 {
-    constexpr size_t N = sizeof...(Args);
-    int64_t* arr = new int64_t[N];
-    int64_t temp[] = { (int64_t)(args)... };
-    memcpy(arr, temp, sizeof(*arr) * N);
-    return arr;
+    a.insert(a.end(), b.begin(), b.end());
 }
 
-vector<Operation> buildCodeBlock(BuildContext *ctx, Node *node);
+int64_t append(vector<Operation> &a, Operation b)
+{
+    a.push_back(b);
+    return a.size() - 1;
+}
 
 string Substr(BuildContext *ctx, Node *node)
 {
@@ -60,6 +61,11 @@ TypeContext *getDerivative(BuildContext *ctx, TypeContext *type, TypeContextType
     }
     ctx->types.push_back(new TypeContext(8, derivative, {._vector={type}}));
     return ctx->types.back();
+}
+
+TypeContext *getBaseType(BuildContext *ctx, string name)
+{
+    return ctx->typeTable[name];
 }
 
 TypeContext *getType(BuildContext *ctx, Node *node)
@@ -139,7 +145,7 @@ vector<pair<string, TypeContext *>> readWorkerArgList(BuildContext *ctx, Node *n
 
 int64_t newTemp(BuildContext *ctx, TypeContext *type)
 {
-    ctx->temporaries[ctx->nextTempId] = type;
+    ctx->variables[ctx->nextTempId] = type;
     return ctx->nextTempId++;
 }
 
@@ -147,15 +153,516 @@ void freeTemp(vector<Operation> &code, int64_t id)
 {
     if (id != -1)
     {
-        code.push_back({OP_FREE_TEMP, data(id)});
+        code.push_back({OP_FREE_TEMP, {id}});
     }
+}
+
+pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
+{
+    if (!is(node, "SimpleTerm"))
+    {
+        return buildExpression(ctx, node);
+    }
+    printf("Simple Term operation\n");
+
+    vector<Operation> ops;
+    
+    switch_var(node)
+    {
+        case 0: // new operator
+        {
+            printf("New operator is unsupported for now\n");
+            break;
+        }
+        case 1: // integer
+        {
+            char *end;
+            int64_t intValue = strtoll(Substr(ctx, node->nonTerm(0)).c_str(), &end, 0);
+            int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
+            append(ops, {OP_NEW_INT, {tmp, intValue}});
+            return {ops, tmp};
+        }
+        case 2: // float
+        {
+            char *end;
+            double value = strtod(Substr(ctx, node->nonTerm(0)).c_str(), &end);
+            int64_t intValue = *(int64_t *)&value;
+            int64_t tmp = newTemp(ctx, getBaseType(ctx, "f64"));
+            append(ops, {OP_NEW_FLOAT, {tmp, intValue}});
+            return {ops, tmp};
+        }
+        case 3: // identifer.identifer.identifer...
+        {
+            /* load variable */
+            string name = Substr(ctx, node->nonTerm(0));
+            int64_t varId = ctx->names[name];
+            TypeContext *type = ctx->variables[varId];
+            
+            vector<int64_t> args;
+            args.push_back(varId);
+            
+            while (node->nonTerm(args.size()))
+            {
+                /* get field index */
+                string field = Substr(ctx, node->nonTerm(args.size()));
+                if (type->type != TYPE_RECORD)
+                {
+                    printf("[Usage of dot on not structure object]\n");
+                    logError(ctx->filename, ctx->code, node->nonTerm(args.size())->start, node->nonTerm(args.size())->end);
+                    break;
+                }
+                int64_t fieldId = type->_struct.names[field];
+                args.push_back(fieldId);
+                type = type->_struct.fields[fieldId];
+            }
+
+            int64_t tmp = newTemp(ctx, type);
+            args.insert(args.begin(), tmp);
+            
+            append(ops, {OP_QUERY_VAR, args});
+            return {ops, tmp};
+        }
+        case 4: // fn call...
+        {
+            printf("Calls are unsupported for now\n");
+            return {{}, -1};
+        }
+    }
+    return {{}, -1};
+}
+
+pair<vector<Operation>, int64_t> buildIndexOperation(BuildContext *ctx, Node *node)
+{
+    if (!is(node, "IndexOperation"))
+    {
+        return buildSimpleTerm(ctx, node);
+    }
+    printf("Index operation\n");
+    
+    auto [t, pos] = buildSimpleTerm(ctx, node->nonTerm(1));
+    auto [tIndex, posIndex] = buildExpression(ctx, node->nonTerm(1));
+
+    vector<Operation> ops;
+    TypeContext *elemType = ctx->variables[pos];    
+    switch (elemType->type)
+    {            
+        case TYPE_CLASS:
+        case TYPE_UNION:
+        case TYPE_RECORD:
+        case TYPE_SCALAR:
+        case TYPE_PIPE:
+        case TYPE_PROMISE:
+            printf("Can't use index on class/union/record/scalar/pipe/promise\n");
+            logError(ctx->filename, ctx->code, node->start, node->end);
+            return {{}, -1};
+        case TYPE_ARRAY:
+        {
+            int64_t tmp = newTemp(ctx, elemType->_vector.base);
+            append(ops, t);
+            append(ops, tIndex);
+            append(ops, {OP_QUERY_INDEX, {tmp, pos, posIndex}});
+            freeTemp(ops, pos);
+            freeTemp(ops, posIndex);
+            return {ops, tmp};
+        }
+    }
+}
+
+pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *node)
+{
+    if (!is(node, "QueryOperation"))
+    {
+        return buildIndexOperation(ctx, node);
+    }
+    printf("Query operation\n");
+    switch_var(node)
+    {
+        case 0: // prefix query
+        {
+            vector<Operation> ops;
+            auto [t, pos] = buildQueryOperation(ctx, node->nonTerm(1));
+            TypeContext *elemType = ctx->variables[pos];
+            switch (elemType->type)
+            {            
+                case TYPE_CLASS:
+                case TYPE_UNION:
+                case TYPE_RECORD:
+                case TYPE_SCALAR:
+                    printf("Can't use prefix query on class/union/record/scalar\n");
+                    logError(ctx->filename, ctx->code, node->start, node->end);
+                    return {{}, -1};
+                case TYPE_ARRAY:
+                {
+                    int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
+                    append(ops, {OP_QUERY_ARRAY, {tmp, pos}}); 
+                    freeTemp(ops, pos);
+                    return {ops, tmp};
+                }
+                case TYPE_PIPE:
+                {
+                    int64_t tmp = newTemp(ctx, elemType->_vector.base);
+                    append(ops, {OP_QUERY_PIPE, {tmp, pos}}); 
+                    freeTemp(ops, pos);
+                    return {ops, tmp};
+                }
+                case TYPE_PROMISE:
+                {
+                    int64_t tmp = newTemp(ctx, elemType->_vector.base);
+                    append(ops, {OP_QUERY_PROMISE, {tmp, pos}}); 
+                    freeTemp(ops, pos);
+                    return {ops, tmp};
+                }
+            }
+            return {{}, -1};
+        }
+        case 1: // infix query
+        {
+            printf("Infix queries are not implemented now\n");
+            return {{}, -1};
+        }   
+    }
+    return {{}, -1};    
+}
+
+
+pair<vector<Operation>, int64_t> buildPrefixOperation(BuildContext *ctx, Node *node)
+{
+    if (!is(node, "PrefixOperation"))
+    {
+        return buildQueryOperation(ctx, node);
+    }
+    printf("Prefix operation\n");
+    vector<Operation> ops;
+    auto [t, pos] = buildPrefixOperation(ctx, node->nonTerm(1));
+    
+    int64_t resultPosition = pos;
+    
+    append(ops, t);
+    
+    switch_var(node->nonTerm(0))
+    {
+        case 0: // +
+        { return {t, resultPosition}; }
+        case 1: // -
+        { 
+            int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
+            append(ops, {OP_NEW_INT, {tmp, 0}}); 
+            append(ops, {OP_SUB, {pos, tmp, pos}}); 
+            freeTemp(ops, tmp);
+            break; 
+        }
+        case 2: // !
+        { 
+            int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
+            append(ops, {OP_JZ, {3, pos}});
+            append(ops, {OP_NEW_INT, {tmp, -1}});
+            append(ops, {OP_JMP, {2, pos}});
+            append(ops, {OP_NEW_INT, {tmp, 0}});
+            freeTemp(ops, pos);
+            resultPosition = tmp;
+            break; 
+        }
+        case 3: // ~ 
+        {  append(ops, {OP_BNOT, {pos, pos}}); break; }
+    }
+    return {ops, resultPosition};
+}
+
+pair<vector<Operation>, int64_t> buildBinOperation(BuildContext *ctx, Node *node)
+{
+    if (!is(node, "BinOperation"))
+    {
+        return buildPrefixOperation(ctx, node);
+    }
+    printf("Bin operation\n");
+    vector<Operation> ops;
+    auto [t, pos] = buildPrefixOperation(ctx, node->nonTerm(0));
+    int64_t id = 1;
+    while (node->nonTerm(id))
+    {
+        auto [t2, pos2] = buildPrefixOperation(ctx, node->nonTerm(id + 1));
+        
+        int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
+        
+        append(ops, t);
+        append(ops, t2);
+        
+        switch_var(node->nonTerm(id + 0))
+        {
+            case 0: // |
+            { append(ops, {OP_BOR, {tmp, pos, pos2}}); break; }
+            case 1: // &
+            { append(ops, {OP_BAND, {tmp, pos, pos2}}); break; }
+            case 2: // ^
+            { append(ops, {OP_BXOR, {tmp, pos, pos2}}); break; }
+            case 3: // <<
+            { append(ops, {OP_SHL, {tmp, pos, pos2}}); break; }
+            case 4: // >>
+            { append(ops, {OP_SHR, {tmp, pos, pos2}}); break; }
+        }
+        
+        freeTemp(ops, pos2);
+        freeTemp(ops, pos);
+        
+        pos = tmp;
+        t = ops;
+        ops.clear();
+        id += 2;
+    }
+    return {t, pos};
+}
+
+pair<vector<Operation>, int64_t> buildMulOperation(BuildContext *ctx, Node *node)
+{
+    if (!is(node, "MulOperation"))
+    {
+        return buildBinOperation(ctx, node);
+    }
+    printf("Mul operation\n");
+    vector<Operation> ops;
+    auto [t, pos] = buildBinOperation(ctx, node->nonTerm(0));
+    int64_t id = 1;
+    while (node->nonTerm(id))
+    {
+        auto [t2, pos2] = buildBinOperation(ctx, node->nonTerm(id + 1));
+        
+        int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
+        
+        append(ops, t);
+        append(ops, t2);
+        
+        switch_var(node->nonTerm(id + 0))
+        {
+            case 0: // *
+            { append(ops, {OP_MUL, {tmp, pos, pos2}}); break; }
+            case 1: // /
+            { append(ops, {OP_DIV, {tmp, pos, pos2}}); break; }
+            case 2: // %
+            { append(ops, {OP_MOD, {tmp, pos, pos2}}); break; }
+        }
+        
+        freeTemp(ops, pos2);
+        freeTemp(ops, pos);
+        
+        pos = tmp;
+        t = ops;
+        ops.clear();
+        id += 2;
+    }
+    return {t, pos};
+}
+
+pair<vector<Operation>, int64_t> buildAddOperation(BuildContext *ctx, Node *node)
+{
+    if (!is(node, "AddOperation"))
+    {
+        return buildMulOperation(ctx, node);
+    }
+    printf("Add operation\n");
+    vector<Operation> ops;
+    auto [t, pos] = buildMulOperation(ctx, node->nonTerm(0));
+    int64_t id = 1;
+    while (node->nonTerm(id))
+    {
+        auto [t2, pos2] = buildMulOperation(ctx, node->nonTerm(id + 1));
+        
+        int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
+        
+        append(ops, t);
+        append(ops, t2);
+        
+        switch_var(node->nonTerm(id + 0))
+        {
+            case 0: // +
+            { append(ops, {OP_ADD, {tmp, pos, pos2}}); break; }
+            case 1: // -
+            { append(ops, {OP_SUB, {tmp, pos, pos2}}); break; }
+        }
+        
+        freeTemp(ops, pos2);
+        freeTemp(ops, pos);
+        
+        pos = tmp;
+        t = ops;
+        ops.clear();
+        id += 2;
+    }
+    return {t, pos};
+}
+
+pair<vector<Operation>, int64_t> buildCompareOperation(BuildContext *ctx, Node *node)
+{
+    if (!is(node, "CompareOperation"))
+    {
+        return buildAddOperation(ctx, node);
+    }
+    printf("Compare operation\n");
+    vector<Operation> ops;
+    auto [t, pos] = buildAddOperation(ctx, node->nonTerm(0));
+    int64_t id = 1;
+    while (node->nonTerm(id))
+    {
+        auto [t2, pos2] = buildAddOperation(ctx, node->nonTerm(id + 1));
+        
+        int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
+        
+        append(ops, t);
+        append(ops, t2);
+        
+        switch_var(node->nonTerm(id + 0))
+        {
+            case 0: // <> 
+            { append(ops, {OP_EQ, {tmp, pos, pos2}}); break; }
+            case 1: // >=
+            { append(ops, {OP_GE, {tmp, pos, pos2}}); break; }
+            case 2: // <=
+            { append(ops, {OP_LE, {tmp, pos, pos2}}); break; }
+            case 3: // >
+            { append(ops, {OP_GT, {tmp, pos, pos2}}); break; }
+            case 4: // <
+            { append(ops, {OP_LT, {tmp, pos, pos2}}); break; }
+            case 5: // =
+            { append(ops, {OP_EQ, {tmp, pos, pos2}}); break; }
+        }
+        
+        freeTemp(ops, pos2);
+        freeTemp(ops, pos);
+        
+        pos = tmp;
+        t = ops;
+        ops.clear();
+        id += 2;
+    }
+    return {t, pos};
+}
+
+pair<vector<Operation>, int64_t> buildLogicOperation(BuildContext *ctx, Node *node)
+{
+    if (!is(node, "LogicOperation"))
+    {
+        return buildCompareOperation(ctx, node);
+    }
+    printf("Logic operation\n");
+    vector<Operation> ops;
+    auto [t, pos] = buildCompareOperation(ctx, node->nonTerm(0));
+    int64_t id = 1;
+    while (node->nonTerm(id))
+    {
+        auto [t2, pos2] = buildCompareOperation(ctx, node->nonTerm(id + 1));
+        int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
+        switch_var(node->nonTerm(id + 0))
+        {
+            case 0: // &&
+            {
+                append(ops, t);
+                int64_t A_jmp = append(ops, {OP_JZ, {-1, pos}});
+                freeTemp(ops, pos);
+                append(ops, t2);
+                append(ops, {OP_NEW_INT, {tmp, -1}});
+                int64_t B_jmp = append(ops, {OP_JNZ, {-1, pos2}});
+                freeTemp(ops, pos2);
+                int64_t pushFalse = append(ops, {OP_NEW_INT, {tmp, 0}});
+                
+                ops[A_jmp].data[0] = pushFalse - A_jmp;
+                ops[B_jmp].data[0] = ops.size() - B_jmp;
+                break;
+            }
+            case 1: // ||
+            {
+                append(ops, t);
+                int64_t A_jmp = append(ops, {OP_JNZ, {-1, pos}});
+                freeTemp(ops, pos);
+                append(ops, t2);
+                append(ops, {OP_NEW_INT, {tmp, 0}});
+                int64_t B_jmp = append(ops, {OP_JZ, {-1, pos2}});
+                freeTemp(ops, pos2);
+                int64_t pushTrue = append(ops, {OP_NEW_INT, {tmp, -1}});
+                
+                ops[A_jmp].data[0] = pushTrue - A_jmp;
+                ops[B_jmp].data[0] = ops.size() - B_jmp;   
+                break;
+            }
+        }
+        pos = tmp;
+        t = ops;
+        ops.clear();
+        id += 2;
+    }
+    return {t, pos};
+}
+
+pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node)
+{
+    if (!is(node, "SetOperation"))
+    {
+        return buildLogicOperation(ctx, node);
+    }
+    /* build rightmost part */
+    auto [res, dataPos] = buildLogicOperation(ctx, node->childs.back());
+    vector<Operation> ops;
+    append(ops, res);
+    /* set to each part in left */
+    for (auto x : node->childs)
+    {
+        if (is(x, "SimpleTerm"))
+        {
+            switch_var(x)
+            {
+                case 0: printf("[Can't push to NEW operator]\n"); logError(ctx->filename, ctx->code, x->start, x->end); break;
+                case 1: printf("[Can't push to integer constant]\n"); logError(ctx->filename, ctx->code, x->start, x->end); break;
+                case 2: printf("[Can't push to float constant]\n"); logError(ctx->filename, ctx->code, x->start, x->end); break;
+                case 3:
+                {
+                    /* push to variable/structure */
+                    if (ctx->names.find(Substr(ctx, x->nonTerm(0))) == ctx->names.end())
+                    {
+                        printf("[Unknown variable name:]\n");
+                        logError(ctx->filename, ctx->code, x->nonTerm(0)->start, x->nonTerm(0)->end);
+                        break;
+                    }
+                    /* get variable */
+                    int64_t varId = ctx->names[Substr(ctx, x->nonTerm(0))];
+                    vector<int64_t> args;
+                    args.push_back(varId);
+                    TypeContext *type = ctx->variables[varId];
+                    while (x->nonTerm(args.size()))
+                    {
+                        /* encode path to field */
+                        string field = Substr(ctx, x->nonTerm(args.size()));
+                        if (type->type != TYPE_RECORD)
+                        {
+                            printf("[Usage of dot on not structure object]\n");
+                            logError(ctx->filename, ctx->code, x->nonTerm(args.size())->start, x->nonTerm(args.size())->end);
+                            break;
+                        }
+                        int64_t fieldId = type->_struct.names[field];
+                        args.push_back(fieldId);
+                        type = type->_struct.fields[fieldId];
+                    }
+                    /* add command */
+                    args.push_back(dataPos);
+                    append(ops, {OP_PUSH_VAR, args});
+                    break;
+                }
+                case 4: printf("[Can't push to worker call]\n"); logError(ctx->filename, ctx->code, x->start, x->end); break;
+            }
+        }
+        else if (is(x, "QueryOperation"))
+        {
+            printf("push to query... For now, this isn't supported...\n");
+        }
+        else if (is(x, "IndexOperation"))
+        {
+            printf("push to index... For now, this isn't supported...\n");
+        }
+    }
+    return {ops, dataPos};
 }
 
 pair<vector<Operation>, int64_t> buildExpression(BuildContext *ctx, Node *node)
 {
-    (void)ctx;
     assert_type(node, "expression");
-    return {};
+    return buildSetOperation(ctx, node->nonTerm(0));
 }
 
 vector<Operation> buildStatement(BuildContext *ctx, Node *node)
@@ -188,7 +695,7 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
         {
             printf("statement expression\n");
             auto [expr, exprPos] = buildExpression(ctx, node->nonTerm(0)); 
-            ops.insert(ops.end(), expr.begin(), expr.end());
+            append(ops, expr);
             freeTemp(ops, exprPos);
             break;
         }
@@ -197,10 +704,10 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
             printf("statement while\n");
             auto [guard, guardPos] = buildExpression(ctx, node->nonTerm(0)); 
             auto body = buildCodeBlock(ctx, node->nonTerm(1));
-            ops.push_back({OP_JMP, data(1 + body.size())});
-            ops.insert(ops.end(), body.begin(), body.end());
-            ops.insert(ops.end(), guard.begin(), guard.end());
-            ops.push_back({OP_JNZ, data(- guard.size() - body.size(), guardPos)});
+            append(ops, {OP_JMP, {1 + (int64_t)body.size()}});
+            append(ops, body);
+            append(ops, guard);
+            append(ops, {OP_JNZ, {- (int64_t)guard.size() - (int64_t)body.size(), guardPos}});
             freeTemp(ops, guardPos);
             break;
         }
@@ -226,12 +733,12 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
                             auto [pattern, patternPos] = buildExpression(ctx, var->nonTerm(0));
                             auto block = buildCodeBlock(ctx, var->nonTerm(1));
                             int64_t temp = ctx->nextTempId++;
-                            ops.insert(ops.end(), pattern.begin(), pattern.end());
-                            ops.push_back({OP_EQ, data(temp, matchPos, patternPos)});
+                            append(ops, pattern);
+                            append(ops, {OP_EQ, {temp, matchPos, patternPos}});
                             freeTemp(ops, patternPos);
-                            ops.push_back({OP_JNZ, data(1 + block.size(), temp)});
+                            append(ops, {OP_JNZ, {2 + (int64_t)block.size(), temp}});
                             freeTemp(ops, temp);
-                            ops.insert(ops.end(), block.begin(), block.end());
+                            append(ops, block);
                             break;
                         }
                     }
@@ -251,7 +758,7 @@ vector<Operation> buildCodeBlock(BuildContext *ctx, Node *node)
     while (node->nonTerm(id))
     {
         auto res = buildStatement(ctx, node->nonTerm(id));
-        ops.insert(ops.end(), res.begin(), res.end());
+        append(ops, res);
         id++;
     }
     return ops;
@@ -266,7 +773,6 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     ctx->nextTempId = 100000;
     ctx->names.clear();
     ctx->variables.clear();
-    ctx->temporaries.clear();
     
     wk->content = new WorkerContext();
     /* create variables for inputs + code to load them */
@@ -275,7 +781,7 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     {
         int64_t varId = ctx->names[name] = ctx->nextVarId++;
         ctx->variables[varId] = type;
-        wk->content->code.push_back({OP_LOAD_INPUT, data(inputId++, varId)});
+        wk->content->code.push_back({OP_LOAD_INPUT, {inputId++, varId}});
     }
     /* create variables for outputs? */
     int64_t outputId = 0;
@@ -283,11 +789,11 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     {
         int64_t varId = ctx->names[name] = ctx->nextVarId++;
         ctx->variables[varId] = type;
-        wk->content->code.push_back({OP_LOAD_OUTPUT, data(outputId++, varId)});
+        wk->content->code.push_back({OP_LOAD_OUTPUT, {outputId++, varId}});
     }
     /* build body */
     auto res = buildCodeBlock(ctx, node);
-    wk->content->code.insert(wk->content->code.end(), res.begin(), res.end());
+    append(wk->content->code, res);
 }
 
 
@@ -352,8 +858,29 @@ BuildContext *initializateContext(const char *filename, char *source)
     return ctx;
 }
 
+
+Node *compressNode(Node *x)
+{
+    if (!x->rule) { return x; }
+    if (x->rule->variants[x->variant].pass)  
+    { 
+        return compressNode(x->nonTerm(0)); 
+    }
+    for (auto &t : x->childs)
+    {
+        t = compressNode(t);
+    }
+    return x;
+}
+
+
 pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<Node *>nodes)
 {
+    /* compress AST tree */
+    for (auto &node : nodes)
+    {
+        node = compressNode(node);
+    }
     BuildContext *ctx = initializateContext(filename, source);
     for (auto &node : nodes)
     {
