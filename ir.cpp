@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <limits.h>
+#include <stdint.h>
 #include <map>
 #include <string>
 #include <vector>
@@ -18,6 +20,16 @@ using namespace std;
 #define assert_type(node, str) do{if (!is((node), str)){if((node)->rule){printf("[Have <%s> instead]\n", (node)->rule->name);}assert(is((node), str));}}while(0)
 #define switch_type(x) switch ((x)->rule ? (x)->rule->id : 0) 
 #define switch_var(x) switch ((x)->variant)
+
+
+/* pre-intermediate representation */
+struct Operation
+{
+    OperationType type;
+    vector<int64_t> data;
+    map<string, string> attributes = {};
+};
+
 
 pair<vector<Operation>, int64_t> buildExpression(BuildContext *ctx, Node *node);
 vector<Operation> buildCodeBlock(BuildContext *ctx, Node *node);
@@ -116,11 +128,11 @@ pair<bool, TypeContext *> operation_types(TypeContext *t1, TypeContext *t2)
 
 WorkerDeclarationContext *getWorkerByName(BuildContext *ctx, string name)
 {
-    for (auto &x : ctx->result->workers)
+    for (auto &[fn, key] : ctx->result->workers)
     {
-        if (x->name == name)
+        if (fn->name == name)
         {
-            return x;
+            return fn;
         }
     }
     return NULL;
@@ -142,6 +154,17 @@ TypeContext *getDerivative(BuildContext *ctx, TypeContext *type, TypeContextType
 TypeContext *getBaseType(BuildContext *ctx, string name)
 {
     return ctx->typeTable[name];
+}
+
+TypeContext *getIntegerType(BuildContext *ctx, int64_t x)
+{
+    if (x >= INT8_MIN && x <= INT8_MAX) return getBaseType(ctx, "i8");
+    if (x >= 0 && (uint64_t)x <= UINT8_MAX) return getBaseType(ctx, "u8");
+    if (x >= INT16_MIN && x <= INT16_MAX) return getBaseType(ctx, "i16");
+    if (x >= 0 && (uint64_t)x <= UINT16_MAX) return getBaseType(ctx, "u16");
+    if (x >= INT32_MIN && x <= INT32_MAX)  return getBaseType(ctx, "i32");
+    if (x >= 0 && (uint64_t)x <= UINT32_MAX) return getBaseType(ctx, "u32");
+    return getBaseType(ctx, "i64");
 }
 
 TypeContext *getType(BuildContext *ctx, Node *node)
@@ -345,7 +368,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
         {
             char *end;
             int64_t intValue = strtoll(Substr(ctx, node->nonTerm(0)).c_str(), &end, 0);
-            int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
+            int64_t tmp = newTemp(ctx, getIntegerType(ctx, intValue));
             append(ops, {OP_NEW_INT, {tmp, intValue}});
             return {ops, tmp};
         }
@@ -400,6 +423,13 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
 
             /* build all arguments */
             vector<int64_t> args;
+            
+            /* load function by name */
+            WorkerDeclarationContext *fn = getWorkerByName(ctx, name);
+            printf("Call of %s...\n", name.c_str());
+
+            args.push_back(ctx->result->workers[fn]);
+            
             for (auto ch : argList->childs)
             {
                 if (is(ch, "expression"))
@@ -409,9 +439,6 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                     args.push_back(pos);
                 }
             }
-            /* load function by name */
-            WorkerDeclarationContext *fn = getWorkerByName(ctx, name);
-            printf("Call of %s...\n", name.c_str());
             
             /* declare output variables */
             int64_t tmpResult = -1, outId = 0;
@@ -1408,6 +1435,8 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     ctx->nextTempId = FIRST_TEMP_ID;
     ctx->names.clear();
     ctx->variables.clear();
+
+    vector<Operation> ops;
     
     wk->content = new WorkerContext();
     /* create variables for inputs + code to load them */
@@ -1416,7 +1445,7 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     {
         int64_t varId = ctx->names[name] = ctx->nextVarId++;
         ctx->variables[varId] = type;
-        wk->content->code.push_back({OP_LOAD_INPUT, {inputId++, varId}});
+        append(ops, {OP_LOAD_INPUT, {inputId++, varId}});
     }
     /* create variables for outputs? */
     int64_t outputId = 0;
@@ -1424,13 +1453,50 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     {
         int64_t varId = ctx->names[name] = ctx->nextVarId++;
         ctx->variables[varId] = type;
-        wk->content->code.push_back({OP_LOAD_OUTPUT, {outputId++, varId}});
+        append(ops, {OP_LOAD_OUTPUT, {outputId++, varId}});
     }
     /* build body */
     auto res = buildCodeBlock(ctx, node);
-    append(wk->content->code, res);
-    /* save variables */
+    append(ops, res);
+    /* convert Operations to Blocks */
+    vector<OperationBlock *> data(ops.size());
+    map<OperationBlock *, int64_t> blockId;
+    /* fill data */
+    for (int64_t i = 0; i < (int64_t)ops.size(); ++i)
+    {
+        data[i] = new OperationBlock(ops[i].type, ops[i].data, ops[i].attributes, {});
+        blockId[data[i]] = i;
+    }
+    /* fill links */
+    for (int64_t i = 0; i < (int64_t)ops.size(); ++i)
+    {
+        if (data[i]->type == OP_JMP)
+        {
+            int64_t pos = data[i]->data.front();
+            data[i]->data.erase(data[i]->data.begin());
+            data[i]->next.push_back(i + pos >= (int64_t)data.size() ? NULL : data[i + pos]);
+        }
+        else
+        {
+            data[i]->next.push_back(i + 1 == (int64_t)ops.size() ? NULL : data[i + 1]);
+            if (IS_JUMP(data[i]->type))
+            {
+                int64_t pos = data[i]->data.front();
+                data[i]->data.erase(data[i]->data.begin());
+                data[i]->next.push_back(i + pos >= (int64_t)data.size() ? NULL : data[i + pos]);
+            }
+        }
+        for (auto &j : data[i]->next)
+        {
+            data[blockId[j]]->prev.insert(data[i]);
+        }
+    }
+    /* set data */
+    wk->content->entry = data.front();
+    wk->content->code = data;
     wk->content->variables = ctx->variables;
+    wk->content->nextVarId = ctx->nextVarId;
+    wk->content->nextTempId = ctx->nextTempId;
 }
 
 void addWorkerDefinition(BuildContext *ctx, Node *node, bool with_code)
@@ -1450,13 +1516,15 @@ void addWorkerDefinition(BuildContext *ctx, Node *node, bool with_code)
     
     printf("Worker %s declaration generated\n", wk->name.data());
 
-    ctx->result->workers.push_back(wk);
+    ctx->result->workers[wk] = ctx->result->nextWorkerId++;
 }
 
 BuildContext *initializateContext(const char *filename, char *source, map<string, string> configs)
 {
     BuildContext *ctx = new BuildContext(configs, filename, source);
     ctx->result = new BuildResult();
+    ctx->result->cost = 0;
+    ctx->result->nextWorkerId = 0;
     
     /* add builtin types */
 
@@ -1555,7 +1623,7 @@ pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<No
     }
     
     int64_t id = 0;
-    for (auto &fn : ctx->result->workers)
+    for (auto &[fn, key] : ctx->result->workers)
     {
         ctx->result->names[fn->name] = id++;
     }
@@ -1572,7 +1640,8 @@ void dumpIR(WorkerDeclarationContext *fn)
         printf("code:\n");
         for (auto &x : fn->content->code)
         {
-            switch (x.type)
+            printf("%p ", x);
+            switch (x->type)
             {
             
                 case OP_LOAD_INPUT: printf("OP_LOAD_INPUT "); break;
@@ -1625,15 +1694,23 @@ void dumpIR(WorkerDeclarationContext *fn)
                 case OP_GE: printf("OP_GE "); break;
             }
             printf("[ ");
-            for (int64_t t : x.data)
+            for (int64_t t : x->data)
             {
                 printf("%lld ", t);
             }
             printf("]");
-            if (x.attributes.size() > 0)
+            for (int64_t i = 0; i < (int64_t)x->next.size(); ++i)
+            {
+                printf(" next=%p ", x->next[i]);
+            }
+            for (auto &i : x->prev)
+            {
+                printf(" [prev=%p] ", i);
+            }
+            if (x->attributes.size() > 0)
             {
                 printf(" { ");
-                for (auto [k, v] : x.attributes)
+                for (auto &[k, v] : x->attributes)
                 {
                     printf("%s=%s ", k.c_str(), v.c_str());
                 }

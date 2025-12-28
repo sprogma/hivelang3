@@ -11,7 +11,19 @@ using namespace std;
 class OptimizationLayer
 {
 public:
-    virtual void Apply(BuildResult *state) = 0;
+    virtual void Apply(BuildResult *state)
+    {
+        (void)state;
+    }
+    
+    virtual vector<BuildResult *> Apply(vector<BuildResult *>state)
+    {
+        for (auto &st : state)
+        {
+            Apply(st);
+        }
+        return state;
+    }
     virtual ~OptimizationLayer() {}
 };
 
@@ -25,12 +37,18 @@ public:
         layers.push_back(layer);
     }
 
-    void Apply(BuildResult *input)
+    BuildResult *Apply(BuildResult *input)
     {
+        vector<BuildResult *> variants {input};
+
+        /* for now, simply apply each layer */
+        
         for (auto lay : layers)
         {
-            lay->Apply(input);
+            variants = lay->Apply(variants);
         }
+        
+        return variants[0];
     }
 
     ~Optimizer()
@@ -43,15 +61,15 @@ public:
 };
 
 BuildResult *forkResult(BuildResult *input);
+WorkerDeclarationContext *forkWorker(WorkerDeclarationContext *input);
 
+void freeTemp(WorkerDeclarationContext *wk, OperationBlock *code, int64_t id);
+int64_t newTemp(WorkerDeclarationContext *wk, TypeContext *type);
+void removeOp(WorkerDeclarationContext *wk, OperationBlock *code);
+void connectOp(WorkerDeclarationContext *wk, OperationBlock *code, OperationBlock *next);
 
 /* known layers */
 
-class InlineLayer : OptimizationLayer
-{
-    InlineLayer(double agression);
-    virtual void Apply(BuildResult *state);
-    virtual ~InlineLayer();
-};
+OptimizationLayer *newInlineLayer(double agression);
 
 #endif

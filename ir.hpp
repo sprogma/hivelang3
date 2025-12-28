@@ -4,10 +4,12 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <set>
 
 using namespace std;
 
 #include "ast.hpp"
+#include "utils.hpp"
 
 
 enum TypeContextType
@@ -118,20 +120,26 @@ enum OperationType
     OP_EQ, OP_LT, OP_LE, OP_GT, OP_GE,
 };
 
+inline constexpr auto IS_JUMP = is_one<OP_JMP, OP_JZ, OP_JNZ>;
 
-struct Operation
+struct OperationBlock
 {
     OperationType type;
     vector<int64_t> data;
     map<string, string> attributes = {};
+    vector<OperationBlock *> next;
+    set<OperationBlock *> prev;
 };
 
 
 // defined worker
 struct WorkerContext
 {
-    vector<Operation> code;
+    OperationBlock *entry;
+    vector<OperationBlock *> code;
     map<int64_t, TypeContext *>variables;
+    int64_t nextVarId;
+    int64_t nextTempId;
 };
 
 
@@ -143,13 +151,28 @@ struct WorkerDeclarationContext
     vector<pair<string, TypeContext *>> inputs;
     vector<pair<string, TypeContext *>> outputs;
     WorkerContext *content;
+
+    ~WorkerDeclarationContext()
+    {
+        delete content;
+    }
 };
 
 
 struct BuildResult
 {
-    vector<WorkerDeclarationContext *> workers;
+    double cost;
+    map<WorkerDeclarationContext *, int64_t> workers;
     map<string, int64_t> names;
+    int64_t nextWorkerId;
+
+    ~BuildResult()
+    {
+        for (auto i : workers)
+        {
+            delete i.first;
+        }
+    }
 };
 
 #define FIRST_TEMP_ID 1000000

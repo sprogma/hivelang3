@@ -3,11 +3,20 @@ union point
     i32 x, y;
 }
 
-(i32 x, i32 y)create(point? res)
+(i32 x, i32 y)add(i32? res)
 {
-    point t;
-    t.x <- x;
-    t.y <- t.x + y;
-    res <- t;
+    res <- x + y;
+}
+
+(i32 x, i32 y)mul(i32? res)
+{
+    i32 ans;
+    ans <- 0;
+    while y > 0
+    {
+        ans <- ?(x, ans)add(*);
+        y <- y - 1;
+    }
+    res <- ans;
 }
 

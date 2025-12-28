@@ -4,6 +4,7 @@ using namespace std;
 
 
 #include "ast.hpp"
+#include "optimization/optimizer.hpp"
 #include "ir.hpp"
 
 
@@ -72,12 +73,24 @@ int main(int argc, char **argv)
     
     printf("Ast builded\n");
 
-    for (auto &fn : Code->workers)
+    for (auto &[fn, key] : Code->workers)
     {
         dumpIR(fn);
     }
 
     printf("Optimization layers?\n");
+
+    Optimizer opt;
+    opt.AddLayer(newInlineLayer(10.0));
+
+    auto newCode = opt.Apply(Code);
+
+    printf("After optimization have code:\n");
+
+    for (auto &[fn, key] : newCode->workers)
+    {
+        dumpIR(fn);
+    }
 
     free(code);
     return 0;
