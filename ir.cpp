@@ -6,11 +6,13 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <ranges>
 #include <variant>
 #include <algorithm>
 
 using namespace std;
 
+#include "optimization/optimizer.hpp"
 #include "logger.hpp"
 #include "ast.hpp"
 #include "ir.hpp"
@@ -66,6 +68,20 @@ void printTypeR(TypeContext *t)
 void printType(TypeContext *t)
 {
     printTypeR(t); printf("\n");
+}
+
+#define HANDLE_NOT_NULL(tmp, node) \
+    if (handleNotNull(ctx, tmp, node)) return {{}, -1};
+    
+bool handleNotNull(BuildContext *ctx, int64_t tmp, Node *node)
+{    
+    if (tmp == -1)
+    {
+        printf("Error: wrong usage of void expression\n");
+        logError(ctx->filename, ctx->code, node->start, node->end);
+        return true;
+    }
+    return false;
 }
 
 bool is_convertable(TypeContext *t1, TypeContext *t2)
@@ -267,7 +283,7 @@ int64_t newTemp(BuildContext *ctx, TypeContext *type)
 
 void freeTemp(vector<Operation> &code, int64_t id)
 {
-    if (id > FIRST_TEMP_ID)
+    if (id >= FIRST_TEMP_ID)
     {
         code.push_back({OP_FREE_TEMP, {id}});
     }
@@ -300,6 +316,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                 if (is(ch, "expression"))
                 {
                     auto [code, pos] = buildExpression(ctx, ch);
+                    HANDLE_NOT_NULL(pos, ch);
                     append(ops, code);
                     args.push_back(pos);
                 }
@@ -435,6 +452,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                 if (is(ch, "expression"))
                 {
                     auto [res, pos] = buildExpression(ctx, ch);
+                    HANDLE_NOT_NULL(pos, ch);
                     append(ops, res);
                     args.push_back(pos);
                 }
@@ -442,6 +460,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             
             /* declare output variables */
             int64_t tmpResult = -1, outId = 0;
+            vector<int64_t> outputs;
             for (auto ch : outList->childs)
             {
                 if (is(ch, "result_list_identifer"))
@@ -457,6 +476,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                             }
                             tmpResult = newTemp(ctx, fn->outputs[outId].second);
                             args.push_back(tmpResult);
+                            outputs.push_back(-1);
                             break;
                         }
                         case 1: /* normal output */
@@ -466,10 +486,50 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                             ctx->variables[varId] = fn->outputs[outId].second;
                             ctx->names[varName] = varId;
                             args.push_back(varId);
+                            outputs.push_back(varId);
                         }
                     }
                 }
                 outId++;
+            }
+
+            /* create all outputs */
+            for (auto &i : outputs)
+            {
+                if (i != -1)
+                {
+                    if (ctx->variables[i]->type == TYPE_PIPE)
+                    {
+                        append(ops, {OP_NEW_PIPE, {i}});
+                    }
+                    else if (ctx->variables[i]->type == TYPE_PROMISE)
+                    {
+                        append(ops, {OP_NEW_PROMISE, {i}});
+                    }
+                    else
+                    {
+                        printf("Return types can be only pipe/promise, have\n");
+                        printType(ctx->variables[i]);
+                        logError(ctx->filename, ctx->code, outList->start, outList->end);
+                    }
+                }
+                else
+                {
+                    if (ctx->variables[tmpResult]->type == TYPE_PIPE)
+                    {
+                        append(ops, {OP_NEW_PIPE, {tmpResult}});
+                    }
+                    else if (ctx->variables[tmpResult]->type == TYPE_PROMISE)
+                    {
+                        append(ops, {OP_NEW_PROMISE, {tmpResult}});
+                    }
+                    else
+                    {
+                        printf("Return types can be only pipe/promise, have\n");
+                        printType(ctx->variables[tmpResult]);
+                        logError(ctx->filename, ctx->code, outList->start, outList->end);
+                    }
+                }
             }
 
             /* create operation */
@@ -490,7 +550,9 @@ pair<vector<Operation>, int64_t> buildIndexOperation(BuildContext *ctx, Node *no
     printf("Index operation\n");
     
     auto [t, pos] = buildSimpleTerm(ctx, node->nonTerm(0));
+    HANDLE_NOT_NULL(pos, node->nonTerm(0));
     auto [tIndex, posIndex] = buildExpression(ctx, node->nonTerm(1));
+    HANDLE_NOT_NULL(posIndex, node->nonTerm(1));
 
     vector<Operation> ops;
     TypeContext *type = ctx->variables[pos];    
@@ -560,6 +622,7 @@ pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *no
         {
             vector<Operation> ops;
             auto [t, pos] = buildQueryOperation(ctx, node->nonTerm(1));
+            HANDLE_NOT_NULL(pos, node->nonTerm(1));
             append(ops, t);
             TypeContext *elemType = ctx->variables[pos];
             switch (elemType->type)
@@ -600,6 +663,7 @@ pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *no
         {
             vector<Operation> ops;
             auto [code, position] = buildIndexOperation(ctx, node->nonTerm(0));
+            HANDLE_NOT_NULL(position, node->nonTerm(0));
             TypeContext *type = ctx->variables[position];
             map<string, string> attributes = getAttributeList(ctx, node->nonTerm(1));
             if (type->type != TYPE_CLASS)
@@ -658,6 +722,7 @@ pair<vector<Operation>, int64_t> buildPrefixOperation(BuildContext *ctx, Node *n
         case 0: // operator
         {
             auto [t, pos] = buildPrefixOperation(ctx, node->nonTerm(1));
+            HANDLE_NOT_NULL(pos, node->nonTerm(1));
             
             int64_t resultPosition = pos;
             
@@ -694,6 +759,7 @@ pair<vector<Operation>, int64_t> buildPrefixOperation(BuildContext *ctx, Node *n
         case 1: // cast
         {
             auto [t, pos] = buildPrefixOperation(ctx, node->nonTerm(1));
+            HANDLE_NOT_NULL(pos, node->nonTerm(1));
 
             TypeContext *type = getType(ctx, node->nonTerm(0));
 
@@ -725,10 +791,12 @@ pair<vector<Operation>, int64_t> buildBinOperation(BuildContext *ctx, Node *node
     printf("Bin operation\n");
     vector<Operation> ops;
     auto [t, pos] = buildPrefixOperation(ctx, node->nonTerm(0));
+    HANDLE_NOT_NULL(pos, node->nonTerm(0));
     int64_t id = 1;
     while (node->nonTerm(id))
     {
         auto [t2, pos2] = buildPrefixOperation(ctx, node->nonTerm(id + 1));
+        HANDLE_NOT_NULL(pos2, node->nonTerm(id + 1));
 
         auto [can, resType] = operation_types(ctx->variables[pos], ctx->variables[pos2]);
         if (!can)
@@ -779,10 +847,12 @@ pair<vector<Operation>, int64_t> buildMulOperation(BuildContext *ctx, Node *node
     printf("Mul operation\n");
     vector<Operation> ops;
     auto [t, pos] = buildBinOperation(ctx, node->nonTerm(0));
+    HANDLE_NOT_NULL(pos, node->nonTerm(0));
     int64_t id = 1;
     while (node->nonTerm(id))
     {
         auto [t2, pos2] = buildBinOperation(ctx, node->nonTerm(id + 1));
+        HANDLE_NOT_NULL(pos2, node->nonTerm(id + 1));
 
         auto [can, resType] = operation_types(ctx->variables[pos], ctx->variables[pos2]);
         if (!can)
@@ -829,10 +899,12 @@ pair<vector<Operation>, int64_t> buildAddOperation(BuildContext *ctx, Node *node
     printf("Add operation\n");
     vector<Operation> ops;
     auto [t, pos] = buildMulOperation(ctx, node->nonTerm(0));
+    HANDLE_NOT_NULL(pos, node->nonTerm(0));
     int64_t id = 1;
     while (node->nonTerm(id))
     {
         auto [t2, pos2] = buildMulOperation(ctx, node->nonTerm(id + 1));
+        HANDLE_NOT_NULL(pos2, node->nonTerm(id + 1));
 
         auto [can, resType] = operation_types(ctx->variables[pos], ctx->variables[pos2]);
         if (!can)
@@ -877,10 +949,12 @@ pair<vector<Operation>, int64_t> buildCompareOperation(BuildContext *ctx, Node *
     printf("Compare operation\n");
     vector<Operation> ops;
     auto [t, pos] = buildAddOperation(ctx, node->nonTerm(0));
+    HANDLE_NOT_NULL(pos, node->nonTerm(0));
     int64_t id = 1;
     while (node->nonTerm(id))
     {
         auto [t2, pos2] = buildAddOperation(ctx, node->nonTerm(id + 1));
+        HANDLE_NOT_NULL(pos2, node->nonTerm(id + 1));
         
         int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
         
@@ -923,10 +997,12 @@ pair<vector<Operation>, int64_t> buildLogicOperation(BuildContext *ctx, Node *no
     printf("Logic operation\n");
     vector<Operation> ops;
     auto [t, pos] = buildCompareOperation(ctx, node->nonTerm(0));
+    HANDLE_NOT_NULL(pos, node->nonTerm(0));
     int64_t id = 1;
     while (node->nonTerm(id))
     {
         auto [t2, pos2] = buildCompareOperation(ctx, node->nonTerm(id + 1));
+        HANDLE_NOT_NULL(pos2, node->nonTerm(id + 1));
         int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
         switch_var(node->nonTerm(id + 0))
         {
@@ -977,6 +1053,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
     }
     /* build rightmost part */
     auto [res, dataPos] = buildLogicOperation(ctx, node->childs.back());
+    HANDLE_NOT_NULL(dataPos, node->childs.back());
     TypeContext *dataType = ctx->variables[dataPos];
     vector<Operation> ops;
     append(ops, res);
@@ -1050,8 +1127,10 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                                 if (is_convertable(type->_vector.base, dataType) || ctx->enabled("implicit_castes"))
                                 {
                                     auto [target, targetPos] = buildSimpleTerm(ctx, x);
+                                    HANDLE_NOT_NULL(targetPos, x);
                                     append(ops, target);
                                     append(ops, {OP_PUSH_PIPE, {targetPos, dataPos}});
+                                    freeTemp(ops, targetPos);
                                     break;
                                 }
                                 else
@@ -1071,8 +1150,10 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                                 if (is_convertable(type->_vector.base, dataType) || ctx->enabled("implicit_castes"))
                                 {
                                     auto [target, targetPos] = buildSimpleTerm(ctx, x);
+                                    HANDLE_NOT_NULL(targetPos, x);
                                     append(ops, target);
                                     append(ops, {OP_PUSH_PROMISE, {targetPos, dataPos}});
+                                    freeTemp(ops, targetPos);
                                     break;
                                 }
                                 else
@@ -1100,6 +1181,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
         {
             /* get value - if it is pipe or it is promise - push to them */
             auto [code, pos] = buildExpression(ctx, x);
+            HANDLE_NOT_NULL(pos, x);
             TypeContext *type = ctx->variables[pos];
 
             switch (type->type)
@@ -1117,12 +1199,14 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                 {
                     append(ops, code);
                     append(ops, {OP_PUSH_PIPE, {pos, dataPos}});
+                    freeTemp(ops, pos);
                     break;
                 }
                 case TYPE_PROMISE:
                 {
                     append(ops, code);
                     append(ops, {OP_PUSH_PROMISE, {pos, dataPos}});
+                    freeTemp(ops, pos);
                     break;
                 }
             }
@@ -1130,7 +1214,9 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
         else if (is(x, "IndexOperation"))
         {
             auto [array, arrayPos] = buildSimpleTerm(ctx, x->nonTerm(0));
+            HANDLE_NOT_NULL(arrayPos, x->nonTerm(0));
             auto [index, indexPos] = buildExpression(ctx, x->nonTerm(1));
+            HANDLE_NOT_NULL(indexPos, x->nonTerm(1));
 
             TypeContext *arrayType = ctx->variables[arrayPos];
             TypeContext *indexType = ctx->variables[indexPos];
@@ -1179,6 +1265,9 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                     append(ops, index);
                     
                     append(ops, {OP_PUSH_ARRAY, args});
+
+                    freeTemp(ops, arrayPos);
+                    freeTemp(ops, indexPos);
                 }
                 else
                 {
@@ -1198,8 +1287,10 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                         {
                             /* calculate array value */
                             auto [target, targetPos] = buildIndexOperation(ctx, x);
+                            HANDLE_NOT_NULL(targetPos, x);
                             append(ops, target);
                             append(ops, {OP_PUSH_PIPE, {targetPos, dataPos}});
+                            freeTemp(ops, targetPos);
                             break;
                         }
                         else
@@ -1220,8 +1311,10 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                         {
                             /* calculate array value */
                             auto [target, targetPos] = buildIndexOperation(ctx, x);
+                            HANDLE_NOT_NULL(targetPos, x);
                             append(ops, target);
                             append(ops, {OP_PUSH_PROMISE, {targetPos, dataPos}});
+                            freeTemp(ops, targetPos);
                             break;
                         }
                         else
@@ -1247,6 +1340,13 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
             {
                 /* get value - if it is pipe or it is promise - push to them */
                 auto [code, pos] = buildQueryOperation(ctx, x);
+                HANDLE_NOT_NULL(pos, x);
+                if (pos == -1)
+                {
+                    printf("Error: wrong usage of void expression [call without * is void]\n");
+                    logError(ctx->filename, ctx->code, x->start, x->end);
+                    return {{}, -1};
+                }
                 TypeContext *type = ctx->variables[pos];
 
                 switch (type->type)
@@ -1264,12 +1364,14 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                     {
                         append(ops, code);
                         append(ops, {OP_PUSH_PIPE, {pos, dataPos}});
+                        freeTemp(ops, pos);
                         break;
                     }
                     case TYPE_PROMISE:
                     {
                         append(ops, code);
                         append(ops, {OP_PUSH_PROMISE, {pos, dataPos}});
+                        freeTemp(ops, pos);
                         break;
                     }
                 }
@@ -1278,6 +1380,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
             else // infix query syntax - class field access
             {
                 auto [code, position] = buildIndexOperation(ctx, x->nonTerm(0));
+                HANDLE_NOT_NULL(position, x->nonTerm(0));
                 TypeContext *type = ctx->variables[position];
                 map<string, string> attributes = getAttributeList(ctx, x->nonTerm(1));
                 if (type->type != TYPE_CLASS)
@@ -1314,6 +1417,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
 
                 append(ops, code);
                 append(ops, {OP_PUSH_CLASS, args, attributes});
+                freeTemp(ops, position);
                 break;
             }
         }
@@ -1357,6 +1461,7 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
         {
             printf("statement expression\n");
             auto [expr, exprPos] = buildExpression(ctx, node->nonTerm(0)); 
+            // here -1 as expr pos is normal situation
             append(ops, expr);
             freeTemp(ops, exprPos);
             break;
@@ -1365,6 +1470,7 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
         {
             printf("statement while\n");
             auto [guard, guardPos] = buildExpression(ctx, node->nonTerm(0)); 
+            if (handleNotNull(ctx, guardPos, node->nonTerm(0))) { break; }
             auto body = buildCodeBlock(ctx, node->nonTerm(1));
             append(ops, {OP_JMP, {1 + (int64_t)body.size()}});
             append(ops, body);
@@ -1377,6 +1483,7 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
         {    
             printf("statement match\n");
             auto [match, matchPos] = buildExpression(ctx, node->nonTerm(0));
+            if (handleNotNull(ctx, matchPos, node->nonTerm(0))) { break; }
             ops.insert(ops.end(), match.begin(), match.end());
             for (auto &var : node->childs)
             {
@@ -1393,6 +1500,7 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
                         case 1: // expression
                         {
                             auto [pattern, patternPos] = buildExpression(ctx, var->nonTerm(0));
+                            if (handleNotNull(ctx, patternPos, var->nonTerm(0))) { break; }
                             auto block = buildCodeBlock(ctx, var->nonTerm(1));
                             int64_t temp = ctx->nextTempId++;
                             append(ops, pattern);
@@ -1406,6 +1514,7 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
                     }
                 }
             }
+            freeTemp(ops, matchPos);    
             break;
         }
     }
@@ -1488,7 +1597,10 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
         }
         for (auto &j : data[i]->next)
         {
-            data[blockId[j]]->prev.insert(data[i]);
+            if (j != NULL)
+            {
+                data[blockId[j]]->prev.insert(data[i]);
+            }
         }
     }
     /* set data */
@@ -1497,6 +1609,14 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     wk->content->variables = ctx->variables;
     wk->content->nextVarId = ctx->nextVarId;
     wk->content->nextTempId = ctx->nextTempId;
+    /* remove jumps */
+    for (auto &[k, v] : blockId)
+    {
+        if (k->type == OP_JMP)
+        {
+            removeOp(wk, k);
+        }
+    }
 }
 
 void addWorkerDefinition(BuildContext *ctx, Node *node, bool with_code)
@@ -1632,6 +1752,220 @@ pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<No
     return {ctx->result, false};
 }
 
+void applyNamesTranslition(OperationBlock *op, map<int64_t, int64_t> &translition)
+{    
+    switch (op->type)
+    {   
+        // 2nd
+        case OP_LOAD_INPUT:
+        case OP_LOAD_OUTPUT:
+            op->data[1] = translition[op->data[1]];
+            break;
+
+        // 1, last
+        case OP_PUSH_VAR:
+        case OP_PUSH_CLASS:
+            op->data[0] = translition[op->data[0]];
+            op->data.back() = translition[op->data.back()];
+            break;
+
+        // 1, 2
+        case OP_QUERY_VAR:
+        case OP_QUERY_CLASS:
+            op->data[0] = translition[op->data[0]];
+            op->data[1] = translition[op->data[1]];
+            break;
+
+        // 1, 2 and last
+        case OP_PUSH_ARRAY:
+        case OP_QUERY_INDEX:
+            op->data[0] = translition[op->data[0]];
+            op->data[1] = translition[op->data[1]];
+            op->data.back() = translition[op->data.back()];
+            break;
+            
+        // all except first
+        case OP_CALL:
+            for (auto &i : op->data | views::drop(1))
+            {
+                i = translition[i];
+            }
+            break;
+
+        // first arg
+        case OP_NEW_INT:
+        case OP_NEW_FLOAT:
+            op->data[0] = translition[op->data[0]];
+            break;
+        
+        // all args
+        case OP_FREE_TEMP:
+        case OP_JMP:
+        case OP_JZ:
+        case OP_JNZ:
+        case OP_PUSH_PIPE:
+        case OP_PUSH_PROMISE:
+        case OP_QUERY_ARRAY:
+        case OP_QUERY_PIPE:
+        case OP_QUERY_PROMISE:
+        case OP_NEW_ARRAY:
+        case OP_NEW_PIPE:
+        case OP_NEW_PROMISE:
+        case OP_NEW_CLASS:
+        case OP_CAST:
+        case OP_MOV:
+        case OP_BOR:
+        case OP_BAND:
+        case OP_BXOR:
+        case OP_SHL:
+        case OP_SHR:
+        case OP_BNOT:
+        case OP_ADD:
+        case OP_SUB:
+        case OP_MUL:
+        case OP_DIV:
+        case OP_MOD:
+        case OP_EQ:
+        case OP_LT:
+        case OP_LE:
+        case OP_GT:
+        case OP_GE:
+            for (auto &i : op->data)
+            {
+                i = translition[i];
+            }
+            break;
+    }
+}
+
+vector<int64_t> getUsedVariables(OperationBlock *op)
+{    
+    switch (op->type)
+    {   
+        // 2nd
+        case OP_LOAD_INPUT:
+        case OP_LOAD_OUTPUT:
+            return {op->data[1]};
+            
+        case OP_QUERY_VAR:
+        case OP_QUERY_CLASS:
+        case OP_CALL:
+        case OP_FREE_TEMP:
+        case OP_QUERY_INDEX:
+        case OP_QUERY_ARRAY:
+        case OP_QUERY_PIPE:
+        case OP_QUERY_PROMISE:
+        case OP_PUSH_PIPE:
+        case OP_PUSH_PROMISE:
+        case OP_PUSH_CLASS:
+        case OP_PUSH_ARRAY:
+            return {};
+        
+        // all args
+        case OP_PUSH_VAR:
+        case OP_NEW_INT:
+        case OP_NEW_FLOAT:
+        case OP_JMP:
+        case OP_JZ:
+        case OP_JNZ:
+        case OP_NEW_ARRAY:
+        case OP_NEW_PIPE:
+        case OP_NEW_PROMISE:
+        case OP_NEW_CLASS:
+        case OP_CAST:
+        case OP_MOV:
+        case OP_BOR:
+        case OP_BAND:
+        case OP_BXOR:
+        case OP_SHL:
+        case OP_SHR:
+        case OP_BNOT:
+        case OP_ADD:
+        case OP_SUB:
+        case OP_MUL:
+        case OP_DIV:
+        case OP_MOD:
+        case OP_EQ:
+        case OP_LT:
+        case OP_LE:
+        case OP_GT:
+        case OP_GE:
+            return {op->data[0]};
+    }
+}
+
+vector<int64_t> getWritedVariables(OperationBlock *op)
+{    
+    switch (op->type)
+    {   
+        // 2nd
+        case OP_LOAD_INPUT:
+        case OP_LOAD_OUTPUT:
+            return {op->data[1]};
+
+        // 1, last
+        case OP_PUSH_VAR:
+        case OP_PUSH_CLASS:
+            return {op->data[0]};
+
+        // 1, 2
+        case OP_QUERY_VAR:
+        case OP_QUERY_CLASS:
+            return {op->data[0]};
+
+        // 1, 2 and last
+        case OP_PUSH_ARRAY:
+        case OP_QUERY_INDEX:
+            return {op->data[0]};
+            
+        // all except first
+        case OP_CALL:
+        {
+            auto t = op->data | views::drop(1);
+            return vector<int64_t>(t.begin(), t.end());
+        }
+
+        // first arg
+        case OP_NEW_INT:
+        case OP_NEW_FLOAT:
+            return {op->data[0]};
+        
+        // all args
+        case OP_FREE_TEMP:
+        case OP_JMP:
+        case OP_JZ:
+        case OP_JNZ:
+        case OP_PUSH_PIPE:
+        case OP_PUSH_PROMISE:
+        case OP_QUERY_ARRAY:
+        case OP_QUERY_PIPE:
+        case OP_QUERY_PROMISE:
+        case OP_NEW_ARRAY:
+        case OP_NEW_PIPE:
+        case OP_NEW_PROMISE:
+        case OP_NEW_CLASS:
+        case OP_CAST:
+        case OP_MOV:
+        case OP_BOR:
+        case OP_BAND:
+        case OP_BXOR:
+        case OP_SHL:
+        case OP_SHR:
+        case OP_BNOT:
+        case OP_ADD:
+        case OP_SUB:
+        case OP_MUL:
+        case OP_DIV:
+        case OP_MOD:
+        case OP_EQ:
+        case OP_LT:
+        case OP_LE:
+        case OP_GT:
+        case OP_GE:
+            return op->data;
+    }
+}
+
 void dumpIR(WorkerDeclarationContext *fn)
 {
     printf("Worker %s\n", fn->name.c_str());
@@ -1651,6 +1985,7 @@ void dumpIR(WorkerDeclarationContext *fn)
                 
                 case OP_CALL: printf("OP_CALL "); break;
                 case OP_CAST: printf("OP_CAST "); break;
+                case OP_MOV: printf("OP_MOV "); break;
 
                 case OP_NEW_INT: printf("OP_NEW_INT "); break;
                 case OP_NEW_FLOAT: printf("OP_NEW_FLOAT "); break;

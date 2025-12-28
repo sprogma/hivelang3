@@ -1,13 +1,9 @@
-union point
-{
-    i32 x, y;
-}
-
 (i32 x, i32 y)add(i32? res)
 {
     res <- x + y;
 }
 
+[export:yes]
 (i32 x, i32 y)mul(i32? res)
 {
     i32 ans;

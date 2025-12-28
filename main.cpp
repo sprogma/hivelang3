@@ -82,6 +82,8 @@ int main(int argc, char **argv)
 
     Optimizer opt;
     opt.AddLayer(newInlineLayer(10.0));
+    opt.AddLayer(newCompressPromiseLayer());
+    opt.AddLayer(newStripUnusedFunctionsLayer());
 
     auto newCode = opt.Apply(Code);
 

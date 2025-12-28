@@ -71,5 +71,7 @@ void connectOp(WorkerDeclarationContext *wk, OperationBlock *code, OperationBloc
 /* known layers */
 
 OptimizationLayer *newInlineLayer(double agression);
+OptimizationLayer *newStripUnusedFunctionsLayer();
+OptimizationLayer *newCompressPromiseLayer();
 
 #endif

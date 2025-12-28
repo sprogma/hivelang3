@@ -93,6 +93,7 @@ enum OperationType
     
     OP_CALL,
     OP_CAST,
+    OP_MOV,
     
     OP_NEW_INT, // format is [dest, value]
     OP_NEW_FLOAT, // format is [dest, value[int64_t encoded]]
@@ -101,23 +102,26 @@ enum OperationType
     OP_NEW_PROMISE, // format is [dest]
     OP_NEW_CLASS, // format is [dest]
     
-    OP_PUSH_VAR, // format is [path to field, source]
+    OP_PUSH_VAR, // format is [var, path to field, source]
     OP_PUSH_ARRAY, // format is [array, index, path to field, source]
     OP_PUSH_PIPE, // format is [pipe, source]
     OP_PUSH_PROMISE, // format is [promise, source]
     OP_PUSH_CLASS, // format is [class, path to field, source]
     
-    OP_QUERY_VAR, 
-    OP_QUERY_ARRAY, 
-    OP_QUERY_INDEX, 
-    OP_QUERY_PIPE, 
-    OP_QUERY_PROMISE, 
-    OP_QUERY_CLASS, 
+    OP_QUERY_VAR, // format is [dest, var, path to field]
+    OP_QUERY_ARRAY, // format is [dest, source]
+    OP_QUERY_INDEX, // format is [dest, source, path to field, index]
+    OP_QUERY_PIPE, // format is [dest, source]
+    OP_QUERY_PROMISE, // format is [dest, source]
+    OP_QUERY_CLASS, // format is [dest, source, path to field]
     
-    OP_JMP, OP_JZ, OP_JNZ,
+    OP_JZ, OP_JNZ,
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD,
     OP_BOR, OP_BAND, OP_BXOR, OP_SHL, OP_SHR, OP_BNOT,
     OP_EQ, OP_LT, OP_LE, OP_GT, OP_GE,
+
+    // used only in parsing - don't use it.
+    OP_JMP,
 };
 
 inline constexpr auto IS_JUMP = is_one<OP_JMP, OP_JZ, OP_JNZ>;
@@ -206,6 +210,11 @@ struct BuildContext
 /* - api */
 pair<BuildResult *, bool> buildAst(const char *filename, char *code, vector<Node *>nodes, map<string, string> configs);
 
+vector<int64_t> getWritedVariables(OperationBlock *op);
+vector<int64_t> getUsedVariables(OperationBlock *op); // all variables from operation
+void applyNamesTranslition(OperationBlock *block, map<int64_t, int64_t> &translition);
+
 void dumpIR(WorkerDeclarationContext *worker);
+
 
 #endif
