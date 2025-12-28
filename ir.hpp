@@ -89,6 +89,9 @@ enum OperationType
     OP_LOAD_OUTPUT,
     OP_FREE_TEMP,
     
+    OP_CALL,
+    OP_CAST,
+    
     OP_NEW_INT, // format is [dest, value]
     OP_NEW_FLOAT, // format is [dest, value[int64_t encoded]]
     OP_NEW_ARRAY, // format is [dest, length]
@@ -120,6 +123,7 @@ struct Operation
 {
     OperationType type;
     vector<int64_t> data;
+    map<string, string> attributes = {};
 };
 
 
@@ -127,6 +131,7 @@ struct Operation
 struct WorkerContext
 {
     vector<Operation> code;
+    map<int64_t, TypeContext *>variables;
 };
 
 
@@ -146,9 +151,12 @@ struct BuildResult
     vector<WorkerDeclarationContext *> workers;
 };
 
+#define FIRST_TEMP_ID 1000000
 
 struct BuildContext
 {
+    map<string, string> configs;
+    
     const char *filename;
     char *code;
     map<string, TypeContext *> typeTable;
@@ -163,10 +171,15 @@ struct BuildContext
         for (auto &p : typeTable) delete p.second;
         typeTable.clear();
     }
+
+    bool enabled(string x)
+    {
+        return configs.find(x) != configs.end();
+    }
 };
 
 
 /* - api */
-pair<BuildResult *, bool> buildAst(const char *filename, char *code, vector<Node *>nodes);
+pair<BuildResult *, bool> buildAst(const char *filename, char *code, vector<Node *>nodes, map<string, string> configs);
 
 #endif

@@ -1,6 +1,6 @@
 // this file was generated using grammar_gen.ps1
 
-let prefix = "<RULE:1728113469>"
+let prefix = "<RULE:840592057>"
 
 let Sn = prefix + "Sn"
 let identifer_or_number = prefix + "identifer_or_number"
@@ -185,7 +185,8 @@ let grammar =
             v [Sn; ">>"] [] []
         ]
         rule "PrefixOperation" [
-            v [Sn; prefix_op; PrefixOperation] [] []
+            v [prefix_op; PrefixOperation] [] []
+            v [Sn; "("; var_type; Sn; ")"; PrefixOperation] [] []
             p [QueryOperation] [] []
         ]
         rule "prefix_op" [
@@ -195,25 +196,24 @@ let grammar =
             v [Sn; "~"] [] []
         ]
         rule "QueryOperation" [
-            v [Sn; "?"; PrefixOperation] [] []
-            v [IndexOperation; Sn; "?"; Sn; PrefixOperation] [] []
+            v [attribute_list; Sn; "?"; PrefixOperation] [] []
+            v [IndexOperation; attribute_list; Sn; "?"; Sn; PrefixOperation] [] []
             p [IndexOperation] [] []
         ]
         rule "IndexOperation" [
-            v [SimpleTerm; Sn; "["; expression; Sn; "]"] [] []
+            v [SimpleTerm; Sn; "["; expression; Sn; "]"] ["."; identifer] []
             p [SimpleTerm] [] []
         ]
         rule "SimpleTerm" [
             v [Sn; new_operator] [] []
-            v [Sn; float] [] []
             v [Sn; integer] [] []
+            v [Sn; float] [] []
             v [Sn; identifer] ["."; identifer] []
             v [Sn; "("; call_arg_list; Sn; ")"; Sn; identifer; attribute_list; Sn; "("; call_result_list; Sn; ")"] [] []
             p [Sn; "("; expression; Sn; ")"] [] []
         ]
         rule "new_operator" [
-            v [Sn; "new"; attribute_list; Sn; identifer; Sn; "("; call_arg_list; Sn; ")"] [] []
-            v [Sn; "new"; S; identifer; Sn; "("; call_arg_list; Sn; ")"] [] []
+            v [Sn; "new"; S; var_type; attribute_list; Sn; "("; call_arg_list; Sn; ")"] [] []
         ]
     ] |> Map.ofList
     

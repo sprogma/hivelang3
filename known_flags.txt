@@ -1,0 +1,2 @@
+[switch] implicit_castes
+[switch] optimize_query_var

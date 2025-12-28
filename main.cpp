@@ -7,8 +7,33 @@ using namespace std;
 #include "ir.hpp"
 
 
-int main()
+int main(int argc, char **argv)
 {
+    map<string, string> configs;
+
+    for (int i = 1; i < argc; ++i) 
+    {
+        string s = argv[i];
+
+        size_t eq = s.find('=');
+        if (eq == string::npos) continue;
+
+        string key = s.substr(0, eq);
+        string val = s.substr(eq + 1);
+
+        if (key.size() >= 4 && key[0] == '-') 
+        {
+            size_t pos = 0;
+            while (pos < key.size() && key[pos] == '-')  { ++pos; }
+            string param = key.substr(pos);
+            if (!param.empty()) 
+            {
+                configs[param] = val;
+            }
+        }
+    }
+
+    
     const char *filename = "example.hive";
     FILE *f = fopen(filename, "r");
     char *code = (char *)malloc(1024 * 1024);
@@ -37,7 +62,7 @@ int main()
     printf("Convering...\n");
     /* convert to intermediate language */
 
-    auto [Code, error2] = buildAst(filename, code, nodes);
+    auto [Code, error2] = buildAst(filename, code, nodes, configs);
 
     if (error2)
     {
@@ -62,6 +87,9 @@ int main()
                     case OP_LOAD_OUTPUT: printf("OP_LOAD_OUTPUT "); break;
                     
                     case OP_FREE_TEMP: printf("OP_FREE_TEMP "); break;
+                    
+                    case OP_CALL: printf("OP_CALL "); break;
+                    case OP_CAST: printf("OP_CAST "); break;
     
                     case OP_NEW_INT: printf("OP_NEW_INT "); break;
                     case OP_NEW_FLOAT: printf("OP_NEW_FLOAT "); break;
@@ -109,7 +137,17 @@ int main()
                 {
                     printf("%lld ", t);
                 }
-                printf("]\n");
+                printf("]");
+                if (x.attributes.size() > 0)
+                {
+                    printf(" { ");
+                    for (auto [k, v] : x.attributes)
+                    {
+                        printf("%s=%s ", k.c_str(), v.c_str());
+                    }
+                    printf("}");
+                }
+                printf("\n");
             }
         }
     }

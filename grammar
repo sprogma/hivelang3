@@ -122,6 +122,7 @@ rule "bin_op" [
 ]
 rule "PrefixOperation" [
     v [prefix_op; PrefixOperation] [] []
+    v [Sn; "("; var_type; Sn; ")"; PrefixOperation] [] []
     p [QueryOperation] [] []
 ]
 rule "prefix_op" [
@@ -131,12 +132,12 @@ rule "prefix_op" [
     v [Sn; "~"] [] []
 ]
 rule "QueryOperation" [
-    v [Sn; "?"; QueryOperation] [] []
-    v [IndexOperation; Sn; "?"; Sn; PrefixOperation] [] []
+    v [attribute_list; Sn; "?"; PrefixOperation] [] []
+    v [IndexOperation; attribute_list; Sn; "?"; Sn; PrefixOperation] [] []
     p [IndexOperation] [] []
 ]
 rule "IndexOperation" [
-    v [SimpleTerm; Sn; "["; expression; Sn; "]"] [] []
+    v [SimpleTerm; Sn; "["; expression; Sn; "]"] ["."; identifer] []
     p [SimpleTerm] [] []
 ]
 rule "SimpleTerm" [
@@ -148,6 +149,5 @@ rule "SimpleTerm" [
     p [Sn; "("; expression; Sn; ")"] [] []
 ]
 rule "new_operator" [
-    v [Sn; "new"; attribute_list; Sn; identifer; Sn; "("; call_arg_list; Sn; ")"] [] []
-    v [Sn; "new"; S; identifer; Sn; "("; call_arg_list; Sn; ")"] [] []
+    v [Sn; "new"; S; var_type; attribute_list; Sn; "("; call_arg_list; Sn; ")"] [] []
 ]

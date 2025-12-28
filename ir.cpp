@@ -38,6 +38,82 @@ string Substr(BuildContext *ctx, Node *node)
     return string(ctx->code + node->start, node->end - node->start);
 }
 
+void printTypeR(TypeContext *t)
+{
+    switch (t->type)
+    {
+        case TYPE_UNION: printf("UNION"); break;
+        case TYPE_RECORD: printf("RECORD"); break;
+        case TYPE_CLASS: printf("CLASS"); break;
+        case TYPE_PIPE: printf("PIPE of "); printTypeR(t->_vector.base); break;
+        case TYPE_ARRAY: printf("ARRAY of "); printTypeR(t->_vector.base); break;
+        case TYPE_PROMISE: printf("PROMISE of "); printTypeR(t->_vector.base); break;
+        case TYPE_SCALAR: printf("SCALAR [%d, size=%lld]", t->_scalar.kind, t->size); break;
+    }
+}
+void printType(TypeContext *t)
+{
+    printTypeR(t); printf("\n");
+}
+
+bool is_convertable(TypeContext *t1, TypeContext *t2)
+{
+    if (t1 == t2)
+    {
+        return true;
+    }
+    if (t1->type == TYPE_SCALAR && t2->type == TYPE_SCALAR)
+    {
+        if (t1->_scalar.kind & SCALAR_I)
+        {
+            if (t2->_scalar.kind & SCALAR_I) return t1->size >= t2->size;
+            if (t2->_scalar.kind & SCALAR_U) return t1->size > t2->size;
+            if (t2->_scalar.kind & SCALAR_F) return false;
+        }
+        else if (t1->_scalar.kind & SCALAR_U)
+        {
+            if (t2->_scalar.kind & SCALAR_I) return false;
+            if (t2->_scalar.kind & SCALAR_U) return t1->size >= t2->size;
+            if (t2->_scalar.kind & SCALAR_F) return false;
+        }
+        else if (t1->_scalar.kind & SCALAR_F)
+        {
+            if (t2->_scalar.kind & SCALAR_I) return (t1->size == 8 && t2->size <= 4);
+            if (t2->_scalar.kind & SCALAR_U) return (t1->size == 8 && t2->size <= 4);
+            if (t2->_scalar.kind & SCALAR_F) return t1->size >= t2->size;
+        }
+    }
+    return false;
+}
+
+bool is_castable(TypeContext *t1, TypeContext *t2)
+{
+    if (t1 == t2)
+    {
+        return true;
+    }
+    if (t1->type == TYPE_SCALAR && t2->type == TYPE_SCALAR)
+    {
+        return true; // all known scalars has casing rules
+    }
+    return false;
+}
+
+pair<bool, TypeContext *> operation_types(TypeContext *t1, TypeContext *t2)
+{
+    if (t1 == t2) { return {true, t1}; }
+    if (t1->type == TYPE_SCALAR && t2->type == TYPE_SCALAR)
+    {
+        if (SCALAR_TYPE(t1->_scalar.kind) == SCALAR_TYPE(t2->_scalar.kind))
+        {
+            return {true, (t1->size > t2->size ? t1 : t2)};
+        }
+        // TODO: more precision casting
+        return {false, NULL};
+    }
+    return {false, NULL};
+}
+
 WorkerDeclarationContext *getWorkerByName(BuildContext *ctx, string name)
 {
     for (auto &x : ctx->result->workers)
@@ -82,6 +158,23 @@ TypeContext *getType(BuildContext *ctx, Node *node)
         }
     }
     return cur;
+}
+
+map<string, string> getAttributeList(BuildContext *ctx, Node *node)
+{
+    map<string, string> attrs;
+    int64_t attrId = 0;
+    assert_type(node, "attribute_list");
+    while (node->nonTerm(attrId))
+    {
+        Node *key = node->nonTerm(attrId + 0);
+        Node *value = node->nonTerm(attrId + 1);
+        assert_type(key, "identifer_or_number");
+        assert_type(value, "identifer_or_number");
+        attrs[Substr(ctx, key)] = Substr(ctx, value);
+        attrId += 2;
+    }
+    return attrs;
 }
 
 void processStructure(BuildContext *ctx, TypeContextType type, Node *node)
@@ -151,7 +244,7 @@ int64_t newTemp(BuildContext *ctx, TypeContext *type)
 
 void freeTemp(vector<Operation> &code, int64_t id)
 {
-    if (id != -1)
+    if (id > FIRST_TEMP_ID)
     {
         code.push_back({OP_FREE_TEMP, {id}});
     }
@@ -171,8 +264,82 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
     {
         case 0: // new operator
         {
-            printf("New operator is unsupported for now\n");
-            break;
+            Node *newOp = node->nonTerm(0);
+            
+            assert_type(newOp, "new_operator");
+
+            TypeContext *type = getType(ctx, newOp->nonTerm(0));
+            map<string, string> attributes = getAttributeList(ctx, newOp->nonTerm(1));
+            
+            vector<int> args;
+            for (auto &ch : newOp->nonTerm(2)->childs)
+            {
+                if (is(ch, "expression"))
+                {
+                    auto [code, pos] = buildExpression(ctx, ch);
+                    append(ops, code);
+                    args.push_back(pos);
+                }
+            }
+            
+            switch (type->type)
+            {
+                case TYPE_UNION: 
+                case TYPE_RECORD: 
+                case TYPE_SCALAR: 
+                    printf("Error: can't use NEW expression with union/record/scalar types\n");
+                    logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                    return {{}, -1};
+                case TYPE_CLASS: 
+                {
+                    if (args.size() > 0)
+                    {
+                        printf("Error: NEW expression with class doesn't support field initialization for now\n");
+                        logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                        return {{}, -1};
+                    }
+                    int64_t resultPos = newTemp(ctx, type);
+                    append(ops, {OP_NEW_CLASS, {resultPos}, attributes});
+                    return {ops, resultPos};
+                }
+                case TYPE_ARRAY:
+                {
+                    if (args.size() != 1)
+                    {
+                        printf("Error: NEW expression with array need 1 parameter - length\n");
+                        logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                        return {{}, -1};
+                    }
+                    int64_t resultPos = newTemp(ctx, type);
+                    append(ops, {OP_NEW_ARRAY, {resultPos, args[0]}, attributes});
+                    return {ops, resultPos};
+                }
+                case TYPE_PIPE: 
+                {
+                    if (args.size() > 0)
+                    {
+                        printf("Error: NEW expression with pipe can't take any parameters\n");
+                        logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                        return {{}, -1};
+                    }
+                    int64_t resultPos = newTemp(ctx, type);
+                    append(ops, {OP_NEW_PIPE, {resultPos}, attributes});
+                    return {ops, resultPos};
+                }
+                case TYPE_PROMISE: 
+                {
+                    if (args.size() > 0)
+                    {
+                        printf("Error: NEW expression with promise can't take any parameters\n");
+                        logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                        return {{}, -1};
+                    }
+                    int64_t resultPos = newTemp(ctx, type);
+                    append(ops, {OP_NEW_PROMISE, {resultPos}, attributes});
+                    return {ops, resultPos};
+                } 
+            }
+            return {{}, -1};
         }
         case 1: // integer
         {
@@ -215,17 +382,73 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                 args.push_back(fieldId);
                 type = type->_struct.fields[fieldId];
             }
-
+            if (ctx->enabled("optimize_query_var") && args.size() == 1)
+            {
+                return {ops, args[0]};
+            }
             int64_t tmp = newTemp(ctx, type);
             args.insert(args.begin(), tmp);
-            
             append(ops, {OP_QUERY_VAR, args});
             return {ops, tmp};
         }
         case 4: // fn call...
         {
-            printf("Calls are unsupported for now\n");
-            return {{}, -1};
+            Node *argList = node->nonTerm(0);
+            string name = Substr(ctx, node->nonTerm(1));
+            map<string, string> attributes = getAttributeList(ctx, node->nonTerm(2));
+            Node *outList = node->nonTerm(3);
+
+            /* build all arguments */
+            vector<int64_t> args;
+            for (auto ch : argList->childs)
+            {
+                if (is(ch, "expression"))
+                {
+                    auto [res, pos] = buildExpression(ctx, ch);
+                    append(ops, res);
+                    args.push_back(pos);
+                }
+            }
+            /* load function by name */
+            WorkerDeclarationContext *fn = getWorkerByName(ctx, name);
+            printf("Call of %s...\n", name.c_str());
+            
+            /* declare output variables */
+            int64_t tmpResult = -1, outId = 0;
+            for (auto ch : outList->childs)
+            {
+                if (is(ch, "result_list_identifer"))
+                {
+                    switch_var(ch)
+                    {
+                        case 0: /* "star" output - this is return type */
+                        {
+                            if (tmpResult != -1)
+                            {
+                                printf("Two or more * in outputs of call - expression can have only one value\n");
+                                logError(ctx->filename, ctx->code, ch->start, ch->end);
+                            }
+                            tmpResult = newTemp(ctx, fn->outputs[outId].second);
+                            args.push_back(tmpResult);
+                            break;
+                        }
+                        case 1: /* normal output */
+                        {
+                            string varName = Substr(ctx, ch->nonTerm(0));
+                            int64_t varId = ctx->nextVarId++;
+                            ctx->variables[varId] = fn->outputs[outId].second;
+                            ctx->names[varName] = varId;
+                            args.push_back(varId);
+                        }
+                    }
+                }
+                outId++;
+            }
+
+            /* create operation */
+            append(ops, {OP_CALL, args, attributes});
+            
+            return {ops, tmpResult};
         }
     }
     return {{}, -1};
@@ -239,12 +462,12 @@ pair<vector<Operation>, int64_t> buildIndexOperation(BuildContext *ctx, Node *no
     }
     printf("Index operation\n");
     
-    auto [t, pos] = buildSimpleTerm(ctx, node->nonTerm(1));
+    auto [t, pos] = buildSimpleTerm(ctx, node->nonTerm(0));
     auto [tIndex, posIndex] = buildExpression(ctx, node->nonTerm(1));
 
     vector<Operation> ops;
-    TypeContext *elemType = ctx->variables[pos];    
-    switch (elemType->type)
+    TypeContext *type = ctx->variables[pos];    
+    switch (type->type)
     {            
         case TYPE_CLASS:
         case TYPE_UNION:
@@ -253,14 +476,43 @@ pair<vector<Operation>, int64_t> buildIndexOperation(BuildContext *ctx, Node *no
         case TYPE_PIPE:
         case TYPE_PROMISE:
             printf("Can't use index on class/union/record/scalar/pipe/promise\n");
+            printType(type);
             logError(ctx->filename, ctx->code, node->start, node->end);
             return {{}, -1};
         case TYPE_ARRAY:
         {
-            int64_t tmp = newTemp(ctx, elemType->_vector.base);
+            TypeContext *indexType = ctx->variables[posIndex];
+            if (indexType->type != TYPE_SCALAR || (SCALAR_TYPE(indexType->_scalar.kind) != SCALAR_I && SCALAR_TYPE(indexType->_scalar.kind) != SCALAR_U))
+            {
+                printf("Index variable isn't integer scalar\n");
+                printType(type);
+                logError(ctx->filename, ctx->code, node->start, node->end);
+                return {{}, -1};
+            }
             append(ops, t);
             append(ops, tIndex);
-            append(ops, {OP_QUERY_INDEX, {tmp, pos, posIndex}});
+            /* generate path */
+            vector<int64_t> args {0, pos};
+            int64_t id = 2;
+            type = type->_vector.base;
+            while (node->nonTerm(id))
+            {                
+                string field = Substr(ctx, node->nonTerm(id));
+                if (type->type != TYPE_RECORD)
+                {
+                    printf("[Usage of dot on not structure object]\n");
+                    logError(ctx->filename, ctx->code, node->nonTerm(args.size())->start, node->nonTerm(args.size())->end);
+                    break;
+                }
+                args.push_back(type->_struct.names[field]);
+                type = type->_struct.fields[args.back()];
+                id++;
+            }
+            int64_t tmp = newTemp(ctx, type);
+            args[0] = tmp;
+            args.push_back(posIndex);
+            
+            append(ops, {OP_QUERY_INDEX, args});
             freeTemp(ops, pos);
             freeTemp(ops, posIndex);
             return {ops, tmp};
@@ -281,6 +533,7 @@ pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *no
         {
             vector<Operation> ops;
             auto [t, pos] = buildQueryOperation(ctx, node->nonTerm(1));
+            append(ops, t);
             TypeContext *elemType = ctx->variables[pos];
             switch (elemType->type)
             {            
@@ -289,6 +542,7 @@ pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *no
                 case TYPE_RECORD:
                 case TYPE_SCALAR:
                     printf("Can't use prefix query on class/union/record/scalar\n");
+                    printType(elemType);
                     logError(ctx->filename, ctx->code, node->start, node->end);
                     return {{}, -1};
                 case TYPE_ARRAY:
@@ -317,8 +571,46 @@ pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *no
         }
         case 1: // infix query
         {
-            printf("Infix queries are not implemented now\n");
-            return {{}, -1};
+            vector<Operation> ops;
+            auto [code, position] = buildIndexOperation(ctx, node->nonTerm(0));
+            TypeContext *type = ctx->variables[position];
+            map<string, string> attributes = getAttributeList(ctx, node->nonTerm(1));
+            if (type->type != TYPE_CLASS)
+            {
+                printf("[infix form of query must be used with classes, but used with:]\n");
+                printType(type);
+                logError(ctx->filename, ctx->code, node->nonTerm(0)->start, node->nonTerm(0)->end);       
+                break;
+            }
+            if (!is(node->nonTerm(2), "SimpleTerm") || node->nonTerm(2)->variant != 3)
+            {
+                printf("[Error - in infix form of class query, second part must be dotted identifer chain]\n");
+                logError(ctx->filename, ctx->code, node->nonTerm(2)->start, node->nonTerm(2)->end);
+                break;
+            }
+            Node *path = node->nonTerm(2);
+            /* parse path to field */
+            vector<int64_t> args {0, position};
+            int64_t id = 0;
+            while (path->nonTerm(id))
+            {
+                string field = Substr(ctx, path->nonTerm(id));
+                if (type->type != TYPE_RECORD && (id != 0 || type->type != TYPE_CLASS))
+                {
+                    printf("[Usage of dot on not structure object]\n");
+                    logError(ctx->filename, ctx->code, path->nonTerm(id)->start, path->nonTerm(id)->end);
+                    break;
+                }
+                args.push_back(type->_struct.names[field]);
+                type = type->_struct.fields[args.back()];
+                id++;
+            }
+
+            args[0] = newTemp(ctx, type);
+
+            append(ops, code);
+            append(ops, {OP_QUERY_CLASS, args, attributes});
+            return {ops, args[0]};
         }   
     }
     return {{}, -1};    
@@ -333,39 +625,68 @@ pair<vector<Operation>, int64_t> buildPrefixOperation(BuildContext *ctx, Node *n
     }
     printf("Prefix operation\n");
     vector<Operation> ops;
-    auto [t, pos] = buildPrefixOperation(ctx, node->nonTerm(1));
-    
-    int64_t resultPosition = pos;
-    
-    append(ops, t);
-    
-    switch_var(node->nonTerm(0))
+
+    switch_var(node)
     {
-        case 0: // +
-        { return {t, resultPosition}; }
-        case 1: // -
-        { 
-            int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
-            append(ops, {OP_NEW_INT, {tmp, 0}}); 
-            append(ops, {OP_SUB, {pos, tmp, pos}}); 
-            freeTemp(ops, tmp);
-            break; 
-        }
-        case 2: // !
-        { 
-            int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
-            append(ops, {OP_JZ, {3, pos}});
-            append(ops, {OP_NEW_INT, {tmp, -1}});
-            append(ops, {OP_JMP, {2, pos}});
-            append(ops, {OP_NEW_INT, {tmp, 0}});
+        case 0: // operator
+        {
+            auto [t, pos] = buildPrefixOperation(ctx, node->nonTerm(1));
+            
+            int64_t resultPosition = pos;
+            
+            append(ops, t);
+            
+            switch_var(node->nonTerm(0))
+            {
+                case 0: // +
+                { return {t, resultPosition}; }
+                case 1: // -
+                { 
+                    int64_t tmp = newTemp(ctx, ctx->variables[pos]);
+                    append(ops, {OP_NEW_INT, {tmp, 0}}); 
+                    append(ops, {OP_SUB, {pos, tmp, pos}}); 
+                    freeTemp(ops, tmp);
+                    break; 
+                }
+                case 2: // !
+                { 
+                    int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
+                    append(ops, {OP_JZ, {3, pos}});
+                    append(ops, {OP_NEW_INT, {tmp, -1}});
+                    append(ops, {OP_JMP, {2, pos}});
+                    append(ops, {OP_NEW_INT, {tmp, 0}});
+                    freeTemp(ops, pos);
+                    resultPosition = tmp;
+                    break; 
+                }
+                case 3: // ~ 
+                {  append(ops, {OP_BNOT, {pos, pos}}); break; }
+            }
+            return {ops, resultPosition};
+        } 
+        case 1: // cast
+        {
+            auto [t, pos] = buildPrefixOperation(ctx, node->nonTerm(1));
+
+            TypeContext *type = getType(ctx, node->nonTerm(0));
+
+            if (!is_castable(type, ctx->variables[pos]))
+            {
+                printf("Cast is impossible between this types\n");
+                printType(type);
+                printType(ctx->variables[pos]);
+                logError(ctx->filename, ctx->code, node->start, node->end);
+            }
+            
+            append(ops, t);
+            int64_t tmp = newTemp(ctx, type);
+            append(ops, {OP_CAST, {pos, tmp, pos}}); 
             freeTemp(ops, pos);
-            resultPosition = tmp;
-            break; 
-        }
-        case 3: // ~ 
-        {  append(ops, {OP_BNOT, {pos, pos}}); break; }
+            
+            return {ops, tmp};
+        } 
     }
-    return {ops, resultPosition};
+    return {{}, -1};
 }
 
 pair<vector<Operation>, int64_t> buildBinOperation(BuildContext *ctx, Node *node)
@@ -381,8 +702,18 @@ pair<vector<Operation>, int64_t> buildBinOperation(BuildContext *ctx, Node *node
     while (node->nonTerm(id))
     {
         auto [t2, pos2] = buildPrefixOperation(ctx, node->nonTerm(id + 1));
+
+        auto [can, resType] = operation_types(ctx->variables[pos], ctx->variables[pos2]);
+        if (!can)
+        {
+            printf("Can't implictly add this types\n");
+            printType(ctx->variables[pos]);
+            printType(ctx->variables[pos2]);
+            logError(ctx->filename, ctx->code, node->nonTerm(id + 0)->start, node->nonTerm(id + 0)->end);
+            return {{}, -1};
+        }
         
-        int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
+        int64_t tmp = newTemp(ctx, resType);
         
         append(ops, t);
         append(ops, t2);
@@ -425,8 +756,18 @@ pair<vector<Operation>, int64_t> buildMulOperation(BuildContext *ctx, Node *node
     while (node->nonTerm(id))
     {
         auto [t2, pos2] = buildBinOperation(ctx, node->nonTerm(id + 1));
+
+        auto [can, resType] = operation_types(ctx->variables[pos], ctx->variables[pos2]);
+        if (!can)
+        {
+            printf("Can't implictly add this types\n");
+            printType(ctx->variables[pos]);
+            printType(ctx->variables[pos2]);
+            logError(ctx->filename, ctx->code, node->nonTerm(id + 0)->start, node->nonTerm(id + 0)->end);
+            return {{}, -1};
+        }
         
-        int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
+        int64_t tmp = newTemp(ctx, resType);
         
         append(ops, t);
         append(ops, t2);
@@ -465,9 +806,19 @@ pair<vector<Operation>, int64_t> buildAddOperation(BuildContext *ctx, Node *node
     while (node->nonTerm(id))
     {
         auto [t2, pos2] = buildMulOperation(ctx, node->nonTerm(id + 1));
+
+        auto [can, resType] = operation_types(ctx->variables[pos], ctx->variables[pos2]);
+        if (!can)
+        {
+            printf("Can't implictly add this types\n");
+            printType(ctx->variables[pos]);
+            printType(ctx->variables[pos2]);
+            logError(ctx->filename, ctx->code, node->nonTerm(id + 0)->start, node->nonTerm(id + 0)->end);
+            return {{}, -1};
+        }
         
-        int64_t tmp = newTemp(ctx, getBaseType(ctx, "i64"));
-        
+        int64_t tmp = newTemp(ctx, resType);
+
         append(ops, t);
         append(ops, t2);
         
@@ -599,11 +950,18 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
     }
     /* build rightmost part */
     auto [res, dataPos] = buildLogicOperation(ctx, node->childs.back());
+    TypeContext *dataType = ctx->variables[dataPos];
     vector<Operation> ops;
     append(ops, res);
     /* set to each part in left */
+    int id = 0;
     for (auto x : node->childs)
     {
+        if (id + 1 == (int64_t)node->childs.size())
+        {
+            break;
+        }
+        id++;
         if (is(x, "SimpleTerm"))
         {
             switch_var(x)
@@ -616,7 +974,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                     /* push to variable/structure */
                     if (ctx->names.find(Substr(ctx, x->nonTerm(0))) == ctx->names.end())
                     {
-                        printf("[Unknown variable name:]\n");
+                        printf("[Unknown variable name: %s]\n", Substr(ctx, x->nonTerm(0)).c_str());
                         logError(ctx->filename, ctx->code, x->nonTerm(0)->start, x->nonTerm(0)->end);
                         break;
                     }
@@ -641,19 +999,296 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                     }
                     /* add command */
                     args.push_back(dataPos);
-                    append(ops, {OP_PUSH_VAR, args});
+                    /* check - if this is pushing of equal types */
+                    if (is_castable(type, dataType))
+                    {
+                        if (is_convertable(type, dataType) || ctx->enabled("implicit_castes"))
+                        {
+                            append(ops, {OP_PUSH_VAR, args});
+                        }
+                        else
+                        {
+                            printf("[can't automaticly cast this types, use <implicit_castes> flag to allow this cast]\n");
+                            printType(type);
+                            printType(dataType);
+                            logError(ctx->filename, ctx->code, x->start, x->end);   
+                        }
+                    }
+                    else
+                    {
+                        if (type->type == TYPE_PIPE)
+                        {
+                            if (is_castable(type->_vector.base, dataType))
+                            {
+                                if (is_convertable(type->_vector.base, dataType) || ctx->enabled("implicit_castes"))
+                                {
+                                    auto [target, targetPos] = buildSimpleTerm(ctx, x);
+                                    append(ops, target);
+                                    append(ops, {OP_PUSH_PIPE, {targetPos, dataPos}});
+                                    break;
+                                }
+                                else
+                                {
+                                    printf("[can't automaticly cast this types, use <implicit_castes> flag to allow this cast]\n");
+                                    printType(type);
+                                    printType(dataType);
+                                    logError(ctx->filename, ctx->code, x->start, x->end);   
+                                    break;
+                                } 
+                            }
+                        }
+                        else if (type->type == TYPE_PROMISE)
+                        {
+                            if (is_castable(type->_vector.base, dataType))
+                            {
+                                if (is_convertable(type->_vector.base, dataType) || ctx->enabled("implicit_castes"))
+                                {
+                                    auto [target, targetPos] = buildSimpleTerm(ctx, x);
+                                    append(ops, target);
+                                    append(ops, {OP_PUSH_PROMISE, {targetPos, dataPos}});
+                                    break;
+                                }
+                                else
+                                {
+                                    printf("[can't automaticly cast this types, use <implicit_castes> flag to allow this cast]\n");
+                                    printType(type);
+                                    printType(dataType);
+                                    logError(ctx->filename, ctx->code, x->start, x->end);   
+                                    break;
+                                } 
+                            }
+                        }
+                        printf("[this types are uncastable - push is wrong]\n");
+                        printType(type);
+                        printType(dataType);
+                        logError(ctx->filename, ctx->code, x->start, x->end);       
+                    }
                     break;
                 }
                 case 4: printf("[Can't push to worker call]\n"); logError(ctx->filename, ctx->code, x->start, x->end); break;
+
             }
         }
-        else if (is(x, "QueryOperation"))
+        else if (is(x, "expression"))
         {
-            printf("push to query... For now, this isn't supported...\n");
+            /* get value - if it is pipe or it is promise - push to them */
+            auto [code, pos] = buildExpression(ctx, x);
+            TypeContext *type = ctx->variables[pos];
+
+            switch (type->type)
+            {
+                case TYPE_CLASS:
+                case TYPE_UNION:
+                case TYPE_RECORD:
+                case TYPE_ARRAY:
+                case TYPE_SCALAR:
+                    printf("[can't push to expression [from braces] with value of type class/union/record/array/scalar:]\n");
+                    printType(type);
+                    logError(ctx->filename, ctx->code, x->start, x->end);       
+                    break;
+                case TYPE_PIPE:
+                {
+                    append(ops, code);
+                    append(ops, {OP_PUSH_PIPE, {pos, dataPos}});
+                    break;
+                }
+                case TYPE_PROMISE:
+                {
+                    append(ops, code);
+                    append(ops, {OP_PUSH_PROMISE, {pos, dataPos}});
+                    break;
+                }
+            }
         }
         else if (is(x, "IndexOperation"))
         {
-            printf("push to index... For now, this isn't supported...\n");
+            auto [array, arrayPos] = buildSimpleTerm(ctx, x->nonTerm(0));
+            auto [index, indexPos] = buildExpression(ctx, x->nonTerm(1));
+
+            TypeContext *arrayType = ctx->variables[arrayPos];
+            TypeContext *indexType = ctx->variables[indexPos];
+            if (arrayType->type != TYPE_ARRAY)
+            {
+                printf("[push to indexation not in array, wrong type:]\n");
+                printType(arrayType);
+                logError(ctx->filename, ctx->code, x->start, x->end);   
+                break;
+            }            
+            if (indexType->type != TYPE_SCALAR || (SCALAR_TYPE(indexType->_scalar.kind) != SCALAR_I && SCALAR_TYPE(indexType->_scalar.kind) != SCALAR_U))
+            {
+                printf("Index variable isn't integer scalar\n");
+                printType(indexType);
+                logError(ctx->filename, ctx->code, node->start, node->end);
+                return {{}, -1};
+            }
+            
+            TypeContext *type = arrayType->_vector.base;
+
+            /* find path to field */
+            vector<int64_t> args {arrayPos, indexPos};
+            int64_t id = 2;
+            while (x->nonTerm(id))
+            {
+                string field = Substr(ctx, x->nonTerm(id));
+                if (type->type != TYPE_RECORD)
+                {
+                    printf("[Usage of dot on not structure object]\n");
+                    logError(ctx->filename, ctx->code, x->nonTerm(id)->start, x->nonTerm(id)->end);
+                    break;
+                }
+                args.push_back(type->_struct.names[field]);
+                type = type->_struct.fields[args.back()];
+                id++;
+            }
+            args.push_back(dataPos);
+            
+            /* check - if this is pushing of equal types */
+            if (is_castable(type, dataType))
+            {
+                if (is_convertable(type, dataType) || ctx->enabled("implicit_castes"))
+                {
+                    /* calculate arguments */
+                    append(ops, array);
+                    append(ops, index);
+                    
+                    append(ops, {OP_PUSH_ARRAY, args});
+                }
+                else
+                {
+                    printf("[can't automaticly cast this types, use <implicit_castes> flag to allow this cast]\n");
+                    printType(type);
+                    printType(dataType);
+                    logError(ctx->filename, ctx->code, x->start, x->end);   
+                }
+            }
+            else
+            {
+                if (type->type == TYPE_PIPE)
+                {
+                    if (is_castable(type->_vector.base, dataType))
+                    {
+                        if (is_convertable(type->_vector.base, dataType) || ctx->enabled("implicit_castes"))
+                        {
+                            /* calculate array value */
+                            auto [target, targetPos] = buildIndexOperation(ctx, x);
+                            append(ops, target);
+                            append(ops, {OP_PUSH_PIPE, {targetPos, dataPos}});
+                            break;
+                        }
+                        else
+                        {
+                            printf("[can't automaticly cast this types, use <implicit_castes> flag to allow this cast]\n");
+                            printType(type);
+                            printType(dataType);
+                            logError(ctx->filename, ctx->code, x->start, x->end);   
+                            break;
+                        } 
+                    }
+                }
+                else if (type->type == TYPE_PROMISE)
+                {
+                    if (is_castable(type->_vector.base, dataType))
+                    {
+                        if (is_convertable(type->_vector.base, dataType) || ctx->enabled("implicit_castes"))
+                        {
+                            /* calculate array value */
+                            auto [target, targetPos] = buildIndexOperation(ctx, x);
+                            append(ops, target);
+                            append(ops, {OP_PUSH_PROMISE, {targetPos, dataPos}});
+                            break;
+                        }
+                        else
+                        {
+                            printf("[can't automaticly cast this types, use <implicit_castes> flag to allow this cast]\n");
+                            printType(type);
+                            printType(dataType);
+                            logError(ctx->filename, ctx->code, x->start, x->end);   
+                            break;
+                        } 
+                    }
+                }
+                printf("[this types are uncastable - push is wrong]\n");
+                printType(type);
+                printType(dataType);
+                logError(ctx->filename, ctx->code, x->start, x->end);       
+            }
+            break;
+        }
+        else if (is(x, "QueryOperation"))
+        {
+            if (x->variant == 0)
+            {
+                /* get value - if it is pipe or it is promise - push to them */
+                auto [code, pos] = buildQueryOperation(ctx, x);
+                TypeContext *type = ctx->variables[pos];
+
+                switch (type->type)
+                {
+                    case TYPE_CLASS:
+                    case TYPE_UNION:
+                    case TYPE_RECORD:
+                    case TYPE_ARRAY:
+                    case TYPE_SCALAR:
+                        printf("[can't push to expression [from braces] with value of type class/union/record/array/scalar:]\n");
+                        printType(type);
+                        logError(ctx->filename, ctx->code, x->start, x->end);       
+                        break;
+                    case TYPE_PIPE:
+                    {
+                        append(ops, code);
+                        append(ops, {OP_PUSH_PIPE, {pos, dataPos}});
+                        break;
+                    }
+                    case TYPE_PROMISE:
+                    {
+                        append(ops, code);
+                        append(ops, {OP_PUSH_PROMISE, {pos, dataPos}});
+                        break;
+                    }
+                }
+                break;
+            }
+            else // infix query syntax - class field access
+            {
+                auto [code, position] = buildIndexOperation(ctx, x->nonTerm(0));
+                TypeContext *type = ctx->variables[position];
+                map<string, string> attributes = getAttributeList(ctx, x->nonTerm(1));
+                if (type->type != TYPE_CLASS)
+                {
+                    printf("[infix form of query must be used with classes, but used with:]\n");
+                    printType(type);
+                    logError(ctx->filename, ctx->code, x->nonTerm(0)->start, x->nonTerm(0)->end);       
+                    break;
+                }
+                if (!is(x->nonTerm(2), "SimpleTerm") || x->nonTerm(2)->variant != 3)
+                {
+                    printf("[Error - in infix form of class query, second part must be dotted identifer chain]\n");
+                    logError(ctx->filename, ctx->code, x->nonTerm(2)->start, x->nonTerm(2)->end);
+                    break;
+                }
+                Node *path = x->nonTerm(2);
+                /* parse path to field */
+                vector<int64_t> args {position};
+                int64_t id = 0;
+                while (path->nonTerm(id))
+                {
+                    string field = Substr(ctx, path->nonTerm(id));
+                    if (type->type != TYPE_RECORD && (id != 0 || type->type != TYPE_CLASS))
+                    {
+                        printf("[Usage of dot on not structure object]\n");
+                        logError(ctx->filename, ctx->code, path->nonTerm(id)->start, path->nonTerm(id)->end);
+                        break;
+                    }
+                    args.push_back(type->_struct.names[field]);
+                    type = type->_struct.fields[args.back()];
+                    id++;
+                }
+                args.push_back(dataPos);
+
+                append(ops, code);
+                append(ops, {OP_PUSH_CLASS, args, attributes});
+                break;
+            }
         }
     }
     return {ops, dataPos};
@@ -770,7 +1405,7 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     printf("Building worker %s ...\n", wk->name.c_str());
     
     ctx->nextVarId = 0;
-    ctx->nextTempId = 100000;
+    ctx->nextTempId = FIRST_TEMP_ID;
     ctx->names.clear();
     ctx->variables.clear();
     
@@ -794,8 +1429,9 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     /* build body */
     auto res = buildCodeBlock(ctx, node);
     append(wk->content->code, res);
+    /* save variables */
+    wk->content->variables = ctx->variables;
 }
-
 
 void addWorkerDefinition(BuildContext *ctx, Node *node, bool with_code)
 {
@@ -804,20 +1440,7 @@ void addWorkerDefinition(BuildContext *ctx, Node *node, bool with_code)
     
     WorkerDeclarationContext *wk = new WorkerDeclarationContext();
 
-    int64_t attrId = 0;
-    Node *attrList = node->nonTerm(0);
-    assert_type(attrList, "attribute_list");
-    while (attrList->nonTerm(attrId))
-    {
-        Node *key = attrList->nonTerm(attrId + 0);
-        Node *value = attrList->nonTerm(attrId + 1);
-        assert_type(key, "identifer_or_number");
-        assert_type(value, "identifer_or_number");
-        wk->attributes[Substr(ctx, key)] = Substr(ctx, value);
-        attrId += 2;
-    }
-
-    printf("read %lld attributes\n", attrId / 2);
+    wk->attributes = getAttributeList(ctx, node->nonTerm(0));
 
     /* read arguments */
     wk->inputs = readWorkerArgList(ctx, node->nonTerm(1));
@@ -830,9 +1453,9 @@ void addWorkerDefinition(BuildContext *ctx, Node *node, bool with_code)
     ctx->result->workers.push_back(wk);
 }
 
-BuildContext *initializateContext(const char *filename, char *source)
+BuildContext *initializateContext(const char *filename, char *source, map<string, string> configs)
 {
-    BuildContext *ctx = new BuildContext(filename, source);
+    BuildContext *ctx = new BuildContext(configs, filename, source);
     ctx->result = new BuildResult();
     
     /* add builtin types */
@@ -874,14 +1497,15 @@ Node *compressNode(Node *x)
 }
 
 
-pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<Node *>nodes)
+pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<Node *>nodes, map<string, string> configs)
 {
     /* compress AST tree */
     for (auto &node : nodes)
     {
         node = compressNode(node);
+        dumpAst(node);
     }
-    BuildContext *ctx = initializateContext(filename, source);
+    BuildContext *ctx = initializateContext(filename, source, configs);
     for (auto &node : nodes)
     {
         assert_type(node, "Global");
