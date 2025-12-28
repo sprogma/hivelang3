@@ -372,9 +372,9 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             {
                 /* get field index */
                 string field = Substr(ctx, node->nonTerm(args.size()));
-                if (type->type != TYPE_RECORD)
+                if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
                 {
-                    printf("[Usage of dot on not structure object]\n");
+                    printf("[Usage of dot on not structure/union object]\n");
                     logError(ctx->filename, ctx->code, node->nonTerm(args.size())->start, node->nonTerm(args.size())->end);
                     break;
                 }
@@ -498,9 +498,9 @@ pair<vector<Operation>, int64_t> buildIndexOperation(BuildContext *ctx, Node *no
             while (node->nonTerm(id))
             {                
                 string field = Substr(ctx, node->nonTerm(id));
-                if (type->type != TYPE_RECORD)
+                if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
                 {
-                    printf("[Usage of dot on not structure object]\n");
+                    printf("[Usage of dot on not structure/union object]\n");
                     logError(ctx->filename, ctx->code, node->nonTerm(args.size())->start, node->nonTerm(args.size())->end);
                     break;
                 }
@@ -595,9 +595,9 @@ pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *no
             while (path->nonTerm(id))
             {
                 string field = Substr(ctx, path->nonTerm(id));
-                if (type->type != TYPE_RECORD && (id != 0 || type->type != TYPE_CLASS))
+                if (type->type != TYPE_RECORD && type->type != TYPE_UNION && (id != 0 || type->type != TYPE_CLASS))
                 {
-                    printf("[Usage of dot on not structure object]\n");
+                    printf("[Usage of dot on not structure/union object]\n");
                     logError(ctx->filename, ctx->code, path->nonTerm(id)->start, path->nonTerm(id)->end);
                     break;
                 }
@@ -987,9 +987,9 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                     {
                         /* encode path to field */
                         string field = Substr(ctx, x->nonTerm(args.size()));
-                        if (type->type != TYPE_RECORD)
+                        if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
                         {
-                            printf("[Usage of dot on not structure object]\n");
+                            printf("[Usage of dot on not structure/union object]\n");
                             logError(ctx->filename, ctx->code, x->nonTerm(args.size())->start, x->nonTerm(args.size())->end);
                             break;
                         }
@@ -1130,9 +1130,9 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
             while (x->nonTerm(id))
             {
                 string field = Substr(ctx, x->nonTerm(id));
-                if (type->type != TYPE_RECORD)
+                if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
                 {
-                    printf("[Usage of dot on not structure object]\n");
+                    printf("[Usage of dot on not structure/union object]\n");
                     logError(ctx->filename, ctx->code, x->nonTerm(id)->start, x->nonTerm(id)->end);
                     break;
                 }
