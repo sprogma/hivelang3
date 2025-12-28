@@ -149,6 +149,7 @@ struct WorkerDeclarationContext
 struct BuildResult
 {
     vector<WorkerDeclarationContext *> workers;
+    map<string, int64_t> names;
 };
 
 #define FIRST_TEMP_ID 1000000
@@ -181,5 +182,7 @@ struct BuildContext
 
 /* - api */
 pair<BuildResult *, bool> buildAst(const char *filename, char *code, vector<Node *>nodes, map<string, string> configs);
+
+void dumpIR(WorkerDeclarationContext *worker);
 
 #endif

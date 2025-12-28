@@ -1,4 +1,4 @@
-class point
+union point
 {
     i32 x, y;
 }
@@ -6,9 +6,8 @@ class point
 (i32 x, i32 y)create(point? res)
 {
     point t;
-    t <- new point();
-    t?x <- x;
-    t[timeout:0.5]?y <- t?x + y;
+    t.x <- x;
+    t.y <- t.x + y;
     res <- t;
 }
 
