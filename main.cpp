@@ -5,6 +5,7 @@ using namespace std;
 
 #include "ast.hpp"
 #include "optimization/optimizer.hpp"
+#include "codegen/codegen.hpp"
 #include "ir.hpp"
 
 
@@ -93,6 +94,14 @@ int main(int argc, char **argv)
     {
         dumpIR(fn);
     }
+    
+    printf("Generating code for x64-win\n");
+
+    CodeAssembler *assembler = new_x64_win_Assembler();
+
+    assembler->Build(newCode, "res.exe");
+
+    printf("res.exe file generated\n");
 
     free(code);
     return 0;

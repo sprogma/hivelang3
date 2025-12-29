@@ -443,6 +443,12 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             
             /* load function by name */
             WorkerDeclarationContext *fn = getWorkerByName(ctx, name);
+            if (fn == NULL)
+            {
+                printf("Error: can't find worker named %s\n", name.c_str());
+                logError(ctx->filename, ctx->code, node->start, node->end);
+                return {{}, -1};
+            }
             printf("Call of %s...\n", name.c_str());
 
             args.push_back(ctx->result->workers[fn]);
