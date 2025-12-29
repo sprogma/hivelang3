@@ -120,6 +120,10 @@ enum OperationType
     OP_BOR, OP_BAND, OP_BXOR, OP_SHL, OP_SHR, OP_BNOT,
     OP_EQ, OP_LT, OP_LE, OP_GT, OP_GE,
 
+    // used for register allocations
+    OP_STORE, // format is [variable, place]
+    OP_LOAD, // format is [variable, place]
+
     // used only in parsing - don't use it.
     OP_JMP,
 };
@@ -212,7 +216,7 @@ pair<BuildResult *, bool> buildAst(const char *filename, char *code, vector<Node
 
 vector<int64_t> getWritedVariables(OperationBlock *op);
 vector<int64_t> getUsedVariables(OperationBlock *op); // all variables from operation
-void applyNamesTranslition(OperationBlock *block, map<int64_t, int64_t> &translition);
+void applyNamesTranslition(OperationBlock *block, const map<int64_t, int64_t> &translition);
 
 void dumpIR(WorkerDeclarationContext *worker);
 

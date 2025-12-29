@@ -62,6 +62,7 @@ void connectOp(WorkerDeclarationContext *wk, OperationBlock *code, OperationBloc
     if (code == NULL)
     {
         wk->content->entry = next;
+        next->next.insert(next->next.begin(), NULL);
     }
     else
     {
@@ -73,6 +74,34 @@ void connectOp(WorkerDeclarationContext *wk, OperationBlock *code, OperationBloc
             code->next[0]->prev.insert(next);
         }
         code->next[0] = next;
+    }
+}
+
+void connectBeforeOp(WorkerDeclarationContext *wk, OperationBlock *code, OperationBlock *next)
+{
+    wk->content->code.push_back(next);
+    if (code == NULL)
+    {
+        wk->content->entry = next;
+        next->next.insert(next->next.begin(), NULL);
+    }
+    else
+    {
+        /* make all links on CODE point on NEXT */
+        for (auto &p : code->prev)
+        {
+            for (auto &n : p->next)
+            {
+                if (n == code) 
+                { 
+                    n = next; 
+                    next->prev.insert(p);
+                }
+            }
+        }
+        /* update links */
+        next->next.insert(next->next.begin(), code);
+        code->prev = {next};
     }
 }
 

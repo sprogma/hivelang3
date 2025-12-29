@@ -1478,10 +1478,11 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
             auto [guard, guardPos] = buildExpression(ctx, node->nonTerm(0)); 
             if (handleNotNull(ctx, guardPos, node->nonTerm(0))) { break; }
             auto body = buildCodeBlock(ctx, node->nonTerm(1));
-            append(ops, {OP_JMP, {1 + (int64_t)body.size()}});
+            append(ops, {OP_JMP, {2 + (int64_t)body.size()}});
+            freeTemp(ops, guardPos);
             append(ops, body);
             append(ops, guard);
-            append(ops, {OP_JNZ, {- (int64_t)guard.size() - (int64_t)body.size(), guardPos}});
+            append(ops, {OP_JNZ, {- 1 - (int64_t)guard.size() - (int64_t)body.size(), guardPos}});
             freeTemp(ops, guardPos);
             break;
         }
@@ -1515,6 +1516,7 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
                             append(ops, {OP_JNZ, {2 + (int64_t)block.size(), temp}});
                             freeTemp(ops, temp);
                             append(ops, block);
+                            freeTemp(ops, temp);
                             break;
                         }
                     }
@@ -1758,50 +1760,55 @@ pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<No
     return {ctx->result, false};
 }
 
-void applyNamesTranslition(OperationBlock *op, map<int64_t, int64_t> &translition)
+void applyNamesTranslition(OperationBlock *op, const map<int64_t, int64_t> &translition)
 {    
+    #define T(x) \
+        if (translition.contains(x)) x = translition.find(x)->second;
+        
     switch (op->type)
     {   
         // 2nd
         case OP_LOAD_INPUT:
         case OP_LOAD_OUTPUT:
-            op->data[1] = translition[op->data[1]];
+            T(op->data[1]);
             break;
 
         // 1, last
         case OP_PUSH_VAR:
         case OP_PUSH_CLASS:
-            op->data[0] = translition[op->data[0]];
-            op->data.back() = translition[op->data.back()];
+            T(op->data[0]);
+            T(op->data.back());
             break;
 
         // 1, 2
         case OP_QUERY_VAR:
         case OP_QUERY_CLASS:
-            op->data[0] = translition[op->data[0]];
-            op->data[1] = translition[op->data[1]];
+            T(op->data[0]);
+            T(op->data[1]);
             break;
 
         // 1, 2 and last
         case OP_PUSH_ARRAY:
         case OP_QUERY_INDEX:
-            op->data[0] = translition[op->data[0]];
-            op->data[1] = translition[op->data[1]];
-            op->data.back() = translition[op->data.back()];
+            T(op->data[0]);
+            T(op->data[1]);
+            T(op->data.back());
             break;
             
         // all except first
         case OP_CALL:
             for (auto &i : op->data | views::drop(1))
             {
-                i = translition[i];
+                T(i);
             }
             break;
 
         // first arg
+        case OP_STORE:
+        case OP_LOAD:
         case OP_NEW_INT:
         case OP_NEW_FLOAT:
-            op->data[0] = translition[op->data[0]];
+            T(op->data[0]);
             break;
         
         // all args
@@ -1838,13 +1845,15 @@ void applyNamesTranslition(OperationBlock *op, map<int64_t, int64_t> &translitio
         case OP_GE:
             for (auto &i : op->data)
             {
-                i = translition[i];
+                T(i);
             }
             break;
     }
+    
+    #undef T
 }
 
-vector<int64_t> getUsedVariables(OperationBlock *op)
+vector<int64_t> getWritedVariables(OperationBlock *op)
 {    
     switch (op->type)
     {   
@@ -1865,15 +1874,17 @@ vector<int64_t> getUsedVariables(OperationBlock *op)
         case OP_PUSH_PROMISE:
         case OP_PUSH_CLASS:
         case OP_PUSH_ARRAY:
-            return {};
-        
-        // all args
-        case OP_PUSH_VAR:
-        case OP_NEW_INT:
-        case OP_NEW_FLOAT:
         case OP_JMP:
         case OP_JZ:
         case OP_JNZ:
+        case OP_STORE:
+            return {};
+        
+        // first arg
+        case OP_LOAD:
+        case OP_PUSH_VAR:
+        case OP_NEW_INT:
+        case OP_NEW_FLOAT:
         case OP_NEW_ARRAY:
         case OP_NEW_PIPE:
         case OP_NEW_PROMISE:
@@ -1900,10 +1911,10 @@ vector<int64_t> getUsedVariables(OperationBlock *op)
     }
 }
 
-vector<int64_t> getWritedVariables(OperationBlock *op)
+vector<int64_t> getUsedVariables(OperationBlock *op)
 {    
     switch (op->type)
-    {   
+    {
         // 2nd
         case OP_LOAD_INPUT:
         case OP_LOAD_OUTPUT:
@@ -1912,17 +1923,17 @@ vector<int64_t> getWritedVariables(OperationBlock *op)
         // 1, last
         case OP_PUSH_VAR:
         case OP_PUSH_CLASS:
-            return {op->data[0]};
+            return {op->data[0], op->data.back()};
 
         // 1, 2
         case OP_QUERY_VAR:
         case OP_QUERY_CLASS:
-            return {op->data[0]};
+            return {op->data[0], op->data[1]};
 
         // 1, 2 and last
         case OP_PUSH_ARRAY:
         case OP_QUERY_INDEX:
-            return {op->data[0]};
+            return {op->data[0], op->data[1], op->data.back()};
             
         // all except first
         case OP_CALL:
@@ -1932,6 +1943,9 @@ vector<int64_t> getWritedVariables(OperationBlock *op)
         }
 
         // first arg
+        case OP_STORE:
+        case OP_LOAD:
+        case OP_NEW_CLASS:
         case OP_NEW_INT:
         case OP_NEW_FLOAT:
             return {op->data[0]};
@@ -1949,7 +1963,6 @@ vector<int64_t> getWritedVariables(OperationBlock *op)
         case OP_NEW_ARRAY:
         case OP_NEW_PIPE:
         case OP_NEW_PROMISE:
-        case OP_NEW_CLASS:
         case OP_CAST:
         case OP_MOV:
         case OP_BOR:
@@ -1988,6 +2001,9 @@ void dumpIR(WorkerDeclarationContext *fn)
                 case OP_LOAD_OUTPUT: printf("OP_LOAD_OUTPUT "); break;
                 
                 case OP_FREE_TEMP: printf("OP_FREE_TEMP "); break;
+                
+                case OP_STORE: printf("OP_STORE "); break;
+                case OP_LOAD: printf("OP_LOAD "); break;
                 
                 case OP_CALL: printf("OP_CALL "); break;
                 case OP_CAST: printf("OP_CAST "); break;

@@ -66,6 +66,7 @@ WorkerDeclarationContext *forkWorker(WorkerDeclarationContext *input);
 void freeTemp(WorkerDeclarationContext *wk, OperationBlock *code, int64_t id);
 int64_t newTemp(WorkerDeclarationContext *wk, TypeContext *type);
 void removeOp(WorkerDeclarationContext *wk, OperationBlock *code);
+void connectBeforeOp(WorkerDeclarationContext *wk, OperationBlock *code, OperationBlock *next);
 void connectOp(WorkerDeclarationContext *wk, OperationBlock *code, OperationBlock *next);
 
 /* known layers */
