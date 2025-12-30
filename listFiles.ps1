@@ -1,1 +1,1 @@
-ls *.cpp,*.hpp -r | %{ [pscustomobject]@{name=$_.Name; lines=gc $_ -raw | measure -Line|% Lines}} | sort name
+ls *.cpp,*.hpp -r | %{ [pscustomobject]@{name=(Resolve-Path -Relative $_); lines=gc $_ -raw | measure -Line|% Lines}} | sort name
