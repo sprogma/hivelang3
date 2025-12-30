@@ -15,6 +15,8 @@ public:
     map<OperationBlock *, set<int64_t>> op_vars;
     map<int64_t, set<int64_t>> overlaps;
     set<int64_t> physicVars;
+    // write to key, read from value
+    map<int64_t, set<int64_t>> readWriteOverlaps;
     
     // op -> var -> [can TO var, can FROM var]
     map<OperationBlock *, map<int64_t, pair<bool, bool>>> access;
@@ -148,14 +150,46 @@ private:
         // }
         for (auto &[op, vars] : op_vars)
         {
+            auto wrt = getWritedVariables(op);
+            auto rdv = getReadVariables(op);
+            set<int64_t> writedVars(wrt.begin(), wrt.end());
+            set<int64_t> readVars(rdv.begin(), rdv.end());
+            set<int64_t> freedVars;
+            if (op->next.size() == 1)
+            {
+                OperationBlock *x = op->next[0];
+                while (x && x->type == OP_FREE_TEMP)
+                {
+                    freedVars.insert(x->data[0]);
+                    x = x->next[0];
+                }
+            }
+            
+            // printf("operator %p\n", op);
+            // for (auto &a1 : writedVars) printf("write %lld\n", a1);
+            // for (auto &a1 : readVars) printf("read %lld\n", a1);
+            // for (auto &a1 : freedVars) printf("free %lld\n", a1);
+            
             for (auto &i : vars)
             {
-                overlaps[i];
+                overlaps[i]; // create all vars
+                readWriteOverlaps[i]; // create all vars
                 for (auto &j : vars)
                 {
-                    if (i != j)
+                    if (i < j) // to add each pair only once
                     {
-                        overlaps[i].insert(j);
+                        if (((writedVars.contains(i) && readVars.contains(j) && freedVars.contains(j)) ||
+                            (writedVars.contains(j) && readVars.contains(i) && freedVars.contains(i))) &&
+                            writedVars.size() == 1)
+                        {
+                            // if we write to I, reading J and after that free J - that means i and j can have one register
+                            // [only if writing register is one, to be shure]
+                            readWriteOverlaps[i].insert(j);
+                        }
+                        else
+                        {
+                            overlaps[i].insert(j); overlaps[j].insert(i);
+                        }
                     }
                 }
             }

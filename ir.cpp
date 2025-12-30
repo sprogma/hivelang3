@@ -174,10 +174,11 @@ TypeContext *getBaseType(BuildContext *ctx, string name)
 
 TypeContext *getIntegerType(BuildContext *ctx, int64_t x)
 {
-    if (x >= INT8_MIN && x <= INT8_MAX) return getBaseType(ctx, "i8");
-    if (x >= 0 && (uint64_t)x <= UINT8_MAX) return getBaseType(ctx, "u8");
-    if (x >= INT16_MIN && x <= INT16_MAX) return getBaseType(ctx, "i16");
-    if (x >= 0 && (uint64_t)x <= UINT16_MAX) return getBaseType(ctx, "u16");
+    // TODO: how can i do this?
+    // if (x >= INT8_MIN && x <= INT8_MAX) return getBaseType(ctx, "i8");
+    // if (x >= 0 && (uint64_t)x <= UINT8_MAX) return getBaseType(ctx, "u8");
+    // if (x >= INT16_MIN && x <= INT16_MAX) return getBaseType(ctx, "i16");
+    // if (x >= 0 && (uint64_t)x <= UINT16_MAX) return getBaseType(ctx, "u16");
     if (x >= INT32_MIN && x <= INT32_MAX)  return getBaseType(ctx, "i32");
     if (x >= 0 && (uint64_t)x <= UINT32_MAX) return getBaseType(ctx, "u32");
     return getBaseType(ctx, "i64");

@@ -8,6 +8,7 @@
 #include <math.h>
 #include <vector>
 #include <bitset>
+#include <ranges>
 #include <array>
 #include <map>
 
@@ -87,6 +88,70 @@ private:
         }
     }
 
+    void trySpeadSameRegisters(vector<int64_t> order, map<int64_t, int64_t> &res, RegisterAnalizator &analyser)
+    {
+        /* simple euristic - if operator writes to X from Y and frees Y - allocate for X the same register */
+        for (auto &v : order)
+        {
+            for (auto &rw : analyser.readWriteOverlaps[v])
+            {
+                // if them overlaps in other place - don't create same color
+                if (analyser.overlaps[v].contains(rw))
+                {
+                    continue;
+                }
+                // else - try to allocate same register
+                if (res[rw] != -1)
+                {
+                    // try to color V into color of rw
+                    array<vector<int64_t>, registersCount> color;
+                    for (auto &i : analyser.overlaps[v])
+                    {
+                        if (res[i] == -1) continue;
+                        color[res[i]].push_back(i);
+                    }
+                    if (color[res[rw]].empty())
+                    {
+                        res[v] = res[rw];
+                    }
+                }
+                else if (res[v] != -1)
+                {
+                    // try to color RW into color of v
+                    array<vector<int64_t>, registersCount> color;
+                    for (auto &i : analyser.overlaps[rw])
+                    {
+                        if (res[i] == -1) continue;
+                        color[res[i]].push_back(i);
+                    }
+                    if (color[res[v]].empty())
+                    {
+                        res[rw] = res[v];
+                    }
+                }
+                else
+                {
+                    // try to color both in same color
+                    array<vector<int64_t>, registersCount> color;
+                    // fill using both rw and v
+                    for (auto &i : analyser.overlaps[rw])
+                    {
+                        if (res[i] == -1) continue;
+                        color[res[i]].push_back(i);
+                    }
+                    for (auto &i : analyser.overlaps[v])
+                    {
+                        if (res[i] == -1) continue;
+                        color[res[i]].push_back(i);
+                    }
+                    // if ok - color both nodes
+                    // color to -1 if can't find
+                    res[rw] = res[v] = FindFirst(color);
+                }
+            }
+        } 
+    }
+
     int64_t trySpreadRegisters(map<int64_t, int64_t> &res, RegisterAnalizator &analyser)
     {
         /* color */
@@ -97,15 +162,55 @@ private:
             res[k] = -1;
             order.insert({-v.size(), k});
         }
+
+        vector<int64_t> sameOrder(views::keys(res).begin(), views::keys(res).end());
+        double bestColored = 0;
+        for (int64_t t = 0; t < 1000; ++t)
+        {
+            for (int64_t i = 1; i < (int64_t)sameOrder.size(); ++i)
+            {
+                swap(sameOrder[i], sameOrder[rand() % (i + 1)]);
+            }
+            
+            map<int64_t, int64_t> tmpRes;
+            
+            for (auto &[k, v] : res) tmpRes[k] = -1;
+            
+            trySpeadSameRegisters(sameOrder, tmpRes, analyser);
+            
+            double curColored = 0;
+            for (auto &v : sameOrder)
+            {
+                curColored += 0.2 * (tmpRes[v] != -1);
+                for (auto &rw : analyser.readWriteOverlaps[v])
+                {
+                    // count same colored pairs
+                    curColored += (tmpRes[v] == tmpRes[rw] && tmpRes[v] != -1);
+                }
+            }
+            
+            if (curColored > bestColored)
+            {
+                res = tmpRes;
+                bestColored = curColored;
+            }
+        }
+        printf("Colored same colors: %f\n", bestColored);
+        
         for (auto &[cost, v] : order)
         {
+            if (res[v] != -1) continue;
+            
             array<vector<int64_t>, registersCount> color;
+            
             for (auto &i : analyser.overlaps[v])
             {
                 if (res[i] == -1) continue;
                 color[res[i]].push_back(i);
             }
+            
             int64_t freeColor = FindFirst(color);
+            
             if (freeColor == -1)
             {
                 // TODO: is there some ways to fix color?

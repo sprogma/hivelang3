@@ -232,6 +232,42 @@ private:
         }
     }
 
+    void InsertMove(int64_t dest, int64_t from)
+    {
+        TypeContext *t1 = varType(dest);
+        TypeContext *t2 = varType(from);
+        if (t1 == t2 || t1->size < t2->size)
+        {
+            if (regTable[dest] != regTable[from])
+            {
+                print("\tmov  %s, %s\n", RegisterName(dest), RegisterName(from));
+            }
+            return;
+        }
+        // t1->size > t2->size
+        if (isSigned(dest))
+        {
+            print("\tmovsx %s, %s\n", RegisterName(dest), RegisterName(from));
+        }
+        else
+        {
+            print("\tmovzx %s, %s\n", RegisterName(dest), RegisterName(from));
+        }
+    }
+
+    void InsertInteger(int64_t dest, int64_t value)
+    {
+        switch (value)
+        {
+            case 0:
+                print("\txor  %s, %s\n", RegisterName(dest), RegisterName(dest));
+                break;
+            default:
+                print("\tmov  %s, %lld\n", RegisterName(dest), value);
+                break;
+        }
+    }
+
     void BuildOperation(OperationBlock *op)
     {
         // return from function
@@ -255,10 +291,10 @@ private:
         }
         // if instruction have many next:
         #define BINOP \
-            print("\tmov  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]));
+            InsertMove(op->data[0], op->data[1]);
         #define CMPOP(A, B) \
-            print("\txor  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[0])); \
             print("\tcmp  %s, %s\n", RegisterName(op->data[1]), RegisterName(op->data[2])); \
+            print("\tmov  %s, 0\n", RegisterName(op->data[0])); \
             if (isSigned(op->data[0])) \
                 print("\t" A " %s\n", RegisterName(regTable[op->data[0]], 1)); \
             else \
@@ -273,12 +309,12 @@ private:
             case OP_FREE_TEMP: break;
             
             case OP_JZ:
-                print("\ttest %s\n", RegisterName(op->data[0]));
+                print("\ttest %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[0]));
                 print("\tjz   op_%p\n", op->next[1]);
                 break;
                 
             case OP_JNZ: 
-                print("\ttest %s\n", RegisterName(op->data[0]));
+                print("\ttest %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[0]));
                 print("\tjnz  op_%p\n", op->next[1]);
                 break;
         
@@ -302,15 +338,15 @@ private:
                 break;
                 
             case OP_CAST: 
-                print("\tmov  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]));
+                InsertMove(op->data[0], op->data[1]);
                 break;
                 
             case OP_MOV: 
-                print("\tmov  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]));
+                InsertMove(op->data[0], op->data[1]);
                 break;
 
             case OP_NEW_INT: 
-                print("\tmov  %s, %lld\n", RegisterName(op->data[0]), op->data[1]);
+                InsertInteger(op->data[0], op->data[1]);
                 break;
                 
             case OP_NEW_FLOAT:
@@ -324,7 +360,7 @@ private:
             case OP_PUSH_VAR: 
                 if (op->data.size() == 2)
                 {
-                    print("\tmov %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1])); 
+                    InsertMove(op->data[0], op->data[1]);
                 }
                 else
                 {
@@ -340,7 +376,7 @@ private:
             case OP_QUERY_VAR: 
                 if (op->data.size() == 2)
                 {
-                    print("\tmov  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1])); 
+                    InsertMove(op->data[0], op->data[1]);
                 }
                 else
                 {
