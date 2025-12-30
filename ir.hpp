@@ -118,7 +118,7 @@ enum OperationType
     OP_JZ, OP_JNZ,
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD,
     OP_BOR, OP_BAND, OP_BXOR, OP_SHL, OP_SHR, OP_BNOT,
-    OP_EQ, OP_LT, OP_LE, OP_GT, OP_GE,
+    OP_EQ, OP_LT, OP_LE, OP_GT, OP_GE, OP_NE,
 
     // used for register allocations
     OP_STORE, // format is [variable, place]

@@ -970,7 +970,7 @@ pair<vector<Operation>, int64_t> buildCompareOperation(BuildContext *ctx, Node *
         switch_var(node->nonTerm(id + 0))
         {
             case 0: // <> 
-            { append(ops, {OP_EQ, {tmp, pos, pos2}}); break; }
+            { append(ops, {OP_NE, {tmp, pos, pos2}}); break; }
             case 1: // >=
             { append(ops, {OP_GE, {tmp, pos, pos2}}); break; }
             case 2: // <=
@@ -1838,6 +1838,7 @@ void applyNamesTranslition(OperationBlock *op, const map<int64_t, int64_t> &tran
         case OP_MUL:
         case OP_DIV:
         case OP_MOD:
+        case OP_NE:
         case OP_EQ:
         case OP_LT:
         case OP_LE:
@@ -1902,6 +1903,7 @@ vector<int64_t> getWritedVariables(OperationBlock *op)
         case OP_MUL:
         case OP_DIV:
         case OP_MOD:
+        case OP_NE:
         case OP_EQ:
         case OP_LT:
         case OP_LE:
@@ -1977,6 +1979,7 @@ vector<int64_t> getUsedVariables(OperationBlock *op)
         case OP_DIV:
         case OP_MOD:
         case OP_EQ:
+        case OP_NE:
         case OP_LT:
         case OP_LE:
         case OP_GT:
@@ -2052,6 +2055,7 @@ vector<int64_t> getReadVariables(OperationBlock *op)
         case OP_MUL:
         case OP_DIV:
         case OP_MOD:
+        case OP_NE:
         case OP_EQ:
         case OP_LT:
         case OP_LE:
@@ -2124,6 +2128,7 @@ void dumpIR(WorkerDeclarationContext *fn)
                 case OP_DIV: printf("OP_DIV "); break;
                 case OP_MOD: printf("OP_MOD "); break;
                 case OP_EQ: printf("OP_EQ "); break;
+                case OP_NE: printf("OP_NE "); break;
                 case OP_LT: printf("OP_LT "); break;
                 case OP_LE: printf("OP_LE "); break;
                 case OP_GT: printf("OP_GT "); break;

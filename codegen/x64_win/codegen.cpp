@@ -85,29 +85,92 @@ private:
     map<int64_t, int64_t> regTable;
     map<int64_t, int64_t> memTable;
     int64_t usedMemory;
+    set<OperationBlock *> generated;
 
     // registers configuraion
     static constexpr int64_t registersCount = 5;
 
-    const char *SizeQualifer(int64_t size) {
-        switch (size) {
+    bool isSigned(int64_t name)
+    {
+        return SCALAR_TYPE(varType(name)->type) == SCALAR_I;
+    }
+
+    TypeContext *varType(int64_t name)
+    {
+        return current->content->variables[name];
+    }
+
+    int64_t varSize(int64_t name)
+    {
+        return current->content->variables[name]->size;
+    }
+
+    int64_t GetInputOffset(int64_t id)
+    {
+        // sum all sizes from inputs and outputs
+        int64_t res = 0;
+        for (auto &[name, type] : current->inputs)
+        {
+            if (!id--) break;
+            res += type->size;
+        }
+        return res;
+    }
+
+    int64_t GetOutputOffset(int64_t id)
+    {
+        // sum all sizes from inputs and outputs
+        int64_t res = 0;
+        for (auto &[name, type] : current->inputs) 
+            res += type->size;
+        for (auto &[name, type] : current->outputs)
+        {
+            if (!id--) break;
+            res += type->size;
+        }
+        return res;
+    }
+
+    const char *SizeQualifer(int64_t var) {
+        switch (varSize(var)) {
             case 8: return "QWORD PTR";
             case 4: return "DWORD PTR";
             case 2: return "WORD PTR";
             case 1: return "BYTE PTR";
-        } return "";
+        } 
+        printf("Wrong variable size - there is no qualifier of size %lld\n", varSize(var));
+        return "ERROR PTR";
     }
 
-    const char *RegisterName(pair<int64_t, int64_t> reg)
+    const char *RegisterName(int64_t var)
     {
-        switch (reg.second)
+        return RegisterName(regTable[var], varSize(var));
+    }
+
+    /*
+        registers: 
+            rbp - pointer on locals
+            rsp - pointer on inputs table // TODO: optimize
+            rax - used for division / api calls
+            rdx - used for division / api calls
+    */
+    
+    const char *RegisterName(int64_t id, int64_t size)
+    {
+        switch (size)
         {
-            case 8: return (vector<const char *>{"rax",  "r10",  "r11",  "r12"})[reg.first];
-            case 4: return (vector<const char *>{"eax", "r10d", "r11d", "r12d"})[reg.first];
-            case 2: return (vector<const char *>{ "ax", "r10w", "r11w", "r12w"})[reg.first];
-            case 1: return (vector<const char *>{ "al", "r10b", "r11b", "r12b"})[reg.first];
+            case 8: return (vector<const char *>{"rcx",  "r10",  "r11",  "r12",  "r13"})[id];
+            case 4: return (vector<const char *>{"ecx", "r10d", "r11d", "r12d", "r13d"})[id];
+            case 2: return (vector<const char *>{ "cx", "r10w", "r11w", "r12w", "r13w"})[id];
+            case 1: return (vector<const char *>{ "cl", "r10b", "r11b", "r12b", "r13b"})[id];
         }
-        return "";
+        printf("Wrong variable size - there is no register of size %lld\n", size);
+        return "ERROR";
+    }
+
+    void ApiCall(const char *apiEntry)
+    {
+        print("\tjmp  %s\n", apiEntry);
     }
 
     void BuildFn(WorkerDeclarationContext *wk, int64_t workerId)
@@ -133,13 +196,11 @@ private:
         {
             printf("Var %lld have offset %lld\n", k, v);
         }
+        printf("Total size of variables: %lld\n", usedMemory);
 
         dumpIR(wk);
-        // return
-        return;
-
-
-        return;
+        
+        // generate code
         
         print("worker_%lld:\n", workerId);
         if (wk->content == NULL)
@@ -148,177 +209,173 @@ private:
         }
         else
         {
+            generated.clear();
             BuildOperation(wk->content->entry);
         }
-    }
-    
-    set<OperationBlock *> generated;
-    map<int64_t, pair<int64_t, int64_t>> memoryImage;
-    
-    vector<int64_t> registersUsed; // id of loaded variable
-
-
-    void AllocateMemory(int64_t name)
-    {
-        // TODO: write better allocator
-        TypeContext *type = current->content->variables[name];
-        int64_t start = usedMemory;
-        int64_t end = usedMemory + type->size;
-        memoryImage[name] = {start, end};
-        usedMemory += type->size;
-    }
-
-    int64_t GetVariableSize(int64_t name)
-    {
-        return current->content->variables[name]->size;
-    }
-
-    void UnloadVariable(int64_t reg)
-    {
-        registersUsed[reg] = -1;
-        int64_t var = registersUsed[reg];
-        if (memoryImage.find(var) == memoryImage.end())
-        {
-            AllocateMemory(var);
-        }
-        int64_t size = GetVariableSize(var);
-        print("\tmov %s [rbp+%lld], %s\n", 
-              SizeQualifer(size), 
-              memoryImage[var].first, 
-              RegisterName({reg, size}));
-    }
-
-    pair<int64_t, int64_t> LoadVariable(int64_t name, int64_t reg, bool read=true)
-    {
-        registersUsed[reg] = name;
-        if (memoryImage.find(name) == memoryImage.end() || read == false)
-        {
-            return {reg, GetVariableSize(name)};
-        }
-        int64_t size = GetVariableSize(name);
-        print("\tmov %s, %s [rbp+%lld]\n", 
-              RegisterName({reg, size}),
-              SizeQualifer(size),
-              memoryImage[name].first);
-        return {reg, size};
     }
 
     void BuildOperation(OperationBlock *op)
     {
-        if (generated.find(op) != generated.end())
+        // return from function
+        if (op == NULL)
         {
-            print("\tjmp op_%p\n", op);
+            print("\tret ; ...\n");
             return;
         }
-        
-        generated.insert(op);
-        
+        // if already this block is compiled - jump to it
+        // TODO: here can take some place of "assembly inlining"
+        if (!generated.insert(op).second) 
+        { 
+            print("\tjmp  op_%p\n", op); 
+            return; 
+        }
+
+        // generate code for this instruction        
         print("op_%p:\n", op);
-        if (IS_JUMP(op->type))
+        // if instruction have many next:
+        #define BINOP \
+            print("\tmov  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]));
+        #define CMPOP(A, B) \
+            print("\txor  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[0])); \
+            print("\tcmp  %s, %s\n", RegisterName(op->data[1]), RegisterName(op->data[2])); \
+            if (isSigned(op->data[0])) \
+                print("\t" A " %s\n", RegisterName(regTable[op->data[0]], 1)); \
+            else \
+                print("\t" B " %s\n", RegisterName(regTable[op->data[0]], 1)); \
+            print("\tneg  %s\n", RegisterName(op->data[0]));
+        
+        switch (op->type)
         {
-            assert(op->next.size() == 2);
-            switch (op->type)
-            {
-                case OP_JZ:
-                {
-                    // auto reg = AcqureVariable(op->data[0], {});
-                    // print("\ttest %s\n", RegisterName(reg));
-                    print("\tjz op_%p\n", op->next[1]);
-                    break;
-                }
-                case OP_JNZ:
-                {
-                    // auto reg = AcqureVariable(op->data[0], {});
-                    // print("\ttest %s\n", RegisterName(reg));
-                    print("\tjnz op_%p\n", op->next[1]);
-                    break;
-                }
-                default: {}
-            }
-            BuildNextOperation(op);
-            BuildOperation(op->next[1]);
-        }
-        else
-        {
-            switch (op->type)
-            {
-                case OP_JZ: case OP_JNZ: case OP_JMP: break;    
+            // impossible
+            case OP_JMP: break;    
+            // nothing to do
+            case OP_FREE_TEMP: break;
             
-                case OP_LOAD: printf("OP_LOAD [not supported]\n"); break;
-                case OP_STORE: printf("OP_STORE [not supported]\n"); break;
+            case OP_JZ:
+                print("\ttest %s\n", RegisterName(op->data[0]));
+                print("\tjz   op_%p\n", op->next[1]);
+                break;
+                
+            case OP_JNZ: 
+                print("\ttest %s\n", RegisterName(op->data[0]));
+                print("\tjnz  op_%p\n", op->next[1]);
+                break;
+        
+            case OP_LOAD:
+                print("\tmov  %s, %s [rbp + %lld]\n", RegisterName(op->data[0]), SizeQualifer(op->data[0]), memTable[op->data[1]]);
+                break;
+            case OP_STORE:
+                print("\tmov  %s [rbp + %lld], %s\n", SizeQualifer(op->data[0]), memTable[op->data[1]], RegisterName(op->data[0]));
+                break;
+        
+            case OP_LOAD_INPUT: 
+                print("\tmov  %s, %s [rsp + %lld]\n", RegisterName(op->data[1]), SizeQualifer(op->data[1]), GetInputOffset(op->data[0]));
+                break;
+            case OP_LOAD_OUTPUT: 
+                print("\tmov  %s, %s [rsp + %lld]\n", RegisterName(op->data[1]), SizeQualifer(op->data[1]), GetOutputOffset(op->data[0]));
+                break;
             
-                case OP_LOAD_INPUT: printf("OP_LOAD_INPUT [not supported]\n"); break;
-                case OP_LOAD_OUTPUT: printf("OP_LOAD_OUTPUT [not supported]\n"); break;
+            
+            case OP_CALL: 
+                print("OP_CALL [not supported]\n"); 
+                break;
                 
-                case OP_FREE_TEMP: printf("OP_FREE_TEMP [not supported]\n"); break;
+            case OP_CAST: 
+                print("\tmov  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]));
+                break;
                 
-                case OP_CALL: printf("OP_CALL [not supported]\n"); break;
-                case OP_CAST: printf("OP_CAST [not supported]\n"); break;
-                case OP_MOV: printf("OP_MOV [not supported]\n"); break;
+            case OP_MOV: 
+                print("\tmov  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]));
+                break;
 
-                case OP_NEW_INT: printf("OP_NEW_INT [not supported]\n"); break;
-                case OP_NEW_FLOAT: printf("OP_NEW_FLOAT [not supported]\n"); break;
-                case OP_NEW_ARRAY: printf("OP_NEW_ARRAY [not supported]\n"); break;
-                case OP_NEW_PIPE: printf("OP_NEW_PIPE [not supported]\n"); break;
-                case OP_NEW_PROMISE: printf("OP_NEW_PROMISE [not supported]\n"); break;
-                case OP_NEW_CLASS: printf("OP_NEW_CLASS [not supported]\n"); break;
+            case OP_NEW_INT: 
+                print("\tmov  %s, %lld\n", RegisterName(op->data[0]), op->data[1]);
+                break;
                 
-                case OP_PUSH_VAR: printf("OP_PUSH_VAR [not supported]\n"); break;
-                case OP_PUSH_ARRAY: printf("OP_PUSH_ARRAY [not supported]\n"); break;
-                case OP_PUSH_PIPE: printf("OP_PUSH_PIPE [not supported]\n"); break;
-                case OP_PUSH_PROMISE: printf("OP_PUSH_PROMISE [not supported]\n"); break;
-                case OP_PUSH_CLASS: printf("OP_PUSH_CLASS [not supported]\n"); break;
-                case OP_QUERY_VAR: printf("OP_QUERY_VAR [not supported]\n"); break;
-                case OP_QUERY_ARRAY: printf("OP_QUERY_ARRAY [not supported]\n"); break;
-                case OP_QUERY_INDEX: printf("OP_QUERY_INDEX [not supported]\n"); break;
-                case OP_QUERY_PIPE: printf("OP_QUERY_PIPE [not supported]\n"); break;
-                case OP_QUERY_PROMISE: printf("OP_QUERY_PROMISE [not supported]\n"); break;
-                case OP_QUERY_CLASS: printf("OP_QUERY_CLASS [not supported]\n"); break;
-                
-                case OP_BOR: printf("OP_BOR [not supported]\n"); break;
-                case OP_BAND: printf("OP_BAND [not supported]\n"); break;
-                case OP_BXOR: printf("OP_BXOR [not supported]\n"); break;
-                case OP_SHL: printf("OP_SHL [not supported]\n"); break;
-                case OP_SHR: printf("OP_SHR [not supported]\n"); break;
-                case OP_BNOT: printf("OP_BNOT [not supported]\n"); break;
-                
-                case OP_ADD:
-                {
-                    // auto v0 = AcqureVariable(op->data[0], {}, false);
-                    // auto v1 = AcqureVariable(op->data[1], {});
-                    // auto v2 = AcqureVariable(op->data[2], {});
-                    // print("\txor %s, %s\n", RegisterName({v0.first, 8}), RegisterName({v0.first, 8}));
-                    // print("\tadd %s, %s\n", RegisterName({v0.first, 8}), RegisterName({v1.first, 8}));
-                    // print("\tadd %s, %s\n", RegisterName({v0.first, 8}), RegisterName({v2.first, 8}));
-                    print("\tadd\n");
-                    break;
-                }
-                case OP_SUB: printf("OP_SUB [not supported]\n"); break;
-                case OP_MUL: printf("OP_MUL [not supported]\n"); break;
-                case OP_DIV: printf("OP_DIV [not supported]\n"); break;
-                case OP_MOD: printf("OP_MOD [not supported]\n"); break;
-                
-                case OP_EQ: printf("OP_EQ [not supported]\n"); break;
-                case OP_LT: printf("OP_LT [not supported]\n"); break;
-                case OP_LE: printf("OP_LE [not supported]\n"); break;
-                case OP_GT: printf("OP_GT [not supported]\n"); break;
-                case OP_GE: printf("OP_GE [not supported]\n"); break;
-            }
+            case OP_NEW_FLOAT:
+                print("\tOP_NEW_FLOAT [not supported]\n"); 
+                break;
+            case OP_NEW_ARRAY:    ApiCall("new_array"); break;
+            case OP_NEW_PIPE:     ApiCall("new_pipe"); break;
+            case OP_NEW_PROMISE:  ApiCall("new_promise"); break;
+            case OP_NEW_CLASS:    ApiCall("new_class"); break;
             
-            assert(op->next.size() == 1);
-            BuildNextOperation(op);
-        }
-    }
+            case OP_PUSH_VAR: 
+                if (op->data.size() == 2)
+                {
+                    print("\tmov %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1])); 
+                }
+                else
+                {
+                    print("\tOP_PUSH_VAR to structure [not supported]\n"); 
+                }
+                break;
+                
+            case OP_PUSH_ARRAY:   ApiCall("push_array"); break;
+            case OP_PUSH_PIPE:    ApiCall("push_pipe"); break;
+            case OP_PUSH_PROMISE: ApiCall("push_promise"); break;
+            case OP_PUSH_CLASS:   ApiCall("push_class"); break;
+                
+            case OP_QUERY_VAR: 
+                if (op->data.size() == 2)
+                {
+                    print("\tmov  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1])); 
+                }
+                else
+                {
+                    print("\tOP_QUERY_VAR from structure [not supported]\n"); 
+                }
+                break;
+                
+            case OP_QUERY_ARRAY:   ApiCall("query_array"); break;
+            case OP_QUERY_INDEX:   ApiCall("query_index"); break;
+            case OP_QUERY_PIPE:    ApiCall("query_pipe"); break;
+            case OP_QUERY_PROMISE: ApiCall("query_promise"); break;
+            case OP_QUERY_CLASS:   ApiCall("query_class"); break;
+             
+            case OP_BOR:   BINOP print("\tor   %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            case OP_BAND:  BINOP print("\tand  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            case OP_BXOR:  BINOP print("\txor  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            case OP_SHL:   BINOP print("\tshl  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            case OP_SHR:   BINOP print("\tshr  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            
+            case OP_BNOT:        print("\tnot  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            
+            case OP_ADD:   BINOP print("\tadd  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            case OP_SUB:   BINOP print("\tsub  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            case OP_MUL:   BINOP print("\timul %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            
+            case OP_EQ:    CMPOP("sete", "sete") break;
+            case OP_NE:    CMPOP("setne", "setne") break;
+            case OP_LT:    CMPOP("setl", "setb") break;
+            case OP_LE:    CMPOP("setle", "setbe") break;
+            case OP_GT:    CMPOP("setg", "seta") break;
+            case OP_GE:    CMPOP("setge", "setae") break;
 
-    void BuildNextOperation(OperationBlock *op)
-    {   
-        if (op->next[0] == NULL)
-        {
-            print("\t[ret?]\n");
+            case OP_DIV:
+                print("\tmov  rax, %s\n", RegisterName(op->data[1]));
+                if (isSigned(op->data[0])) 
+                    print("\tcqo\n");
+                else 
+                    print("\txor  edx, edx\n");
+                print("\tdiv  %s\n", RegisterName(op->data[2])); 
+                print("\tmov  %s, rax", RegisterName(op->data[0]));
+                break;
+                
+            case OP_MOD:
+                print("\tmov  rax, %s\n", RegisterName(op->data[1]));
+                if (isSigned(op->data[0])) 
+                    print("\tcqo\n");
+                else 
+                    print("\txor  edx, edx\n");
+                print("\tdiv  %s\n", RegisterName(op->data[2])); 
+                print("\tmov  %s, rdx", RegisterName(op->data[0]));
+                break;
         }
-        else
+
+        for (auto &n : op->next)
         {
-            BuildOperation(op->next[0]);
+            BuildOperation(n);
         }
     }
 };
