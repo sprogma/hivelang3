@@ -5,6 +5,7 @@
 #include <vector>
 #include <bitset>
 #include <array>
+#include <ranges>
 #include <map>
 
 using namespace std;
@@ -86,6 +87,7 @@ private:
     map<int64_t, int64_t> memTable;
     int64_t usedMemory;
     set<OperationBlock *> generated;
+    set<OperationBlock *> usedLabels;
 
     // registers configuraion
     static constexpr int64_t registersCount = 5;
@@ -199,6 +201,11 @@ private:
         printf("Total size of variables: %lld\n", usedMemory);
 
         dumpIR(wk);
+
+        // get used labels
+        generated.clear();
+        usedLabels.clear();
+        UpdateUsedLabels(wk->content->entry);
         
         // generate code
         
@@ -211,6 +218,17 @@ private:
         {
             generated.clear();
             BuildOperation(wk->content->entry);
+        }
+    }
+
+    void UpdateUsedLabels(OperationBlock *op)
+    {
+        if (op == NULL) return;
+        if (!generated.insert(op).second) { usedLabels.insert(op); return; }
+        if (op->next.size() > 0)
+        {
+            UpdateUsedLabels(op->next[0]);
+            for (auto &n : op->next | views::drop(1)) { UpdateUsedLabels(n); usedLabels.insert(n); }
         }
     }
 
@@ -231,7 +249,10 @@ private:
         }
 
         // generate code for this instruction        
-        print("op_%p:\n", op);
+        if (usedLabels.contains(op))
+        {
+            print("op_%p:\n", op);
+        }
         // if instruction have many next:
         #define BINOP \
             print("\tmov  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]));
