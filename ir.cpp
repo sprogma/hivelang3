@@ -1862,14 +1862,8 @@ vector<int64_t> getWritedVariables(OperationBlock *op)
         case OP_LOAD_OUTPUT:
             return {op->data[1]};
             
-        case OP_QUERY_VAR:
-        case OP_QUERY_CLASS:
         case OP_CALL:
         case OP_FREE_TEMP:
-        case OP_QUERY_INDEX:
-        case OP_QUERY_ARRAY:
-        case OP_QUERY_PIPE:
-        case OP_QUERY_PROMISE:
         case OP_PUSH_PIPE:
         case OP_PUSH_PROMISE:
         case OP_PUSH_CLASS:
@@ -1881,6 +1875,12 @@ vector<int64_t> getWritedVariables(OperationBlock *op)
             return {};
         
         // first arg
+        case OP_QUERY_INDEX:
+        case OP_QUERY_ARRAY:
+        case OP_QUERY_PIPE:
+        case OP_QUERY_PROMISE:
+        case OP_QUERY_VAR:
+        case OP_QUERY_CLASS:
         case OP_LOAD:
         case OP_PUSH_VAR:
         case OP_NEW_INT:
@@ -1982,6 +1982,85 @@ vector<int64_t> getUsedVariables(OperationBlock *op)
         case OP_GT:
         case OP_GE:
             return op->data;
+    }
+}
+
+vector<int64_t> getReadVariables(OperationBlock *op)
+{    
+    switch (op->type)
+    {
+        // none
+        case OP_JMP:
+        case OP_LOAD_INPUT:
+        case OP_LOAD_OUTPUT:
+        case OP_LOAD:
+        case OP_NEW_CLASS:
+        case OP_NEW_INT:
+        case OP_NEW_FLOAT:
+        case OP_NEW_PIPE:
+        case OP_NEW_PROMISE:
+            return {};
+
+        // first and last
+        case OP_PUSH_PIPE:
+        case OP_PUSH_PROMISE:
+        case OP_PUSH_CLASS:
+            return {op->data[0], op->data.back()};
+        
+        // last
+        case OP_PUSH_VAR:
+            return {op->data.back()};
+            
+        // 2
+        case OP_QUERY_VAR:
+        case OP_QUERY_CLASS:
+            return {op->data[1]};
+
+        // 1, 2 and last
+        case OP_PUSH_ARRAY:
+            return {op->data[0], op->data[1], op->data.back()};
+
+        // 2 and last
+        case OP_QUERY_INDEX:
+            return {op->data[1], op->data.back()};
+            
+
+        // first arg
+        case OP_JZ:
+        case OP_JNZ:
+        case OP_STORE:
+            return {op->data[0]};
+        
+        
+        // all except first
+        case OP_CALL:
+        case OP_FREE_TEMP:
+        case OP_QUERY_ARRAY:
+        case OP_QUERY_PIPE:
+        case OP_QUERY_PROMISE:
+        case OP_NEW_ARRAY:
+        case OP_CAST:
+        case OP_MOV:
+        case OP_BOR:
+        case OP_BAND:
+        case OP_BXOR:
+        case OP_SHL:
+        case OP_SHR:
+        case OP_BNOT:
+        case OP_ADD:
+        case OP_SUB:
+        case OP_MUL:
+        case OP_DIV:
+        case OP_MOD:
+        case OP_EQ:
+        case OP_LT:
+        case OP_LE:
+        case OP_GT:
+        case OP_GE:
+        {
+            auto t = op->data | views::drop(1);
+            return vector<int64_t>(t.begin(), t.end());
+        }
     }
 }
 

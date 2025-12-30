@@ -13,363 +13,8 @@ using namespace std;
 #include "../../ir.hpp"
 #include "../../optimization/optimizer.hpp"
 #include "../codegen.hpp"
-
-
-template<typename T, auto A>
-int64_t FindFirst(array<T, A> &arr)
-{
-    for (int64_t i = 0; i < (int64_t)A; ++i)
-    {
-        if (arr[i].empty()) return i;
-    }
-    return -1;
-}
-
-
-template<int64_t registersCount>
-class SpreadRegisters
-{
-    static_assert(registersCount >= 2);
-public:
-    SpreadRegisters() { }
-
-private:
-    WorkerDeclarationContext *wk;
-    
-    // id -> block -> [can get TO id, can get FROM id]
-    set<OperationBlock *> used;
-    set<int64_t> iused;
-    map<OperationBlock *, double> executions;
-    map<OperationBlock *, set<int64_t>> op_vars;
-    map<int64_t, set<OperationBlock *>> vars_op;
-    map<OperationBlock *, set<int64_t>> op_using;
-    map<int64_t, set<OperationBlock *>> using_op;
-    map<int64_t, set<int64_t>> g;
-
-    // op -> var -> [can TO var, can FROM var]
-    map<OperationBlock *, map<int64_t, pair<bool, bool>>> access;
-
-
-    void calculateExecutionWay(OperationBlock *n, OperationBlock *tmp, 
-                               map<OperationBlock *, int64_t> &taken,
-                               map<OperationBlock *, vector<OperationBlock *>> &executionTmps,
-                               map<OperationBlock *, int64_t> &tmpCost)
-    {
-        if (!n) return;
-        executionTmps[n].push_back(tmp);
-        if (IS_JUMP(n->type))
-        {
-            tmpCost[n] = 1;
-            if (taken[n]++ < 3)
-            {
-                calculateExecutionWay(n->next[0], n, taken, executionTmps, tmpCost);
-                calculateExecutionWay(n->next[1], n, taken, executionTmps, tmpCost);
-                return;
-            }
-        }
-        // if (!used.insert(n).second) return;
-        calculateExecutionWay(n->next[0], tmp, taken, executionTmps, tmpCost);
-    }
-
-
-    void updateExecutions()
-    {
-        map<OperationBlock *, int64_t> taken;
-        map<OperationBlock *, vector<OperationBlock *>> executionTmps;
-        map<OperationBlock *, int64_t> tmpCost;
-        
-        used.clear();
-        executions.clear();
-
-        tmpCost[NULL] = 1.0;
-        calculateExecutionWay(wk->content->entry, NULL, taken, executionTmps, tmpCost);
-
-        for (auto &[k, v] : executionTmps)
-        {
-            double cost = 0.0;
-            for (auto &p : v) { cost += 1.0 / tmpCost[p]; }
-            executions[k] = cost;
-            printf("executions: %p = %f\n", k, cost);
-        }
-    }
-
-    void updateCanFrom(OperationBlock *node, int64_t var)
-    {
-        if (!node || !used.insert(node).second) return;
-        /* can't free from this */
-        if (node->type == OP_FREE_TEMP && node->data[0] == var)
-        {
-            return;
-        }
-        access[node][var].second = true;
-        /* go by forward edges */
-        for (auto &n : node->next)
-        {
-            updateCanFrom(n, var);
-        }
-    }
-
-    void updateCanTo(OperationBlock *node, int64_t var)
-    {
-        if (!node || !used.insert(node).second) return;
-        /* can't free from this */
-        if (node->type == OP_FREE_TEMP && node->data[0] == var)
-        {
-            return;
-        }
-        access[node][var].first = true;
-        /* go by reverse edges */
-        for (auto &n : node->prev)
-        {
-            updateCanTo(n, var);
-        }
-    }
-
-    void updateOpVars()
-    {
-        access.clear();
-        using_op.clear();
-        op_using.clear();
-        for (auto op : wk->content->code)
-        {
-            // getWritedVariables(op) was included into UsedVariables
-            for (auto &i : getUsedVariables(op)) 
-            { 
-                using_op[i].insert(op);
-                op_using[op].insert(i);
-                used.clear(); updateCanTo(op, i);
-                used.clear(); updateCanFrom(op, i);
-            }
-        }
-        op_vars.clear();
-        vars_op.clear();
-        for (auto &[t, resMap] : access)
-        {
-            for (auto &[k, v] : resMap)
-            {
-                if (v.first && v.second) 
-                { 
-                    op_vars[t].insert(k); 
-                    vars_op[k].insert(t); 
-                }
-            }
-        }
-    }
-
-    void buildMainConflictGraph()
-    {
-        /* analyse live zones */
-        updateOpVars();
-
-        /* build graph */
-        g.clear();
-        // for (auto &op : wk->content->code)
-        // {
-        //     printf("op %p: ", op);
-        //     for (auto &i : op_vars[op])
-        //         printf(" %lld", i);
-        //     printf("\n");
-        // }
-        for (auto &[op, vars] : op_vars)
-        {
-            for (auto &i : vars)
-            {
-                for (auto &j : vars)
-                {
-                    if (i != j)
-                    {
-                        g[i].insert(j);
-                    }
-                }
-            }
-        }
-        // for (auto &[i, val] : g)
-        // {
-        //     printf("G: %lld: ", i);
-        //     for (auto &j : val)
-        //         printf(" %lld", j);
-        //     printf("\n");
-        // }
-    }
-
-    void getAjancedNodes(int64_t x, set<int64_t>ajd, map<int64_t, int64_t> &res)
-    {   
-        ajd.clear();
-        vector<int64_t> stack;
-        stack.push_back(x);
-        while (!stack.empty())
-        {
-            int64_t v = stack.back();
-            stack.pop_back();
-            if (res[v] != -1)
-            {
-                ajd.insert(v);
-                for (auto &n : g[v])
-                {
-                    if (res[n] != -1 && ajd.find(n) == ajd.end())
-                    {
-                        stack.push_back(n);
-                    }
-                }
-            }
-        }
-    }
-
-    bool isAjansed(int64_t a, int64_t b, map<int64_t, int64_t> &res)
-    {
-        set<int64_t> ajd;
-        getAjancedNodes(a, ajd, res);
-        return ajd.find(b) == ajd.end();
-    }
-
-    void swapColor(int64_t x, int64_t oldColor, int64_t newColor, map<int64_t, int64_t> &res)
-    {
-        set<int64_t> ajd;
-        getAjancedNodes(x, ajd, res);
-        /* find unused colors */
-        for (auto &i : ajd)
-        {
-            if (res[i] == oldColor) { res[i] = newColor; }
-            else if (res[i] == newColor) { res[i] = oldColor; }
-        }
-    }
-
-    int64_t trySpreadRegisters(map<int64_t, int64_t> &res)
-    {
-        /* color */
-        set<pair<int64_t, int64_t>> order; // prior, value
-        res.clear();
-        for (auto &[k, v] : g)
-        {
-            res[k] = -1;
-            order.insert({-v.size(), k});
-        }
-        for (auto &[cost, v] : order)
-        {
-            array<vector<int64_t>, registersCount> color;
-            for (auto &i : g[v])
-            {
-                if (res[i] == -1) continue;
-                color[res[i]].push_back(i);
-            }
-            int64_t freeColor = FindFirst(color);
-            if (freeColor == -1)
-            {
-                // TODO: is there some ways to fix color?
-                
-                /* Error - can't resolve conflict */
-                // TODO: may be select another variable to split?
-                /* return it */
-                double bestValue = 0.0;
-                int64_t to_split = -1;
-                for (auto &[var, neibours] : g)
-                {
-                    double thisValue = 0.0;
-                    // simple euristics:
-                    
-                    // * if variable have long lifetime - it is good
-                    thisValue += vars_op[var].size();
-                    // * if variable have many ajansed variables - it is good too.
-                    thisValue += neibours.size();
-                    // * if variable is used often - it is bad
-                    thisValue -= 4.6 * using_op[var].size();
-
-                    printf("%lld value=%f\n", var, thisValue);
-                    
-                    if (to_split == -1 || thisValue > bestValue)
-                    {
-                        bestValue = thisValue;
-                        to_split = var;
-                    }
-                }
-                if (to_split != -1)
-                {
-                    printf("Error: there is no variables, but graph coloring was failed???\n");
-                }
-                return to_split;
-            }
-            res[v] = freeColor;
-        }
-        return -1;
-    }
-
-
-    // map variable -> registerId
-public:
-    map<int64_t, int64_t> spreadRegisters(WorkerDeclarationContext *_wk)
-    {
-        wk = _wk;
-        map<int64_t, int64_t> res;
-        
-        // map<OperationBlock *, int64_t> pressure; // register pressing euristic
-        // calculatePressure(pressure);
-
-        int64_t maxOptimizableIterations = 1000;
-
-        /* try to spread registers */
-        int64_t iter = 0;
-        while (1)
-        {
-            iter++;
-            printf("trying to color %lld...\n", iter);
-            updateExecutions();
-            buildMainConflictGraph();
-            int64_t to_split = trySpreadRegisters(res);
-            if (to_split == -1)
-            {
-                printf("Success!\n");
-                for (auto &[k, v] : res)
-                {
-                    printf("Variable %lld have color %lld\n", k, v);
-                }
-                return res;
-            }
-            printf("failed. Spliting %lld...\n", to_split);
-            // TODO: implement clever not full split algo
-            if (iter > maxOptimizableIterations || true)
-            {
-                /* simply unload/load variable in all occurences */
-                for (int64_t i = 0; i < (int64_t)wk->content->code.size(); ++i)
-                {
-                    OperationBlock *op = wk->content->code[i];
-                    
-                    const auto &usedVars = getUsedVariables(op);
-                    bool found = false;
-                    for (auto &var : usedVars) { if (var == to_split) { found = true; break; } }
-                    if (found)
-                    {
-                        bool foundRead = true; // TODO: write getReadVariables(op)
-                        bool foundWrite = false;
-                        const auto &writtenVars = getWritedVariables(op);
-                        for (auto &var : writtenVars) { if (var == to_split) { foundWrite = true; break; } }    
-                        
-                        int64_t temp = newTemp(wk, wk->content->variables[to_split]);
-                        printf("generated temporary variable: %lld\n", temp);
-                        if (foundRead)
-                        {
-                            connectBeforeOp(wk, op, new OperationBlock(OP_LOAD, {temp, to_split}));
-                        }
-                        connectOp(wk, op, new OperationBlock(OP_FREE_TEMP, {temp}));
-                        /* if write - add store too */
-                        if (foundWrite)
-                        {
-                            connectOp(wk, op, new OperationBlock(OP_STORE, {temp, to_split}));
-                        }
-                        /* translate var id */
-                        applyNamesTranslition(op, map<int64_t, int64_t>{{to_split, temp}});
-                    }
-                }
-            }
-            else
-            {
-                /* clever split of variable: select most pressure using point, and insert load/store */
-            }
-        }
-    }
-};
-
-
-
+#include "../registerAllocator.hpp"
+#include "../memoryAllocator.hpp"
 
 
 
@@ -424,33 +69,33 @@ public:
         for (auto &[fn, id] : ir->workers) { BuildFn(fn, id); }
 
         // add terminating zero
-        if (assemblyEnd) *assemblyEnd++ = '\0';
-        
         printf("Code generated.\n");
+        if (!assemblyEnd)
+        {
+            return;
+        }
+        
+        *assemblyEnd++ = '\0';
         puts(assemblyCode);
     }
 
 private:
-    set<OperationBlock *> generated;
-    map<int64_t, pair<int64_t, int64_t>> memoryImage;
-    map<int64_t, int64_t> regTable;
-    int64_t usedMemory;
-    
-    static constexpr int64_t registersCount = 5;
-    
-    vector<int64_t> registersUsed; // id of loaded variable
     WorkerDeclarationContext *current;
+    // registers table
+    map<int64_t, int64_t> regTable;
+    map<int64_t, int64_t> memTable;
+    int64_t usedMemory;
 
-    const char *SizeQualifer(int64_t size)
-    {
-        switch (size)
-        {
+    // registers configuraion
+    static constexpr int64_t registersCount = 5;
+
+    const char *SizeQualifer(int64_t size) {
+        switch (size) {
             case 8: return "QWORD PTR";
             case 4: return "DWORD PTR";
             case 2: return "WORD PTR";
             case 1: return "BYTE PTR";
-        }
-        return "";
+        } return "";
     }
 
     const char *RegisterName(pair<int64_t, int64_t> reg)
@@ -467,16 +112,32 @@ private:
 
     void BuildFn(WorkerDeclarationContext *wk, int64_t workerId)
     {
-        usedMemory = 0;
-        memoryImage.clear();
-        registersUsed = vector<int64_t>(registersCount, -1);
         current = wk;
 
-        // prepare build register translation
-        SpreadRegisters<registersCount> spr;
-        regTable = spr.spreadRegisters(wk);
+        // create registers translation
+        {
+            SpreadRegisters<registersCount> regSprd;
+            regTable = regSprd.spreadRegisters(wk);
+        }
+
+        // allocate memory
+        {
+            ISpreadMemory *memSprd = newSpreadMemory();
+            const auto &[tbl, sz] = memSprd->spreadMemory(wk);
+            memTable = tbl;
+            usedMemory = sz;
+        }
+
+        // print memory table
+        for (auto &[k, v] : memTable)
+        {
+            printf("Var %lld have offset %lld\n", k, v);
+        }
 
         dumpIR(wk);
+        // return
+        return;
+
 
         return;
         
@@ -490,6 +151,12 @@ private:
             BuildOperation(wk->content->entry);
         }
     }
+    
+    set<OperationBlock *> generated;
+    map<int64_t, pair<int64_t, int64_t>> memoryImage;
+    
+    vector<int64_t> registersUsed; // id of loaded variable
+
 
     void AllocateMemory(int64_t name)
     {

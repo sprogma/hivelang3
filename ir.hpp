@@ -215,6 +215,7 @@ struct BuildContext
 pair<BuildResult *, bool> buildAst(const char *filename, char *code, vector<Node *>nodes, map<string, string> configs);
 
 vector<int64_t> getWritedVariables(OperationBlock *op);
+vector<int64_t> getReadVariables(OperationBlock *op);
 vector<int64_t> getUsedVariables(OperationBlock *op); // all variables from operation
 void applyNamesTranslition(OperationBlock *block, const map<int64_t, int64_t> &translition);
 

@@ -87,6 +87,10 @@ void connectBeforeOp(WorkerDeclarationContext *wk, OperationBlock *code, Operati
     }
     else
     {
+        if (code == wk->content->entry)
+        {
+            wk->content->entry = next;
+        }
         /* make all links on CODE point on NEXT */
         for (auto &p : code->prev)
         {
