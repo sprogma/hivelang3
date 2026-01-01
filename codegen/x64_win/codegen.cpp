@@ -133,6 +133,17 @@ private:
         return res;
     }
 
+    const char *SizeQualifer(TypeContext *var) {
+        switch (var->size) {
+            case 8: return "QWORD PTR";
+            case 4: return "DWORD PTR";
+            case 2: return "WORD PTR";
+            case 1: return "BYTE PTR";
+        } 
+        printf("Wrong variable size - there is no qualifier of size %lld\n", var->size);
+        return "ERROR PTR";
+    }
+
     const char *SizeQualifer(int64_t var) {
         switch (varSize(var)) {
             case 8: return "QWORD PTR";
@@ -290,8 +301,16 @@ private:
             print("op_%p:\n", op);
         }
         // if instruction have many next:
-        #define BINOP \
-            InsertMove(op->data[0], op->data[1]);
+        #define ABEL_BINOP(T) \
+            if (regTable[op->data[0]] == regTable[op->data[2]]) \
+            { \
+                print("\t" T "  %s, %s\n", RegisterName(op->data[2]), RegisterName(op->data[1])); \
+            } \
+            else \
+            { \
+                InsertMove(op->data[0], op->data[1]); \
+                print("\t" T "  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); \
+            }
         #define CMPOP(A, B) \
             print("\tcmp  %s, %s\n", RegisterName(op->data[1]), RegisterName(op->data[2])); \
             print("\tmov  %s, 0\n", RegisterName(op->data[0])); \
@@ -352,20 +371,15 @@ private:
             case OP_NEW_FLOAT:
                 print("\tOP_NEW_FLOAT [not supported]\n"); 
                 break;
+                
             case OP_NEW_ARRAY:    ApiCall("new_array"); break;
             case OP_NEW_PIPE:     ApiCall("new_pipe"); break;
             case OP_NEW_PROMISE:  ApiCall("new_promise"); break;
             case OP_NEW_CLASS:    ApiCall("new_class"); break;
             
-            case OP_PUSH_VAR: 
-                if (op->data.size() == 2)
-                {
-                    InsertMove(op->data[0], op->data[1]);
-                }
-                else
-                {
-                    print("\tOP_PUSH_VAR to structure [not supported]\n"); 
-                }
+            case OP_PUSH_VAR:
+                assert(op->data[1] != 0 || (TypeContext *)op->data[2] != varType(op->data[0]));
+                print("\tmov %s [rbp + %lld], %s\n", SizeQualifer((TypeContext *)op->data[2]), memTable[op->data[0]] + op->data[1], RegisterName(op->data[3]));
                 break;
                 
             case OP_PUSH_ARRAY:   ApiCall("push_array"); break;
@@ -374,14 +388,8 @@ private:
             case OP_PUSH_CLASS:   ApiCall("push_class"); break;
                 
             case OP_QUERY_VAR: 
-                if (op->data.size() == 2)
-                {
-                    InsertMove(op->data[0], op->data[1]);
-                }
-                else
-                {
-                    print("\tOP_QUERY_VAR from structure [not supported]\n"); 
-                }
+                assert(op->data[2] != 0 || (TypeContext *)op->data[3] != varType(op->data[0]));
+                print("\tmov %s, %s [rbp + %lld]\n", RegisterName(op->data[0]), SizeQualifer((TypeContext *)op->data[3]), memTable[op->data[1]] + op->data[2]);
                 break;
                 
             case OP_QUERY_ARRAY:   ApiCall("query_array"); break;
@@ -390,17 +398,30 @@ private:
             case OP_QUERY_PROMISE: ApiCall("query_promise"); break;
             case OP_QUERY_CLASS:   ApiCall("query_class"); break;
              
-            case OP_BOR:   BINOP print("\tor   %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
-            case OP_BAND:  BINOP print("\tand  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
-            case OP_BXOR:  BINOP print("\txor  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
-            case OP_SHL:   BINOP print("\tshl  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
-            case OP_SHR:   BINOP print("\tshr  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            case OP_BOR:   ABEL_BINOP("or") break;
+            case OP_BAND:  ABEL_BINOP("and") break;
+            case OP_BXOR:  ABEL_BINOP("xor") break;
+
+            // TODO: add variant without BMI2
+            case OP_SHL:   print("\tshlx %s, %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]), RegisterName(op->data[2])); break;
+            case OP_SHR:   print("\tshrx %s, %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]), RegisterName(op->data[2])); break;
             
             case OP_BNOT:        print("\tnot  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
             
-            case OP_ADD:   BINOP print("\tadd  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
-            case OP_SUB:   BINOP print("\tsub  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
-            case OP_MUL:   BINOP print("\timul %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            case OP_ADD:   ABEL_BINOP("add") break;
+            case OP_MUL:   ABEL_BINOP("imul") break;
+            case OP_SUB:
+                if (regTable[op->data[0]] == regTable[op->data[2]])
+                {
+                    print("\tsub %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]));
+                    print("\tneg %s\n", RegisterName(op->data[0]));
+                }
+                else
+                {
+                    InsertMove(op->data[0], op->data[1]);
+                    print("\tsub %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2]));
+                }
+                break;
             
             case OP_EQ:    CMPOP("sete", "sete") break;
             case OP_NE:    CMPOP("setne", "setne") break;

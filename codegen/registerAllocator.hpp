@@ -231,7 +231,7 @@ private:
                     // * if variable have many ajansed variables - it is good too.
                     thisValue += neibours.size();
                     // * if variable is used often - it is bad
-                    thisValue -= 3.9 * analyser.usages[var] * analyser.usages[var];
+                    thisValue -= 4.2 * pow(analyser.usages[var], 1.22);
 
                     // printf("%lld value=%f\n", var, thisValue);
                     

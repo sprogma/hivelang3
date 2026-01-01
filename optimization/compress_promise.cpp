@@ -79,14 +79,12 @@ private:
                         
                         if (op2->type == OP_QUERY_PROMISE && op2->data[1] == id)
                         {
-                            if (id > FIRST_TEMP_ID) op2->type = OP_MOV;
-                            else op2->type = OP_QUERY_VAR;
+                            op2->type = OP_MOV;
                             op2->attributes.clear();
                         }
                         if (op2->type == OP_PUSH_PROMISE && op2->data[0] == id)
                         {
-                            if (id > FIRST_TEMP_ID) op2->type = OP_MOV;
-                            else op2->type = OP_PUSH_VAR;
+                            op2->type = OP_MOV;
                             op2->attributes.clear();
                         }
                         if (op2->type == OP_NEW_PROMISE)

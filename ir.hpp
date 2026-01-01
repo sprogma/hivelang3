@@ -93,6 +93,7 @@ enum OperationType
     
     OP_CALL,
     OP_CAST,
+    
     OP_MOV,
     
     OP_NEW_INT, // format is [dest, value]
@@ -102,18 +103,18 @@ enum OperationType
     OP_NEW_PROMISE, // format is [dest]
     OP_NEW_CLASS, // format is [dest]
     
-    OP_PUSH_VAR, // format is [var, path to field, source]
-    OP_PUSH_ARRAY, // format is [array, index, path to field, source]
+    OP_PUSH_VAR, // format is [var, offset, type?, source]
+    OP_PUSH_ARRAY, // format is [array, index, offset, type?, source]
     OP_PUSH_PIPE, // format is [pipe, source]
     OP_PUSH_PROMISE, // format is [promise, source]
-    OP_PUSH_CLASS, // format is [class, path to field, source]
+    OP_PUSH_CLASS, // format is [class, offset, type?, source]
     
-    OP_QUERY_VAR, // format is [dest, var, path to field]
+    OP_QUERY_VAR, // format is [dest, var, offset, type?]
     OP_QUERY_ARRAY, // format is [dest, source]
-    OP_QUERY_INDEX, // format is [dest, source, path to field, index]
+    OP_QUERY_INDEX, // format is [dest, source, offset, type?, index]
     OP_QUERY_PIPE, // format is [dest, source]
     OP_QUERY_PROMISE, // format is [dest, source]
-    OP_QUERY_CLASS, // format is [dest, source, path to field]
+    OP_QUERY_CLASS, // format is [dest, source, offset, type?]
     
     OP_JZ, OP_JNZ,
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD,

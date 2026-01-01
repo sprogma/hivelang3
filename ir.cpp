@@ -217,6 +217,41 @@ map<string, string> getAttributeList(BuildContext *ctx, Node *node)
     return attrs;
 }
 
+pair<int64_t, TypeContext *> GetFieldOffset(BuildContext *ctx, TypeContext *type, int64_t field)
+{
+    (void)ctx;
+    int64_t res = 0;
+    for (auto &i : type->_struct.fields)
+    {
+        if (field-- == 0)
+        {
+            return {res, i};
+        }
+        res += i->size;
+    }
+    return {res, NULL};
+}
+
+pair<int64_t, TypeContext *> GetFieldOffset(BuildContext *ctx, Node *node, int64_t fromId, TypeContext *type)
+{    
+    int64_t id = fromId;
+    int64_t offset = 0;
+    while (node->nonTerm(id))
+    {                
+        string field = Substr(ctx, node->nonTerm(id));
+        if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
+        {
+            printf("[Usage of dot on not structure/union object]\n");
+            logError(ctx->filename, ctx->code, node->nonTerm(id)->start, node->nonTerm(id)->end);
+            break;
+        }
+        tie(offset, type) = GetFieldOffset(ctx, type, type->_struct.names[field]);
+        id++;
+    }
+    return {offset, type};
+}
+
+
 void processStructure(BuildContext *ctx, TypeContextType type, Node *node)
 {
     switch (type)
@@ -406,30 +441,22 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             int64_t varId = ctx->names[name];
             TypeContext *type = ctx->variables[varId];
             
-            vector<int64_t> args;
-            args.push_back(varId);
+            auto [offset, fldType] = GetFieldOffset(ctx, node, 1, type);
             
-            while (node->nonTerm(args.size()))
+            if (ctx->enabled("optimize_query_var") && type->type != TYPE_RECORD)
             {
-                /* get field index */
-                string field = Substr(ctx, node->nonTerm(args.size()));
-                if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
-                {
-                    printf("[Usage of dot on not structure/union object]\n");
-                    logError(ctx->filename, ctx->code, node->nonTerm(args.size())->start, node->nonTerm(args.size())->end);
-                    break;
-                }
-                int64_t fieldId = type->_struct.names[field];
-                args.push_back(fieldId);
-                type = type->_struct.fields[fieldId];
+                return {ops, varId};
             }
-            if (ctx->enabled("optimize_query_var") && args.size() == 1)
-            {
-                return {ops, args[0]};
-            }
+            
             int64_t tmp = newTemp(ctx, type);
-            args.insert(args.begin(), tmp);
-            append(ops, {OP_QUERY_VAR, args});
+            if (type->type != TYPE_RECORD)
+            {
+                append(ops, {OP_MOV, {tmp, varId}});
+            }
+            else
+            {
+                append(ops, {OP_QUERY_VAR, {tmp, varId, offset, (int64_t)fldType}});
+            }
             return {ops, tmp};
         }
         case 4: // fn call...
@@ -588,27 +615,9 @@ pair<vector<Operation>, int64_t> buildIndexOperation(BuildContext *ctx, Node *no
             append(ops, t);
             append(ops, tIndex);
             /* generate path */
-            vector<int64_t> args {0, pos};
-            int64_t id = 2;
-            type = type->_vector.base;
-            while (node->nonTerm(id))
-            {                
-                string field = Substr(ctx, node->nonTerm(id));
-                if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
-                {
-                    printf("[Usage of dot on not structure/union object]\n");
-                    logError(ctx->filename, ctx->code, node->nonTerm(args.size())->start, node->nonTerm(args.size())->end);
-                    break;
-                }
-                args.push_back(type->_struct.names[field]);
-                type = type->_struct.fields[args.back()];
-                id++;
-            }
-            int64_t tmp = newTemp(ctx, type);
-            args[0] = tmp;
-            args.push_back(posIndex);
-            
-            append(ops, {OP_QUERY_INDEX, args});
+            auto [offset, fldType] = GetFieldOffset(ctx, node, 2, type->_vector.base);
+            int64_t tmp = newTemp(ctx, fldType);
+            append(ops, {OP_QUERY_INDEX, {tmp, pos, offset, (int64_t)fldType, posIndex}});
             freeTemp(ops, pos);
             freeTemp(ops, posIndex);
             return {ops, tmp};
@@ -688,27 +697,11 @@ pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *no
             }
             Node *path = node->nonTerm(2);
             /* parse path to field */
-            vector<int64_t> args {0, position};
-            int64_t id = 0;
-            while (path->nonTerm(id))
-            {
-                string field = Substr(ctx, path->nonTerm(id));
-                if (type->type != TYPE_RECORD && type->type != TYPE_UNION && (id != 0 || type->type != TYPE_CLASS))
-                {
-                    printf("[Usage of dot on not structure/union object]\n");
-                    logError(ctx->filename, ctx->code, path->nonTerm(id)->start, path->nonTerm(id)->end);
-                    break;
-                }
-                args.push_back(type->_struct.names[field]);
-                type = type->_struct.fields[args.back()];
-                id++;
-            }
-
-            args[0] = newTemp(ctx, type);
-
+            auto [offset, fldType] = GetFieldOffset(ctx, path, 0, type);
+            int64_t tmp = newTemp(ctx, fldType);
             append(ops, code);
-            append(ops, {OP_QUERY_CLASS, args, attributes});
-            return {ops, args[0]};
+            append(ops, {OP_QUERY_CLASS, {tmp, position, offset, (int64_t)fldType}, attributes});
+            return {ops, tmp};
         }   
     }
     return {{}, -1};    
@@ -1091,31 +1084,23 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                     }
                     /* get variable */
                     int64_t varId = ctx->names[Substr(ctx, x->nonTerm(0))];
-                    vector<int64_t> args;
-                    args.push_back(varId);
                     TypeContext *type = ctx->variables[varId];
-                    while (x->nonTerm(args.size()))
-                    {
-                        /* encode path to field */
-                        string field = Substr(ctx, x->nonTerm(args.size()));
-                        if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
-                        {
-                            printf("[Usage of dot on not structure/union object]\n");
-                            logError(ctx->filename, ctx->code, x->nonTerm(args.size())->start, x->nonTerm(args.size())->end);
-                            break;
-                        }
-                        int64_t fieldId = type->_struct.names[field];
-                        args.push_back(fieldId);
-                        type = type->_struct.fields[fieldId];
-                    }
-                    /* add command */
-                    args.push_back(dataPos);
+
+                    auto [offset, fldType] = GetFieldOffset(ctx, node, 1, type);
+                    
                     /* check - if this is pushing of equal types */
                     if (is_castable(type, dataType))
                     {
                         if (is_convertable(type, dataType) || ctx->enabled("implicit_castes"))
                         {
-                            append(ops, {OP_PUSH_VAR, args});
+                            if (type->type != TYPE_RECORD)
+                            {
+                                append(ops, {OP_MOV, {varId, dataPos}});
+                            }
+                            else
+                            {
+                                append(ops, {OP_PUSH_VAR, {varId, offset, (int64_t)fldType, dataPos}});
+                            }
                         }
                         else
                         {
@@ -1245,33 +1230,18 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
             TypeContext *type = arrayType->_vector.base;
 
             /* find path to field */
-            vector<int64_t> args {arrayPos, indexPos};
-            int64_t id = 2;
-            while (x->nonTerm(id))
-            {
-                string field = Substr(ctx, x->nonTerm(id));
-                if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
-                {
-                    printf("[Usage of dot on not structure/union object]\n");
-                    logError(ctx->filename, ctx->code, x->nonTerm(id)->start, x->nonTerm(id)->end);
-                    break;
-                }
-                args.push_back(type->_struct.names[field]);
-                type = type->_struct.fields[args.back()];
-                id++;
-            }
-            args.push_back(dataPos);
+            auto [offset, fldType] = GetFieldOffset(ctx, x, 2, type);
             
             /* check - if this is pushing of equal types */
-            if (is_castable(type, dataType))
+            if (is_castable(fldType, dataType))
             {
-                if (is_convertable(type, dataType) || ctx->enabled("implicit_castes"))
+                if (is_convertable(fldType, dataType) || ctx->enabled("implicit_castes"))
                 {
                     /* calculate arguments */
                     append(ops, array);
                     append(ops, index);
                     
-                    append(ops, {OP_PUSH_ARRAY, args});
+                    append(ops, {OP_PUSH_ARRAY, {arrayPos, indexPos, offset, (int64_t)fldType, dataPos}});
 
                     freeTemp(ops, arrayPos);
                     freeTemp(ops, indexPos);
@@ -1279,18 +1249,18 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                 else
                 {
                     printf("[can't automaticly cast this types, use <implicit_castes> flag to allow this cast]\n");
-                    printType(type);
+                    printType(fldType);
                     printType(dataType);
                     logError(ctx->filename, ctx->code, x->start, x->end);   
                 }
             }
             else
             {
-                if (type->type == TYPE_PIPE)
+                if (fldType->type == TYPE_PIPE)
                 {
-                    if (is_castable(type->_vector.base, dataType))
+                    if (is_castable(fldType->_vector.base, dataType))
                     {
-                        if (is_convertable(type->_vector.base, dataType) || ctx->enabled("implicit_castes"))
+                        if (is_convertable(fldType->_vector.base, dataType) || ctx->enabled("implicit_castes"))
                         {
                             /* calculate array value */
                             auto [target, targetPos] = buildIndexOperation(ctx, x);
@@ -1303,18 +1273,18 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                         else
                         {
                             printf("[can't automaticly cast this types, use <implicit_castes> flag to allow this cast]\n");
-                            printType(type);
+                            printType(fldType);
                             printType(dataType);
                             logError(ctx->filename, ctx->code, x->start, x->end);   
                             break;
                         } 
                     }
                 }
-                else if (type->type == TYPE_PROMISE)
+                else if (fldType->type == TYPE_PROMISE)
                 {
-                    if (is_castable(type->_vector.base, dataType))
+                    if (is_castable(fldType->_vector.base, dataType))
                     {
-                        if (is_convertable(type->_vector.base, dataType) || ctx->enabled("implicit_castes"))
+                        if (is_convertable(fldType->_vector.base, dataType) || ctx->enabled("implicit_castes"))
                         {
                             /* calculate array value */
                             auto [target, targetPos] = buildIndexOperation(ctx, x);
@@ -1327,7 +1297,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                         else
                         {
                             printf("[can't automaticly cast this types, use <implicit_castes> flag to allow this cast]\n");
-                            printType(type);
+                            printType(fldType);
                             printType(dataType);
                             logError(ctx->filename, ctx->code, x->start, x->end);   
                             break;
@@ -1335,7 +1305,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                     }
                 }
                 printf("[this types are uncastable - push is wrong]\n");
-                printType(type);
+                printType(fldType);
                 printType(dataType);
                 logError(ctx->filename, ctx->code, x->start, x->end);       
             }
@@ -1397,33 +1367,20 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                     logError(ctx->filename, ctx->code, x->nonTerm(0)->start, x->nonTerm(0)->end);       
                     break;
                 }
-                if (!is(x->nonTerm(2), "SimpleTerm") || x->nonTerm(2)->variant != 3)
+                
+                Node *path = x->nonTerm(2);
+                if (!is(path, "SimpleTerm") || path->variant != 3)
                 {
                     printf("[Error - in infix form of class query, second part must be dotted identifer chain]\n");
-                    logError(ctx->filename, ctx->code, x->nonTerm(2)->start, x->nonTerm(2)->end);
+                    logError(ctx->filename, ctx->code, path->start, path->end);
                     break;
                 }
-                Node *path = x->nonTerm(2);
+                
                 /* parse path to field */
-                vector<int64_t> args {position};
-                int64_t id = 0;
-                while (path->nonTerm(id))
-                {
-                    string field = Substr(ctx, path->nonTerm(id));
-                    if (type->type != TYPE_RECORD && (id != 0 || type->type != TYPE_CLASS))
-                    {
-                        printf("[Usage of dot on not structure object]\n");
-                        logError(ctx->filename, ctx->code, path->nonTerm(id)->start, path->nonTerm(id)->end);
-                        break;
-                    }
-                    args.push_back(type->_struct.names[field]);
-                    type = type->_struct.fields[args.back()];
-                    id++;
-                }
-                args.push_back(dataPos);
+                auto [offset, fldType] = GetFieldOffset(ctx, path, 0, type);
 
                 append(ops, code);
-                append(ops, {OP_PUSH_CLASS, args, attributes});
+                append(ops, {OP_PUSH_CLASS, {position, offset, (int64_t)fldType, dataPos}, attributes});
                 freeTemp(ops, position);
                 break;
             }
