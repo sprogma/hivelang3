@@ -18,6 +18,49 @@ using namespace std;
 #include "../memoryAllocator.hpp"
 
 
+enum asm_operationZ
+{
+    ASM_CQO,
+};
+
+enum asm_operation1
+{
+    ASM_NEG,
+    ASM_NOT,
+    
+    ASM_IDIV,
+    ASM_DIV,
+
+    ASM_SETE,
+    ASM_SETNE,
+    ASM_SETL,
+    ASM_SETLE,
+    ASM_SETG,
+    ASM_SETGE,
+    ASM_SETA,
+    ASM_SETAE,
+    ASM_SETB,
+    ASM_SETBE,
+};
+
+enum asm_operation2
+{
+    ASM_MOV,
+    ASM_MOVSX,
+    ASM_MOVZX,
+    
+    ASM_XOR,
+    ASM_AND,
+    ASM_OR,
+    
+    ASM_ADD,
+    ASM_SUB,
+    ASM_IMUL,
+    
+    ASM_TEST,
+    ASM_CMP,
+};
+
 
 class WinX64Assembler : public CodeAssembler
 {
@@ -28,12 +71,319 @@ public:
 private:
     map<int64_t, WorkerDeclarationContext *> idToWorker;
     BuildResult *ir;
-    char *assemblyCode, *assemblyEnd;
+    BYTE *assemblyCode, *assemblyEnd;
     int64_t assemblyAlloc;
     int64_t nextLabelId;
+    
+    void printZ(asm_operationZ op)
+    {
+        AllocCode();
+        switch (op)
+        {
+            case ASM_CQO:
+            {
+                *assemblyEnd++ = 0x48;
+                *assemblyEnd++ = 0x99;
+                break;
+            }
+        }
+    }
+    
+    void printR(asm_operation1 op, pair<int64_t, int64_t> r1)
+    {
+        AllocCode();
 
-    __attribute__ ((format (printf, 2, 3)))
-    void print(const char *format_string, ...)
+        // common data
+        BYTE rex = 0x40;
+        bool needrex = false;
+
+        if (r1.first & 8) { needrex = true; rex |= 0x01; }
+        if (r1.second == 1) { needrex |= (r1.first & 7) >= 4; }
+        if (r1.second == 8) { needrex = true; rex |= 0x08; }
+
+        switch (op)
+        {
+            case ASM_NEG:
+            {
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0xF6 : 0xF7);
+                *assemblyEnd++ = 0xC0 | (3 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_NOT:
+            {
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0xF6 : 0xF7);
+                *assemblyEnd++ = 0xC0 | (2 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_DIV:
+            {
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0xF6 : 0xF7);
+                *assemblyEnd++ = 0xC0 | (6 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_IDIV:
+            {
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0xF6 : 0xF7);
+                *assemblyEnd++ = 0xC0 | (7 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SETE:
+            { 
+                assert(r1.second == 1);
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0x94;
+                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SETNE:
+            { 
+                assert(r1.second == 1);
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0x95;
+                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SETL:
+            { 
+                assert(r1.second == 1);
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0x9C;
+                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SETLE:
+            { 
+                assert(r1.second == 1);
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0x9E;
+                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SETG:
+            { 
+                assert(r1.second == 1);
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0x9F;
+                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SETGE:
+            { 
+                assert(r1.second == 1);
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0x9D;
+                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SETA:
+            { 
+                assert(r1.second == 1);
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0x97;
+                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SETAE:
+            { 
+                assert(r1.second == 1);
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0x93;
+                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SETB:
+            { 
+                assert(r1.second == 1);
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0x92;
+                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SETBE:
+            { 
+                assert(r1.second == 1);
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0x96;
+                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                break;
+            }
+        }
+    }
+
+    
+    void printRR(asm_operation2 op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2)
+    {
+        AllocCode();
+
+        // common data
+        BYTE rex = 0x40;
+        bool needrex = false;
+
+        if (r1.first & 8) { needrex = true; rex |= 0x01; }
+        if (r2.first & 8) { needrex = true; rex |= 0x04; }
+        if (r1.second == 1) { needrex |= (r1.first & 7) >= 4; }
+        if (r2.second == 1) { needrex |= (r2.first & 7) >= 4; }
+        if (r1.second == 8) { needrex = true; rex |= 0x08; }
+        if (r2.second == 8) { needrex = true; rex |= 0x08; }
+        
+        switch (op)
+        {
+            // [prefixes] [REX] [88/89] [param]
+            case ASM_MOV:
+            {
+                assert(r1.second == r2.second);
+
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                
+                if (needrex) { *assemblyEnd++ = rex; }
+
+                *assemblyEnd++ = (r1.second == 1 ? 0x88 : 0x89);
+                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                break;
+            }
+            // [prefixes] [REX] [0F] [B6/B7/BE/BF] [param]        
+            case ASM_MOVZX:
+            case ASM_MOVSX:
+            {                
+                // if this fallback isn't need, don't enable it
+                // if (r1.second == r2.second) return printRR(ASM_MOV, r1, r2);
+                
+                assert(r1.second > r2.second);
+
+                switch (r2.second)
+                {
+                    case 1:
+                        if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                            
+                        if (needrex) { *assemblyEnd++ = rex; }
+
+                        *assemblyEnd++ = 0x0F;
+                        *assemblyEnd++ = (op == ASM_MOVZX) ? 0xB6 : 0xBE;
+                        *assemblyEnd++ = 0xC0 | ((r1.first & 7) << 3) | (r2.first & 7);
+                        break;
+                    case 2:
+                        // dest is only 32/64
+                        *assemblyEnd++ = 0x66;
+
+                        if (needrex) { *assemblyEnd++ = rex; }
+
+                        *assemblyEnd++ = 0x0F;
+                        *assemblyEnd++ = (op == ASM_MOVZX) ? 0xB7 : 0xBF;
+                        *assemblyEnd++ = 0xC0 | ((r1.first & 7) << 3) | (r2.first & 7);
+                        break;
+                    case 4:
+                        // dest is only 8 bit
+                        if (op == ASM_MOVZX)
+                        {
+                            // simple mov
+                            printRR(ASM_MOV, {r1.first, 4}, r2);
+                        }
+                        else
+                        {
+                            *assemblyEnd++ = rex;
+                            *assemblyEnd++ = 0x63;
+                            *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                        }
+                        break;
+                }
+                break;
+            }                
+            // [prefixes] [REX] [88/89] [param]
+            case ASM_XOR:
+            {
+                assert(r1.second == r2.second);
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0x32 : 0x33);
+                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_AND:
+            {
+                assert(r1.second == r2.second);
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0x22 : 0x23);
+                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_OR:
+            {
+                assert(r1.second == r2.second);
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0x0A : 0x0B);
+                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_ADD:
+            {
+                assert(r1.second == r2.second);
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0x02 : 0x03);
+                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_SUB:
+            {
+                assert(r1.second == r2.second);
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0x2A : 0x2B);
+                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_IMUL:
+            {
+                assert(r1.second == r2.second);
+                if (r1.second <= 2) { *assemblyEnd++ = 0x66; } // multiplicate 8 byte as 16 byte
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = 0x0F;
+                *assemblyEnd++ = 0xAF;
+                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_TEST:
+            {
+                assert(r1.second == r2.second);
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0x84 : 0x85);
+                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                break;
+            }
+            case ASM_CMP:
+            {
+                assert(r1.second == r2.second);
+                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (needrex) { *assemblyEnd++ = rex; }
+                *assemblyEnd++ = (r1.second == 1 ? 0x3A : 0x3B);
+                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                break;
+            }
+        }
+    }
+
+    void AllocCode()
     {
         int64_t pos = assemblyEnd - assemblyCode;
         if (pos + 1000 > assemblyAlloc)
@@ -42,12 +392,17 @@ private:
             {
                 assemblyAlloc = 2 * assemblyAlloc + !assemblyAlloc;
             }
-            assemblyCode = (char *)realloc(assemblyCode, assemblyAlloc);
+            assemblyCode = (BYTE *)realloc(assemblyCode, assemblyAlloc);
             assemblyEnd = assemblyCode + pos;
         }
+    }
+    
+    __attribute__ ((format (printf, 2, 3)))
+    void print(const char *format_string, ...)
+    {
         va_list args;
         va_start(args, format_string); 
-        assemblyEnd += vsprintf(assemblyEnd, format_string, args);
+        vprintf(format_string, args);
         va_end(args);
     }
     
@@ -75,9 +430,12 @@ public:
         {
             return;
         }
-        
-        *assemblyEnd++ = '\0';
-        puts(assemblyCode);
+
+        for (BYTE *x = assemblyCode; x < assemblyEnd; ++x)
+        {
+            printf(" %02X", *x);
+        }
+        printf("\n");
     }
 
 private:
@@ -160,10 +518,17 @@ private:
         return RegisterName(regTable[var], varSize(var));
     }
 
+    const int64_t registers[5] = {0b0001, 0b1000, 0b1001, 0b1010, 0b1011};
+
+    const pair<int64_t, int64_t> Register(int64_t var)
+    {
+        return {registers[regTable[var]], varSize(var)};
+    }
+
     /*
         registers: 
             rbp - pointer on locals
-            rsp - pointer on inputs table // TODO: optimize
+            rdi - pointer on inputs table // TODO: optimize
             rax - used for division / api calls
             rdx - used for division / api calls
     */
@@ -243,27 +608,22 @@ private:
         }
     }
 
-    void InsertMove(int64_t dest, int64_t from)
+    void InsertMove(pair<int64_t, int64_t> dest, pair<int64_t, int64_t> from, bool isSigned)
     {
-        TypeContext *t1 = varType(dest);
-        TypeContext *t2 = varType(from);
-        if (t1 == t2 || t1->size < t2->size)
+        if (dest.second <= from.second)
         {
-            if (regTable[dest] != regTable[from])
+            if (dest.first != from.first)
             {
-                print("\tmov  %s, %s\n", RegisterName(dest), RegisterName(from));
+                printRR(ASM_MOV, dest, {from.first, dest.second});
             }
             return;
         }
-        // t1->size > t2->size
-        if (isSigned(dest))
-        {
-            print("\tmovsx %s, %s\n", RegisterName(dest), RegisterName(from));
-        }
-        else
-        {
-            print("\tmovzx %s, %s\n", RegisterName(dest), RegisterName(from));
-        }
+        printRR((isSigned ? ASM_MOVSX : ASM_MOVZX), dest, from);
+    }
+
+    void InsertMove(int64_t dest, int64_t from)
+    {
+        InsertMove(Register(dest), Register(from), isSigned(dest));
     }
 
     void InsertInteger(int64_t dest, int64_t value)
@@ -271,7 +631,7 @@ private:
         switch (value)
         {
             case 0:
-                print("\txor  %s, %s\n", RegisterName(dest), RegisterName(dest));
+                printRR(ASM_XOR, Register(dest), Register(dest));
                 break;
             default:
                 print("\tmov  %s, %lld\n", RegisterName(dest), value);
@@ -304,21 +664,24 @@ private:
         #define ABEL_BINOP(T) \
             if (regTable[op->data[0]] == regTable[op->data[2]]) \
             { \
-                print("\t" T "  %s, %s\n", RegisterName(op->data[2]), RegisterName(op->data[1])); \
+                printRR(T, Register(op->data[2]), Register(op->data[1])); \
             } \
             else \
             { \
                 InsertMove(op->data[0], op->data[1]); \
-                print("\t" T "  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); \
+                printRR(T, Register(op->data[0]), Register(op->data[2])); \
             }
-        #define CMPOP(A, B) \
-            print("\tcmp  %s, %s\n", RegisterName(op->data[1]), RegisterName(op->data[2])); \
+        #define CMPOP(A, B) { \
+            printRR(ASM_CMP, Register(op->data[1]), Register(op->data[2])); \
             print("\tmov  %s, 0\n", RegisterName(op->data[0])); \
+            auto reg = Register(op->data[0]); \
+            reg.second = 1; \
             if (isSigned(op->data[0])) \
-                print("\t" A " %s\n", RegisterName(regTable[op->data[0]], 1)); \
+                printR(A, reg); \
             else \
-                print("\t" B " %s\n", RegisterName(regTable[op->data[0]], 1)); \
-            print("\tneg  %s\n", RegisterName(op->data[0]));
+                printR(B, reg); \
+            printR(ASM_NEG, Register(op->data[0])); \
+        }
         
         switch (op->type)
         {
@@ -328,12 +691,12 @@ private:
             case OP_FREE_TEMP: break;
             
             case OP_JZ:
-                print("\ttest %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[0]));
+                printRR(ASM_TEST, Register(op->data[0]), Register(op->data[0]));
                 print("\tjz   op_%p\n", op->next[1]);
                 break;
                 
             case OP_JNZ: 
-                print("\ttest %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[0]));
+                printRR(ASM_TEST, Register(op->data[0]), Register(op->data[0]));
                 print("\tjnz  op_%p\n", op->next[1]);
                 break;
         
@@ -345,10 +708,10 @@ private:
                 break;
         
             case OP_LOAD_INPUT: 
-                print("\tmov  %s, %s [rsp + %lld]\n", RegisterName(op->data[1]), SizeQualifer(op->data[1]), GetInputOffset(op->data[0]));
+                print("\tmov  %s, %s [rdi + %lld]\n", RegisterName(op->data[1]), SizeQualifer(op->data[1]), GetInputOffset(op->data[0]));
                 break;
             case OP_LOAD_OUTPUT: 
-                print("\tmov  %s, %s [rsp + %lld]\n", RegisterName(op->data[1]), SizeQualifer(op->data[1]), GetOutputOffset(op->data[0]));
+                print("\tmov  %s, %s [rdi + %lld]\n", RegisterName(op->data[1]), SizeQualifer(op->data[1]), GetOutputOffset(op->data[0]));
                 break;
             
             
@@ -398,56 +761,59 @@ private:
             case OP_QUERY_PROMISE: ApiCall("query_promise"); break;
             case OP_QUERY_CLASS:   ApiCall("query_class"); break;
              
-            case OP_BOR:   ABEL_BINOP("or") break;
-            case OP_BAND:  ABEL_BINOP("and") break;
-            case OP_BXOR:  ABEL_BINOP("xor") break;
+            case OP_BOR:   ABEL_BINOP(ASM_OR) break;
+            case OP_BAND:  ABEL_BINOP(ASM_AND) break;
+            case OP_BXOR:  ABEL_BINOP(ASM_XOR) break;
 
             // TODO: add variant without BMI2
             case OP_SHL:   print("\tshlx %s, %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]), RegisterName(op->data[2])); break;
             case OP_SHR:   print("\tshrx %s, %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]), RegisterName(op->data[2])); break;
             
-            case OP_BNOT:        print("\tnot  %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2])); break;
+            case OP_BNOT:
+                InsertMove(op->data[0], op->data[2]);
+                printR(ASM_NOT, Register(op->data[0]));
+                break;
             
-            case OP_ADD:   ABEL_BINOP("add") break;
-            case OP_MUL:   ABEL_BINOP("imul") break;
+            case OP_ADD:   ABEL_BINOP(ASM_ADD) break;
+            case OP_MUL:   ABEL_BINOP(ASM_IMUL) break;
             case OP_SUB:
                 if (regTable[op->data[0]] == regTable[op->data[2]])
                 {
-                    print("\tsub %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]));
-                    print("\tneg %s\n", RegisterName(op->data[0]));
+                    printRR(ASM_SUB, Register(op->data[0]), Register(op->data[1]));
+                    printR(ASM_NEG, Register(op->data[0]));
                 }
                 else
                 {
                     InsertMove(op->data[0], op->data[1]);
-                    print("\tsub %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[2]));
+                    printRR(ASM_SUB, Register(op->data[0]), Register(op->data[2]));
                 }
                 break;
             
-            case OP_EQ:    CMPOP("sete", "sete") break;
-            case OP_NE:    CMPOP("setne", "setne") break;
-            case OP_LT:    CMPOP("setl", "setb") break;
-            case OP_LE:    CMPOP("setle", "setbe") break;
-            case OP_GT:    CMPOP("setg", "seta") break;
-            case OP_GE:    CMPOP("setge", "setae") break;
+            case OP_EQ:    CMPOP(ASM_SETE,  ASM_SETE)  break;
+            case OP_NE:    CMPOP(ASM_SETNE, ASM_SETNE) break;
+            case OP_LT:    CMPOP(ASM_SETL,  ASM_SETB)  break;
+            case OP_LE:    CMPOP(ASM_SETLE, ASM_SETBE) break;
+            case OP_GT:    CMPOP(ASM_SETG,  ASM_SETA)  break;
+            case OP_GE:    CMPOP(ASM_SETGE, ASM_SETAE) break;
 
             case OP_DIV:
-                print("\tmov  rax, %s\n", RegisterName(op->data[1]));
+                InsertMove({0, 8}, Register(op->data[1]), isSigned(op->data[0]));            // mov rax, $1
                 if (isSigned(op->data[0])) 
-                    print("\tcqo\n");
+                    printZ(ASM_CQO);                                                         // cqo
                 else 
-                    print("\txor  edx, edx\n");
-                print("\tdiv  %s\n", RegisterName(op->data[2])); 
-                print("\tmov  %s, rax", RegisterName(op->data[0]));
+                    printRR(ASM_XOR, {2, 4}, {2, 4});                                        // xor edx, edx
+                printR((isSigned(op->data[0]) ? ASM_IDIV : ASM_DIV), Register(op->data[2])); // div $2
+                InsertMove(Register(op->data[0]), {0, 8}, false);                            // mov $0, rax ; sign doesn't matter
                 break;
                 
             case OP_MOD:
-                print("\tmov  rax, %s\n", RegisterName(op->data[1]));
+                InsertMove({0, 8}, Register(op->data[1]), isSigned(op->data[0]));            // mov rax, $1
                 if (isSigned(op->data[0])) 
-                    print("\tcqo\n");
+                    printZ(ASM_CQO);                                                         // cqo
                 else 
-                    print("\txor  edx, edx\n");
-                print("\tdiv  %s\n", RegisterName(op->data[2])); 
-                print("\tmov  %s, rdx", RegisterName(op->data[0]));
+                    printRR(ASM_XOR, {2, 4}, {2, 4});                                        // xor edx, edx
+                printR((isSigned(op->data[0]) ? ASM_IDIV : ASM_DIV), Register(op->data[2])); // div $2
+                InsertMove(Register(op->data[0]), {2, 8}, false);                            // mov $0, rdx ; sign doesn't matter
                 break;
         }
 
