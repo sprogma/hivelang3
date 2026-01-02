@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <vector>
 #include <bitset>
@@ -59,6 +60,23 @@ enum asm_operation2
     
     ASM_TEST,
     ASM_CMP,
+};
+
+enum asm_operation3rm
+{
+    ASM_MOV_RM,
+};
+
+enum asm_operation3mr
+{
+    ASM_MOV_MR,
+};
+
+enum asm_operation3
+{
+    ASM_SHLX,
+    ASM_SHRX,
+    ASM_SARX,
 };
 
 
@@ -383,6 +401,180 @@ private:
         }
     }
 
+    void printRM(asm_operation3rm op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t offset)
+    {
+        AllocCode();
+        
+        BYTE rex = 0x40;
+        bool needrex = false;
+        
+        if (r1.first & 8) { needrex = true; rex |= 0x04; }
+        if (r2.first & 8) { needrex = true; rex |= 0x01; }
+        if (r1.second == 8) { needrex = true; rex |= 0x08; }
+
+        switch (op)
+        {
+            case ASM_MOV_RM:
+            {   
+                assert(r2.second == 8);
+
+                // add 16 bit prefix
+                if (r1.second == 2)  { *assemblyEnd++ = 0x66; }
+
+                // add rex
+                if (needrex)  { *assemblyEnd++ = rex; }
+
+                // opcode
+                *assemblyEnd++ = (r1.second == 1 ? 0x8A : 0x8B);
+
+                // modrm
+                if (offset == 0 && (r2.first & 7) != 5) // if not rbp/r13
+                {
+                    *assemblyEnd++ = 0x00 | ((r1.first & 7) << 3) | (r2.first & 7);
+                } 
+                else if (offset >= INT8_MIN && offset <= INT8_MAX) 
+                {
+                    *assemblyEnd++ = 0x40 | ((r1.first & 7) << 3) | (r2.first & 7);
+                } 
+                else 
+                {
+                    *assemblyEnd++ = 0x80 | ((r1.first & 7) << 3) | (r2.first & 7);
+                }
+                
+                if ((r2.first & 7) == 4)  // if rsp/r12
+                {
+                    // forced to use SIB
+                    *assemblyEnd++ = (0x00 << 6) | (0x04 << 3) | (r2.first & 7);
+                } 
+
+                // offset
+                if (offset || (r2.first & 7) == 5) // if rbp/r13 - write offset even if it is 0
+                {
+                    if (offset >= INT8_MIN && offset <= INT8_MAX) 
+                    {
+                        *assemblyEnd++ = offset;
+                    } 
+                    else 
+                    {
+                        uint32_t data = offset;
+                        memcpy(assemblyEnd, &data, sizeof(data));
+                        assemblyEnd += sizeof(data);
+                    }
+                }
+            }
+        }
+    }
+
+    void printMR(asm_operation3mr op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t offset)
+    {
+        AllocCode();
+        
+        BYTE rex = 0x40;
+        bool needrex = false;
+        
+        if (r1.first & 8) { needrex = true; rex |= 0x01; }
+        if (r2.first & 8) { needrex = true; rex |= 0x04; }
+        if (r2.second == 8) { needrex = true; rex |= 0x08; }
+
+        switch (op)
+        {
+            case ASM_MOV_MR:
+            {   
+                assert(r1.second == 8);
+
+                if (r2.second == 2)  { *assemblyEnd++ = 0x66; }
+
+                // rex
+                if (needrex)  { *assemblyEnd++ = rex; }
+
+                // opcode
+                *assemblyEnd++ = (r2.second == 1 ? 0x88 : 0x89);
+
+                // modrm
+                if (offset == 0 && (r1.first & 7) != 5) // if not rbp/r13
+                {
+                    *assemblyEnd++ = 0x00 | ((r2.first & 7) << 3) | (r1.first & 7);
+                } 
+                else if (offset >= INT8_MIN && offset <= INT8_MAX) 
+                {
+                    *assemblyEnd++ = 0x40 | ((r2.first & 7) << 3) | (r1.first & 7);
+                } 
+                else 
+                {
+                    *assemblyEnd++ = 0x80 | ((r2.first & 7) << 3) | (r1.first & 7);
+                }
+                
+                if ((r1.first & 7) == 4)  // if rsp/r12
+                {
+                    // forced to use SIB
+                    *assemblyEnd++ = (0x00 << 6) | (0x04 << 3) | (r1.first & 7);
+                } 
+
+                // offset
+                if (offset || (r1.first & 7) == 5) // if rbp/r13 - write offset even if zero
+                {
+                    if (offset >= INT8_MIN && offset <= INT8_MAX) 
+                    {
+                        *assemblyEnd++ = offset;
+                    } 
+                    else 
+                    {
+                        uint32_t data = offset;
+                        memcpy(assemblyEnd, &data, sizeof(data));
+                        assemblyEnd += sizeof(data);
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    void printRRR(asm_operation3 op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, pair<int64_t, int64_t> r3)
+    {
+        AllocCode();
+
+        assert(r1.second == r2.second && r2.second == r3.second);
+        assert(r1.second == 4 || r1.second == 8);
+
+        switch (op)
+        {
+            case ASM_SHLX:
+            case ASM_SHRX:
+            case ASM_SARX:
+            {
+                // generate VEX
+                BYTE pp;
+                switch (op) {
+                    case ASM_SHLX: pp = 0x01; break; // 66 prefix
+                    case ASM_SHRX: pp = 0x03; break; // F2 prefix  
+                    case ASM_SARX: pp = 0x02; break; // F3 prefix
+                }
+                
+                *assemblyEnd++ = 0xC4;
+                
+                BYTE r_bit = !!(r1.first & 8);
+                BYTE x_bit = 1;
+                BYTE b_bit = !!(r3.first & 8);
+                BYTE map_select = 0x02; // can't use C5 vex
+                
+                *assemblyEnd++ = (r_bit << 7) | (x_bit << 6) | (b_bit << 5) | map_select;
+                
+                BYTE W = (r1.second == 8) ? 1 : 0;
+                BYTE vvvv = (~r2.first) << 3;
+                BYTE L = 0;
+                
+                *assemblyEnd++ = (W << 7) | vvvv | (L << 2) | pp;
+
+                // modrm
+                *assemblyEnd++ = 0xF7;
+                
+                BYTE modrm = 0xC0 | ((r1.first & 7) << 3) | (r3.first & 7);
+                *assemblyEnd++ = modrm;
+                break;
+            }
+        }
+    }
+
     void AllocCode()
     {
         int64_t pos = assemblyEnd - assemblyCode;
@@ -701,17 +893,21 @@ private:
                 break;
         
             case OP_LOAD:
-                print("\tmov  %s, %s [rbp + %lld]\n", RegisterName(op->data[0]), SizeQualifer(op->data[0]), memTable[op->data[1]]);
+                // mov $0, XX PTR [rbp + $1]
+                printRM(ASM_MOV_RM, Register(op->data[0]), {5, 8}, memTable[op->data[1]]);
                 break;
             case OP_STORE:
-                print("\tmov  %s [rbp + %lld], %s\n", SizeQualifer(op->data[0]), memTable[op->data[1]], RegisterName(op->data[0]));
+                // mov XX PTR [rbp + $1], $0
+                printMR(ASM_MOV_MR, {5, 8}, Register(op->data[0]), memTable[op->data[1]]);
                 break;
         
             case OP_LOAD_INPUT: 
-                print("\tmov  %s, %s [rdi + %lld]\n", RegisterName(op->data[1]), SizeQualifer(op->data[1]), GetInputOffset(op->data[0]));
+                // mov $0, XX PTR [rdi + $1]
+                printRM(ASM_MOV_RM, Register(op->data[1]), {7, 8}, GetInputOffset(op->data[0]));
                 break;
             case OP_LOAD_OUTPUT: 
-                print("\tmov  %s, %s [rdi + %lld]\n", RegisterName(op->data[1]), SizeQualifer(op->data[1]), GetOutputOffset(op->data[0]));
+                // mov $0, XX PTR [rdi + $1]
+                printRM(ASM_MOV_RM, Register(op->data[1]), {7, 8}, GetOutputOffset(op->data[0]));
                 break;
             
             
@@ -742,7 +938,9 @@ private:
             
             case OP_PUSH_VAR:
                 assert(op->data[1] != 0 || (TypeContext *)op->data[2] != varType(op->data[0]));
-                print("\tmov %s [rbp + %lld], %s\n", SizeQualifer((TypeContext *)op->data[2]), memTable[op->data[0]] + op->data[1], RegisterName(op->data[3]));
+                // mov XX PTR [rbp + $0 + $1], $3
+                printMR(ASM_MOV_MR, {5, 8}, Register(op->data[3]), memTable[op->data[0]] + op->data[1]);
+                // (TypeContext *)op->data[2] - type [unused for now]
                 break;
                 
             case OP_PUSH_ARRAY:   ApiCall("push_array"); break;
@@ -752,7 +950,9 @@ private:
                 
             case OP_QUERY_VAR: 
                 assert(op->data[2] != 0 || (TypeContext *)op->data[3] != varType(op->data[0]));
-                print("\tmov %s, %s [rbp + %lld]\n", RegisterName(op->data[0]), SizeQualifer((TypeContext *)op->data[3]), memTable[op->data[1]] + op->data[2]);
+                // mov $0, XX PTR [rbp + $1 + $2]
+                printRM(ASM_MOV_RM, Register(op->data[0]), {5, 8}, memTable[op->data[1]] + op->data[2]);
+                // (TypeContext *)op->data[3] - type [unused for now]
                 break;
                 
             case OP_QUERY_ARRAY:   ApiCall("query_array"); break;
@@ -766,8 +966,14 @@ private:
             case OP_BXOR:  ABEL_BINOP(ASM_XOR) break;
 
             // TODO: add variant without BMI2
-            case OP_SHL:   print("\tshlx %s, %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]), RegisterName(op->data[2])); break;
-            case OP_SHR:   print("\tshrx %s, %s, %s\n", RegisterName(op->data[0]), RegisterName(op->data[1]), RegisterName(op->data[2])); break;
+            case OP_SHL:   
+                // shlx $0 $1 $2
+                printRRR(ASM_SHLX, Register(op->data[0]), Register(op->data[1]), Register(op->data[2]));
+                break;
+            case OP_SHR:
+                // shrx $0 $1 $2
+                printRRR(ASM_SHRX, Register(op->data[0]), Register(op->data[1]), Register(op->data[2]));
+                break;
             
             case OP_BNOT:
                 InsertMove(op->data[0], op->data[2]);
