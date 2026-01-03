@@ -102,13 +102,15 @@ enum OperationType
     OP_NEW_PIPE, // format is [dest]
     OP_NEW_PROMISE, // format is [dest]
     OP_NEW_CLASS, // format is [dest]
-    
+
+    // PUSH_VAR is used only with structures - owerwise MOV is generated
     OP_PUSH_VAR, // format is [var, offset, type?, source]
     OP_PUSH_ARRAY, // format is [array, index, offset, type?, source]
     OP_PUSH_PIPE, // format is [pipe, source]
     OP_PUSH_PROMISE, // format is [promise, source]
     OP_PUSH_CLASS, // format is [class, offset, type?, source]
     
+    // QUERY_VAR is used only with structures - owerwise MOV is generated
     OP_QUERY_VAR, // format is [dest, var, offset, type?]
     OP_QUERY_ARRAY, // format is [dest, source]
     OP_QUERY_INDEX, // format is [dest, source, offset, type?, index]

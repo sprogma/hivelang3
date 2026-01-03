@@ -1,50 +1,44 @@
 #include "inttypes.h"
 #include "stdio.h"
 
+extern int MyAsmFunc(void);
 
 void *objects[1000];
 
 
-// void QueryObject(void *dest, int64_t object, int64_t offset, int64_t index)
-// {
-//     printf("CALL QUERY OBJECT WITH %lld args: ", count);
-//     for (int64_t i = 0; i < count; ++i)
-//     {
-//         printf(" %lld", args[i]);
-//     }
-//     printf("\n");
-//     return 0;
-// }
-// 
-// 
-// int64_t PushObject(int64_t count, int64_t *args)
-// {
-//     printf("CALL PUSH OBJECT WITH %lld args: ", count);
-//     for (int64_t i = 0; i < count; ++i)
-//     {
-//         printf(" %lld", args[i]);
-//     }
-//     printf("\n");
-//     return 0;
-// }
-// 
-// 
-// int64_t NewObject(int64_t count, int64_t *args)
-// {
-//     printf("CALL NEW OBJECT WITH %lld args: ", count);
-//     for (int64_t i = 0; i < count; ++i)
-//     {
-//         printf(" %lld", args[i]);
-//     }
-//     printf("\n");
-//     return 0;
-// }
-// 
-// 
-// void CallObject(int64_t worker, int64_t *args)
-// {
-//     printf("CALL OF WORKER %lld WITH args.\n", worker);
-// }
+// if dest == NULL - return into rax
+int64_t QueryObject(void *dest, int64_t object, int64_t offset, int64_t size)
+{
+    printf("CALL QUERY OBJECT WITH %p <- %lld[%lld:%lld]\n", dest, object, offset, size);
+    return 0;
+}
+
+// if size < 0 -> src is constant value [int64_t]
+void PushObject(int64_t object, int64_t offset, int64_t size, void *src)
+{
+    printf("CALL PUSH OBJECT WITH %lld[%lld:%lld] <- %p\n", object, offset, size, src);
+}
+
+// size is size of element in pipe
+#define NEW_OBJECT_PIPE    0x01
+
+// size is size of element in promise
+#define NEW_OBJECT_PROMISE 0x02
+
+// size is total size of object
+#define NEW_OBJECT_OBJECT  0x03
+
+// return new object [id] in rax
+int64_t NewObject(int64_t type, int64_t size)
+{
+    printf("CALL NEW OBJECT WITH rax <- new %lld with param %lld\n", type, size);
+    return 0;
+}
+
+void CallObject(int64_t worker)
+{
+    printf("CALL OF WORKER %lld WITH args.\n", worker);
+}
 
 enum relocation_type
 {
@@ -82,7 +76,8 @@ struct worker
 };
 
 
-void LoadWorker(void *code)
-{
-}
 
+int main()
+{
+    printf("%d\n", MyAsmFunc());
+}

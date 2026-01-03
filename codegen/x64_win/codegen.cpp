@@ -14,6 +14,7 @@ using namespace std;
 
 #include "../../ir.hpp"
 #include "../../optimization/optimizer.hpp"
+#include "../../analysis/analizators.hpp"
 #include "../codegen.hpp"
 #include "../registerAllocator.hpp"
 #include "../memoryAllocator.hpp"
@@ -743,6 +744,16 @@ private:
             return -1;
         }
     }
+
+    BYTE *printCALL(int64_t address)
+    {
+        pbyte(0x48, 0xB8); // mov rax im64
+        BYTE *res = assemblyEnd;
+        memcpy(assemblyEnd, &address, 8);
+        assemblyEnd += 8;
+        pbyte(0xFF, 0xD0); // call rax
+        return res;
+    }
     
     __attribute__ ((format (printf, 2, 3)))
     void print(const char *format_string, ...)
@@ -787,6 +798,7 @@ public:
 
 private:
     WorkerDeclarationContext *current;
+    RegisterAnalizator *analyzer;
     // registers table
     map<int64_t, int64_t> regTable;
     map<int64_t, int64_t> memTable;
@@ -801,6 +813,11 @@ private:
     bool isSigned(int64_t name)
     {
         return SCALAR_TYPE(varType(name)->type) == SCALAR_I;
+    }
+
+    bool isScalar(int64_t name)
+    {
+        return varType(name)->type == TYPE_SCALAR;
     }
 
     TypeContext *varType(int64_t name)
@@ -875,11 +892,6 @@ private:
     {
         return {registers[regTable[var]], varSize(var)};
     }
-    
-    void ApiCall(const char *apiEntry)
-    {
-        print("\tjmp  %s\n", apiEntry);
-    }
 
     void BuildFn(WorkerDeclarationContext *wk, int64_t workerId)
     {
@@ -908,6 +920,9 @@ private:
 
         dumpIR(wk);
 
+        // analyze code
+        analyzer = new RegisterAnalizator(wk);
+
         // get used labels
         addressTable.clear();
         usedLabels.clear();
@@ -930,6 +945,8 @@ private:
         // join code using JumpInstructions
 
         InsertJumpInstructions();
+
+        delete analyzer;
     }
 
     void UpdateUsedLabels(OperationBlock *op)
@@ -1071,35 +1088,49 @@ private:
                 print("\tOP_NEW_FLOAT [not supported]\n"); 
                 break;
                 
-            case OP_NEW_ARRAY:    ApiCall("new_array"); break;
-            case OP_NEW_PIPE:     ApiCall("new_pipe"); break;
-            case OP_NEW_PROMISE:  ApiCall("new_promise"); break;
-            case OP_NEW_CLASS:    ApiCall("new_class"); break;
+            case OP_NEW_ARRAY:    printf("not supported: new_array\n"); break;
+            case OP_NEW_PIPE:     printf("not supported: new_pipe\n"); break;
+            case OP_NEW_PROMISE:  printf("not supported: new_promise\n"); break;
+            case OP_NEW_CLASS:    printf("not supported: new_class\n"); break;
             
             case OP_PUSH_VAR:
+                // TODO: what if data[3] is not scalar?
                 assert(op->data[1] != 0 || (TypeContext *)op->data[2] != varType(op->data[0]));
                 // mov XX PTR [rbp + $0 + $1], $3
                 printMR(ASM_MOV_MR, {5, 8}, Register(op->data[3]), memTable[op->data[0]] + op->data[1]);
                 // (TypeContext *)op->data[2] - type [unused for now]
                 break;
                 
-            case OP_PUSH_ARRAY:   ApiCall("push_array"); break;
-            case OP_PUSH_PIPE:    ApiCall("push_pipe"); break;
-            case OP_PUSH_PROMISE: ApiCall("push_promise"); break;
-            case OP_PUSH_CLASS:   ApiCall("push_class"); break;
+            case OP_PUSH_ARRAY:   printf("not supported: push_array\n"); break;
+            case OP_PUSH_PIPE:    printf("not supported: push_pipe\n"); break;
+            case OP_PUSH_PROMISE:
+            {
+                if (isScalar(op->data[1]))
+                {
+                    // PushObject(r1, offset, size, r2)
+                    printRR(ASM_MOV, {0, 0}, Register(op->data[0]));
+                    printCALL(0x0);
+                }
+                else
+                {
+                    // PushObject(r1, offset, size, PTR src)
+                }
+            }
+            case OP_PUSH_CLASS:   printf("not supported: push_class\n"); break;
                 
             case OP_QUERY_VAR: 
+                // TODO: what if data[3] is not scalar?
                 assert(op->data[2] != 0 || (TypeContext *)op->data[3] != varType(op->data[0]));
                 // mov $0, XX PTR [rbp + $1 + $2]
                 printRM(ASM_MOV_RM, Register(op->data[0]), {5, 8}, memTable[op->data[1]] + op->data[2]);
                 // (TypeContext *)op->data[3] - type [unused for now]
                 break;
                 
-            case OP_QUERY_ARRAY:   ApiCall("query_array"); break;
-            case OP_QUERY_INDEX:   ApiCall("query_index"); break;
-            case OP_QUERY_PIPE:    ApiCall("query_pipe"); break;
-            case OP_QUERY_PROMISE: ApiCall("query_promise"); break;
-            case OP_QUERY_CLASS:   ApiCall("query_class"); break;
+            case OP_QUERY_ARRAY:   printf("not supported: query_array\n"); break;
+            case OP_QUERY_INDEX:   printf("not supported: query_index\n"); break;
+            case OP_QUERY_PIPE:    printf("not supported: query_pipe\n"); break;
+            case OP_QUERY_PROMISE: printf("not supported: query_promise\n"); break;
+            case OP_QUERY_CLASS:   printf("not supported: query_class\n"); break;
              
             case OP_BOR:   ABEL_BINOP(ASM_OR) break;
             case OP_BAND:  ABEL_BINOP(ASM_AND) break;
