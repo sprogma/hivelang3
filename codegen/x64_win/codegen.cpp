@@ -4,7 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include <vector>
-#include <bitset>
+#include <algorithm>
 #include <array>
 #include <ranges>
 #include <map>
@@ -67,6 +67,11 @@ enum asm_operation3rm
     ASM_MOV_RM,
 };
 
+enum asm_operation2rc
+{
+    ASM_MOV_RC,
+};
+
 enum asm_operation3mr
 {
     ASM_MOV_MR,
@@ -77,6 +82,31 @@ enum asm_operation3
     ASM_SHLX,
     ASM_SHRX,
     ASM_SARX,
+};
+
+
+enum asm_operation_jmp
+{
+    ASM_JMP,
+    ASM_JZ,
+    ASM_JNZ,
+    ASM_JS,
+    ASM_JNS,
+    ASM_JNAE,
+    ASM_JB,
+    ASM_JC,
+    ASM_NC,
+    ASM_NB,
+    ASM_JAE,
+    ASM_JO,
+    ASM_JNO,
+};
+
+struct jmpInstruction
+{
+    asm_operation_jmp jmpType;
+    BYTE *codePos;
+    OperationBlock *destOp;
 };
 
 
@@ -93,15 +123,20 @@ private:
     int64_t assemblyAlloc;
     int64_t nextLabelId;
     
+    template<typename... Args>
+    void pbyte(Args... args) 
+    {
+        ((*assemblyEnd++ = args), ...);
+    }
+    
     void printZ(asm_operationZ op)
     {
-        AllocCode();
         switch (op)
         {
             case ASM_CQO:
             {
-                *assemblyEnd++ = 0x48;
-                *assemblyEnd++ = 0x99;
+                pbyte(0x48);
+                pbyte(0x99);
                 break;
             }
         }
@@ -109,7 +144,6 @@ private:
     
     void printR(asm_operation1 op, pair<int64_t, int64_t> r1)
     {
-        AllocCode();
 
         // common data
         BYTE rex = 0x40;
@@ -123,124 +157,124 @@ private:
         {
             case ASM_NEG:
             {
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0xF6 : 0xF7);
-                *assemblyEnd++ = 0xC0 | (3 << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0xF6 : 0xF7));
+                pbyte(0xC0 | (3 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_NOT:
             {
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0xF6 : 0xF7);
-                *assemblyEnd++ = 0xC0 | (2 << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0xF6 : 0xF7));
+                pbyte(0xC0 | (2 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_DIV:
             {
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0xF6 : 0xF7);
-                *assemblyEnd++ = 0xC0 | (6 << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0xF6 : 0xF7));
+                pbyte(0xC0 | (6 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_IDIV:
             {
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0xF6 : 0xF7);
-                *assemblyEnd++ = 0xC0 | (7 << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0xF6 : 0xF7));
+                pbyte(0xC0 | (7 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SETE:
             { 
                 assert(r1.second == 1);
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0x94;
-                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0x94);
+                pbyte(0xC0 | (0 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SETNE:
             { 
                 assert(r1.second == 1);
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0x95;
-                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0x95);
+                pbyte(0xC0 | (0 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SETL:
             { 
                 assert(r1.second == 1);
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0x9C;
-                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0x9C);
+                pbyte(0xC0 | (0 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SETLE:
             { 
                 assert(r1.second == 1);
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0x9E;
-                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0x9E);
+                pbyte(0xC0 | (0 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SETG:
             { 
                 assert(r1.second == 1);
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0x9F;
-                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0x9F);
+                pbyte(0xC0 | (0 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SETGE:
             { 
                 assert(r1.second == 1);
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0x9D;
-                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0x9D);
+                pbyte(0xC0 | (0 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SETA:
             { 
                 assert(r1.second == 1);
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0x97;
-                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0x97);
+                pbyte(0xC0 | (0 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SETAE:
             { 
                 assert(r1.second == 1);
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0x93;
-                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0x93);
+                pbyte(0xC0 | (0 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SETB:
             { 
                 assert(r1.second == 1);
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0x92;
-                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0x92);
+                pbyte(0xC0 | (0 << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SETBE:
             { 
                 assert(r1.second == 1);
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0x96;
-                *assemblyEnd++ = 0xC0 | (0 << 3) | (r1.first & 7);
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0x96);
+                pbyte(0xC0 | (0 << 3) | (r1.first & 7));
                 break;
             }
         }
@@ -249,7 +283,6 @@ private:
     
     void printRR(asm_operation2 op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2)
     {
-        AllocCode();
 
         // common data
         BYTE rex = 0x40;
@@ -269,12 +302,12 @@ private:
             {
                 assert(r1.second == r2.second);
 
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                if (r1.second == 2) { pbyte(0x66); }
                 
-                if (needrex) { *assemblyEnd++ = rex; }
+                if (needrex) { pbyte(rex); }
 
-                *assemblyEnd++ = (r1.second == 1 ? 0x88 : 0x89);
-                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                pbyte((r1.second == 1 ? 0x88 : 0x89));
+                pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
             // [prefixes] [REX] [0F] [B6/B7/BE/BF] [param]        
@@ -289,23 +322,23 @@ private:
                 switch (r2.second)
                 {
                     case 1:
-                        if (r1.second == 2) { *assemblyEnd++ = 0x66; }
+                        if (r1.second == 2) { pbyte(0x66); }
                             
-                        if (needrex) { *assemblyEnd++ = rex; }
+                        if (needrex) { pbyte(rex); }
 
-                        *assemblyEnd++ = 0x0F;
-                        *assemblyEnd++ = (op == ASM_MOVZX) ? 0xB6 : 0xBE;
-                        *assemblyEnd++ = 0xC0 | ((r1.first & 7) << 3) | (r2.first & 7);
+                        pbyte(0x0F);
+                        pbyte((op == ASM_MOVZX) ? 0xB6 : 0xBE);
+                        pbyte(0xC0 | ((r1.first & 7) << 3) | (r2.first & 7));
                         break;
                     case 2:
                         // dest is only 32/64
-                        *assemblyEnd++ = 0x66;
+                        pbyte(0x66);
 
-                        if (needrex) { *assemblyEnd++ = rex; }
+                        if (needrex) { pbyte(rex); }
 
-                        *assemblyEnd++ = 0x0F;
-                        *assemblyEnd++ = (op == ASM_MOVZX) ? 0xB7 : 0xBF;
-                        *assemblyEnd++ = 0xC0 | ((r1.first & 7) << 3) | (r2.first & 7);
+                        pbyte(0x0F);
+                        pbyte((op == ASM_MOVZX) ? 0xB7 : 0xBF);
+                        pbyte(0xC0 | ((r1.first & 7) << 3) | (r2.first & 7));
                         break;
                     case 4:
                         // dest is only 8 bit
@@ -316,9 +349,9 @@ private:
                         }
                         else
                         {
-                            *assemblyEnd++ = rex;
-                            *assemblyEnd++ = 0x63;
-                            *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                            pbyte(rex);
+                            pbyte(0x63);
+                            pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                         }
                         break;
                 }
@@ -328,74 +361,74 @@ private:
             case ASM_XOR:
             {
                 assert(r1.second == r2.second);
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0x32 : 0x33);
-                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0x32 : 0x33));
+                pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
             case ASM_AND:
             {
                 assert(r1.second == r2.second);
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0x22 : 0x23);
-                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0x22 : 0x23));
+                pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
             case ASM_OR:
             {
                 assert(r1.second == r2.second);
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0x0A : 0x0B);
-                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0x0A : 0x0B));
+                pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
             case ASM_ADD:
             {
                 assert(r1.second == r2.second);
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0x02 : 0x03);
-                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0x02 : 0x03));
+                pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
             case ASM_SUB:
             {
                 assert(r1.second == r2.second);
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0x2A : 0x2B);
-                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0x2A : 0x2B));
+                pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
             case ASM_IMUL:
             {
                 assert(r1.second == r2.second);
-                if (r1.second <= 2) { *assemblyEnd++ = 0x66; } // multiplicate 8 byte as 16 byte
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = 0x0F;
-                *assemblyEnd++ = 0xAF;
-                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                if (r1.second <= 2) { pbyte(0x66); } // multiplicate 8 byte as 16 byte
+                if (needrex) { pbyte(rex); }
+                pbyte(0x0F);
+                pbyte(0xAF);
+                pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
             case ASM_TEST:
             {
                 assert(r1.second == r2.second);
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0x84 : 0x85);
-                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0x84 : 0x85));
+                pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
             case ASM_CMP:
             {
                 assert(r1.second == r2.second);
-                if (r1.second == 2) { *assemblyEnd++ = 0x66; }
-                if (needrex) { *assemblyEnd++ = rex; }
-                *assemblyEnd++ = (r1.second == 1 ? 0x3A : 0x3B);
-                *assemblyEnd++ = 0xC0 | ((r2.first & 7) << 3) | (r1.first & 7);
+                if (r1.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                pbyte((r1.second == 1 ? 0x3A : 0x3B));
+                pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
         }
@@ -403,7 +436,6 @@ private:
 
     void printRM(asm_operation3rm op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t offset)
     {
-        AllocCode();
         
         BYTE rex = 0x40;
         bool needrex = false;
@@ -419,32 +451,32 @@ private:
                 assert(r2.second == 8);
 
                 // add 16 bit prefix
-                if (r1.second == 2)  { *assemblyEnd++ = 0x66; }
+                if (r1.second == 2)  { pbyte(0x66); }
 
                 // add rex
-                if (needrex)  { *assemblyEnd++ = rex; }
+                if (needrex)  { pbyte(rex); }
 
                 // opcode
-                *assemblyEnd++ = (r1.second == 1 ? 0x8A : 0x8B);
+                pbyte((r1.second == 1 ? 0x8A : 0x8B));
 
                 // modrm
                 if (offset == 0 && (r2.first & 7) != 5) // if not rbp/r13
                 {
-                    *assemblyEnd++ = 0x00 | ((r1.first & 7) << 3) | (r2.first & 7);
+                    pbyte(0x00 | ((r1.first & 7) << 3) | (r2.first & 7));
                 } 
                 else if (offset >= INT8_MIN && offset <= INT8_MAX) 
                 {
-                    *assemblyEnd++ = 0x40 | ((r1.first & 7) << 3) | (r2.first & 7);
+                    pbyte(0x40 | ((r1.first & 7) << 3) | (r2.first & 7));
                 } 
                 else 
                 {
-                    *assemblyEnd++ = 0x80 | ((r1.first & 7) << 3) | (r2.first & 7);
+                    pbyte(0x80 | ((r1.first & 7) << 3) | (r2.first & 7));
                 }
                 
                 if ((r2.first & 7) == 4)  // if rsp/r12
                 {
                     // forced to use SIB
-                    *assemblyEnd++ = (0x00 << 6) | (0x04 << 3) | (r2.first & 7);
+                    pbyte((0x00 << 6) | (0x04 << 3) | (r2.first & 7));
                 } 
 
                 // offset
@@ -452,7 +484,7 @@ private:
                 {
                     if (offset >= INT8_MIN && offset <= INT8_MAX) 
                     {
-                        *assemblyEnd++ = offset;
+                        pbyte(offset);
                     } 
                     else 
                     {
@@ -465,9 +497,57 @@ private:
         }
     }
 
+    void printRC(asm_operation2rc op, pair<int64_t, int64_t> r1, int64_t value)
+    {
+
+        
+        switch (op)
+        {
+            case ASM_MOV_RC:
+                if (r1.second == 8 && value == (uint32_t)value) { r1.second = 4; }
+                break;
+            default:
+                break;
+        }
+        
+        BYTE rex = 0x40;
+        bool needrex = false;
+    
+        if (r1.first & 8)
+        {
+            rex |= 0x01;
+            needrex = true;
+        }
+        if (r1.second == 1 && r1.first >= 4)
+        {
+            needrex = true;
+        }
+        if (r1.second == 8)
+        {
+            rex |= 0x08;
+            needrex = true;
+        }
+        
+        
+        switch (op)
+        {
+            case ASM_MOV_RC:
+            {
+                if (needrex) { pbyte(rex); }
+                if (r1.second == 2) { pbyte(0x66); }
+                
+                pbyte((r1.second == 1 ? 0xB0 : 0xB8) | (r1.first & 7));
+
+                memcpy(assemblyEnd, &value, r1.second);
+                assemblyEnd += r1.second;
+                
+                break;
+            }
+        }
+    }
+
     void printMR(asm_operation3mr op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t offset)
     {
-        AllocCode();
         
         BYTE rex = 0x40;
         bool needrex = false;
@@ -482,32 +562,32 @@ private:
             {   
                 assert(r1.second == 8);
 
-                if (r2.second == 2)  { *assemblyEnd++ = 0x66; }
+                if (r2.second == 2)  { pbyte(0x66); }
 
                 // rex
-                if (needrex)  { *assemblyEnd++ = rex; }
+                if (needrex)  { pbyte(rex); }
 
                 // opcode
-                *assemblyEnd++ = (r2.second == 1 ? 0x88 : 0x89);
+                pbyte((r2.second == 1 ? 0x88 : 0x89));
 
                 // modrm
                 if (offset == 0 && (r1.first & 7) != 5) // if not rbp/r13
                 {
-                    *assemblyEnd++ = 0x00 | ((r2.first & 7) << 3) | (r1.first & 7);
+                    pbyte(0x00 | ((r2.first & 7) << 3) | (r1.first & 7));
                 } 
                 else if (offset >= INT8_MIN && offset <= INT8_MAX) 
                 {
-                    *assemblyEnd++ = 0x40 | ((r2.first & 7) << 3) | (r1.first & 7);
+                    pbyte(0x40 | ((r2.first & 7) << 3) | (r1.first & 7));
                 } 
                 else 
                 {
-                    *assemblyEnd++ = 0x80 | ((r2.first & 7) << 3) | (r1.first & 7);
+                    pbyte(0x80 | ((r2.first & 7) << 3) | (r1.first & 7));
                 }
                 
                 if ((r1.first & 7) == 4)  // if rsp/r12
                 {
                     // forced to use SIB
-                    *assemblyEnd++ = (0x00 << 6) | (0x04 << 3) | (r1.first & 7);
+                    pbyte((0x00 << 6) | (0x04 << 3) | (r1.first & 7));
                 } 
 
                 // offset
@@ -515,7 +595,7 @@ private:
                 {
                     if (offset >= INT8_MIN && offset <= INT8_MAX) 
                     {
-                        *assemblyEnd++ = offset;
+                        pbyte(offset);
                     } 
                     else 
                     {
@@ -531,7 +611,6 @@ private:
 
     void printRRR(asm_operation3 op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, pair<int64_t, int64_t> r3)
     {
-        AllocCode();
 
         assert(r1.second == r2.second && r2.second == r3.second);
         assert(r1.second == 4 || r1.second == 8);
@@ -550,42 +629,118 @@ private:
                     case ASM_SARX: pp = 0x02; break; // F3 prefix
                 }
                 
-                *assemblyEnd++ = 0xC4;
+                pbyte(0xC4);
                 
                 BYTE r_bit = !!(r1.first & 8);
                 BYTE x_bit = 1;
                 BYTE b_bit = !!(r3.first & 8);
                 BYTE map_select = 0x02; // can't use C5 vex
                 
-                *assemblyEnd++ = (r_bit << 7) | (x_bit << 6) | (b_bit << 5) | map_select;
+                pbyte((r_bit << 7) | (x_bit << 6) | (b_bit << 5) | map_select);
                 
                 BYTE W = (r1.second == 8) ? 1 : 0;
                 BYTE vvvv = (~r2.first) << 3;
                 BYTE L = 0;
                 
-                *assemblyEnd++ = (W << 7) | vvvv | (L << 2) | pp;
+                pbyte((W << 7) | vvvv | (L << 2) | pp);
 
                 // modrm
-                *assemblyEnd++ = 0xF7;
+                pbyte(0xF7);
                 
                 BYTE modrm = 0xC0 | ((r1.first & 7) << 3) | (r3.first & 7);
-                *assemblyEnd++ = modrm;
+                pbyte(modrm);
                 break;
             }
         }
     }
 
-    void AllocCode()
+    // return {size, encoding variant}
+    pair<int64_t, int64_t> JMPsize(asm_operation_jmp op, int64_t offset, int64_t encoding_variant)
     {
-        int64_t pos = assemblyEnd - assemblyCode;
-        if (pos + 1000 > assemblyAlloc)
+        if (offset >= INT8_MIN + 6 && offset <= INT8_MAX && encoding_variant <= 0)
+        {   
+            return {1 + 1, 0}; // opcode + data
+        }
+        else if (encoding_variant <= 1)
         {
-            while (pos + 1000 > assemblyAlloc)
+            switch (op)
             {
-                assemblyAlloc = 2 * assemblyAlloc + !assemblyAlloc;
+                case ASM_JMP: return {1 + 4, 1}; // opcode + data
+                case ASM_JZ:
+                case ASM_JNZ:
+                case ASM_JS:
+                case ASM_JNS:
+                case ASM_JNAE:
+                case ASM_JB:
+                case ASM_JC:
+                case ASM_NC:
+                case ASM_NB:
+                case ASM_JAE:
+                case ASM_JO:
+                case ASM_JNO: return {2 + 4, 1}; // opcode + data
             }
-            assemblyCode = (BYTE *)realloc(assemblyCode, assemblyAlloc);
-            assemblyEnd = assemblyCode + pos;
+        }
+        else
+        {
+            printf("ERROR: Wrong encoding_variant: %lld\n", encoding_variant);
+            return {0, 0};
+        }
+    }
+
+    int64_t printJMP(asm_operation_jmp op, int64_t offset, int64_t encoding_variant)
+    {
+        auto [sz, var] = JMPsize(op, offset, encoding_variant);
+        offset -= sz;
+        // 6 is max jmp size
+        if (var == 0)
+        {   
+            switch (op)
+            {
+                case ASM_JMP: pbyte(0xEB); break;
+                case ASM_JZ: pbyte(0x74); break;
+                case ASM_JNZ: pbyte(0x75); break;
+                case ASM_JS: pbyte(0x78); break;
+                case ASM_JNS: pbyte(0x79); break;
+                case ASM_JNAE:
+                case ASM_JB:
+                case ASM_JC: pbyte(0x72); break;
+                case ASM_NC:
+                case ASM_NB:
+                case ASM_JAE: pbyte(0x73); break;
+                case ASM_JO: pbyte(0x70); break;
+                case ASM_JNO: pbyte(0x71); break;
+            }   
+            
+            pbyte(offset);
+            return 0;
+        }
+        else if (var == 1)
+        {
+            switch (op)
+            {
+                case ASM_JMP: pbyte(0xE9); break;
+                case ASM_JZ: pbyte(0x0F, 0x84); break;
+                case ASM_JNZ: pbyte(0x0F, 0x85); break;
+                case ASM_JS: pbyte(0x0F, 0x88); break;
+                case ASM_JNS: pbyte(0x0F, 0x89); break;
+                case ASM_JNAE:
+                case ASM_JB:
+                case ASM_JC: pbyte(0x0F, 0x82); break;
+                case ASM_NC:
+                case ASM_NB:
+                case ASM_JAE: pbyte(0x0F, 0x83); break;
+                case ASM_JO: pbyte(0x0F, 0x80); break;
+                case ASM_JNO: pbyte(0x0F, 0x81); break;
+            }
+            
+            memcpy(assemblyEnd, &offset, 4);
+            assemblyEnd += 4;
+            return 1;
+        }
+        else
+        {
+            printf("ERROR: Wrong encoding_variant: %lld\n", var);
+            return -1;
         }
     }
     
@@ -606,18 +761,18 @@ public:
 
         /* init build context */
         nextLabelId = 0;
-        generated.clear();
+        addressTable.clear();
 
         /* initializate string */
         assemblyAlloc = 0;
-        assemblyCode = assemblyEnd = NULL;
+        assemblyCode = assemblyEnd = (BYTE *)malloc(1024 * 1024);
 
         /* build each worker */
         for (auto &[fn, id] : ir->workers) { idToWorker[id] = fn; }
         for (auto &[fn, id] : ir->workers) { BuildFn(fn, id); }
 
         // add terminating zero
-        printf("Code generated.\n");
+        printf("Code addressTable.\n");
         if (!assemblyEnd)
         {
             return;
@@ -636,8 +791,9 @@ private:
     map<int64_t, int64_t> regTable;
     map<int64_t, int64_t> memTable;
     int64_t usedMemory;
-    set<OperationBlock *> generated;
     set<OperationBlock *> usedLabels;
+    map<OperationBlock *, BYTE *> addressTable;
+    vector<jmpInstruction> JumpInstructions;
 
     // registers configuraion
     static constexpr int64_t registersCount = 5;
@@ -705,18 +861,6 @@ private:
         return "ERROR PTR";
     }
 
-    const char *RegisterName(int64_t var)
-    {
-        return RegisterName(regTable[var], varSize(var));
-    }
-
-    const int64_t registers[5] = {0b0001, 0b1000, 0b1001, 0b1010, 0b1011};
-
-    const pair<int64_t, int64_t> Register(int64_t var)
-    {
-        return {registers[regTable[var]], varSize(var)};
-    }
-
     /*
         registers: 
             rbp - pointer on locals
@@ -724,20 +868,14 @@ private:
             rax - used for division / api calls
             rdx - used for division / api calls
     */
-    
-    const char *RegisterName(int64_t id, int64_t size)
-    {
-        switch (size)
-        {
-            case 8: return (vector<const char *>{"rcx",  "r10",  "r11",  "r12",  "r13"})[id];
-            case 4: return (vector<const char *>{"ecx", "r10d", "r11d", "r12d", "r13d"})[id];
-            case 2: return (vector<const char *>{ "cx", "r10w", "r11w", "r12w", "r13w"})[id];
-            case 1: return (vector<const char *>{ "cl", "r10b", "r11b", "r12b", "r13b"})[id];
-        }
-        printf("Wrong variable size - there is no register of size %lld\n", size);
-        return "ERROR";
-    }
 
+    const int64_t registers[5] = {0b0001, 0b1000, 0b1001, 0b1010, 0b1011};
+
+    const pair<int64_t, int64_t> Register(int64_t var)
+    {
+        return {registers[regTable[var]], varSize(var)};
+    }
+    
     void ApiCall(const char *apiEntry)
     {
         print("\tjmp  %s\n", apiEntry);
@@ -771,8 +909,9 @@ private:
         dumpIR(wk);
 
         // get used labels
-        generated.clear();
+        addressTable.clear();
         usedLabels.clear();
+        JumpInstructions.clear();
         UpdateUsedLabels(wk->content->entry);
         
         // generate code
@@ -784,15 +923,19 @@ private:
         }
         else
         {
-            generated.clear();
+            addressTable.clear();
             BuildOperation(wk->content->entry);
         }
+
+        // join code using JumpInstructions
+
+        InsertJumpInstructions();
     }
 
     void UpdateUsedLabels(OperationBlock *op)
     {
         if (op == NULL) return;
-        if (!generated.insert(op).second) { usedLabels.insert(op); return; }
+        if (!addressTable.insert({op, 0}).second) { usedLabels.insert(op); return; }
         if (op->next.size() > 0)
         {
             UpdateUsedLabels(op->next[0]);
@@ -826,7 +969,7 @@ private:
                 printRR(ASM_XOR, Register(dest), Register(dest));
                 break;
             default:
-                print("\tmov  %s, %lld\n", RegisterName(dest), value);
+                printRC(ASM_MOV_RC, Register(dest), value);
                 break;
         }
     }
@@ -836,22 +979,17 @@ private:
         // return from function
         if (op == NULL)
         {
-            print("\tret ; ...\n");
+            pbyte(0xC3);
             return;
         }
         // if already this block is compiled - jump to it
         // TODO: here can take some place of "assembly inlining"
-        if (!generated.insert(op).second) 
+        if (!addressTable.insert({op, assemblyEnd}).second) 
         { 
-            print("\tjmp  op_%p\n", op); 
-            return; 
+            JumpInstructions.push_back({ASM_JMP, assemblyEnd, op});
+            return;
         }
 
-        // generate code for this instruction        
-        if (usedLabels.contains(op))
-        {
-            print("op_%p:\n", op);
-        }
         // if instruction have many next:
         #define ABEL_BINOP(T) \
             if (regTable[op->data[0]] == regTable[op->data[2]]) \
@@ -865,7 +1003,7 @@ private:
             }
         #define CMPOP(A, B) { \
             printRR(ASM_CMP, Register(op->data[1]), Register(op->data[2])); \
-            print("\tmov  %s, 0\n", RegisterName(op->data[0])); \
+            printRC(ASM_MOV_RC, Register(op->data[0]), 0); \
             auto reg = Register(op->data[0]); \
             reg.second = 1; \
             if (isSigned(op->data[0])) \
@@ -883,15 +1021,17 @@ private:
             case OP_FREE_TEMP: break;
             
             case OP_JZ:
+            {
                 printRR(ASM_TEST, Register(op->data[0]), Register(op->data[0]));
-                print("\tjz   op_%p\n", op->next[1]);
+                JumpInstructions.push_back({ASM_JZ, assemblyEnd, op->next[1]});
                 break;
-                
+            }   
             case OP_JNZ: 
+            {
                 printRR(ASM_TEST, Register(op->data[0]), Register(op->data[0]));
-                print("\tjnz  op_%p\n", op->next[1]);
+                JumpInstructions.push_back({ASM_JNZ, assemblyEnd, op->next[1]});
                 break;
-        
+            }
             case OP_LOAD:
                 // mov $0, XX PTR [rbp + $1]
                 printRM(ASM_MOV_RM, Register(op->data[0]), {5, 8}, memTable[op->data[1]]);
@@ -1026,6 +1166,102 @@ private:
         for (auto &n : op->next)
         {
             BuildOperation(n);
+        }
+    }
+
+    void InsertJumpInstructions()
+    {        
+        // need to select JumpInstructions sizes
+        vector<int64_t> shortJmp(JumpInstructions.size(), 0); // use everythere shortest form
+        vector<BYTE *> currentPosition(JumpInstructions.size());
+        map<OperationBlock *, BYTE *> opPosition;
+        int64_t totalAddSize = 0;
+
+
+        stable_sort(JumpInstructions.begin(), JumpInstructions.end(), [](const jmpInstruction &a, const jmpInstruction &b){
+            return a.codePos < b.codePos;
+        });
+
+
+        bool need_next;
+        do
+        {
+            // update positions
+            {
+                map<BYTE *,int64_t> offsets;
+                
+                offsets[NULL] = 0;
+                
+                int64_t lastOffset = 0;
+                int64_t id = 0;
+
+                // fill offsets map
+                for (auto &i : JumpInstructions)
+                {
+                    currentPosition[id] = i.codePos + lastOffset;
+                    lastOffset += JMPsize(i.jmpType, 0, shortJmp[id]).first;
+                    offsets[i.codePos] = lastOffset;
+                    
+                    id++;
+                }
+
+                // save total size
+                totalAddSize = lastOffset;
+                
+                // fill opcode positions
+                opPosition.clear();
+                for (auto &[op, addr] : addressTable)
+                {
+                    int64_t opOffset = prev(offsets.upper_bound(addr))->second;
+                    opPosition[op] = addr + opOffset;
+                }
+            }
+            // check if there is any too long jumps
+            need_next = false;
+            {
+                int64_t id = 0;
+                for (auto &i : JumpInstructions)
+                {
+                    int64_t need_variant = JMPsize(i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]).second;
+                    if (need_variant != shortJmp[id])
+                    {
+                        shortJmp[id] = need_variant; // try to use next range level
+                        need_next = true;
+                    }
+                    id++;
+                }
+            }
+        }
+        while (need_next);
+
+        // all jumps is now of right size - insert them
+        {
+            int64_t id = JumpInstructions.size() - 1;
+            BYTE *newAssmeblyEnd = assemblyEnd + totalAddSize;
+            BYTE *codeDest = assemblyEnd + totalAddSize;
+            BYTE *codeSrc = assemblyEnd;
+            for (auto &i : views::reverse(JumpInstructions))
+            {
+                // copy code block
+                int64_t blockSize = codeSrc - i.codePos;
+                if (blockSize)
+                {
+                    codeDest -= blockSize;
+                    codeSrc  -= blockSize;
+                    memmove(codeDest, codeSrc, blockSize);
+                }
+
+                printf("inserted %lld to %lld ... [to %lld]\n", shortJmp[id], currentPosition[id] - assemblyCode, opPosition[i.destOp] - currentPosition[id]);
+                // insert jump instruction
+                codeDest -= JMPsize(i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]).first;
+                assemblyEnd = codeDest;
+                assert(printJMP(i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]) == shortJmp[id]);
+                
+                id--;
+            }
+
+            // restore end
+            assemblyEnd = newAssmeblyEnd;
         }
     }
 };

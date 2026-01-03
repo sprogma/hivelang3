@@ -1,5 +1,18 @@
-[export:true]
-(i32 x)move(i32? res)
+(i32 x, i32 y)add(i32? res)
 {
-    res <- x << 2;
+    res <- x + y;
 }
+
+[export:yes]
+(i32 x, i32 y)mul(i32? res)
+{
+    i32 ans;
+    ans <- 0;
+    while y > 0
+    {
+        ans <- ?(x, ans)add(*);
+        y <- y - 1;
+    }
+    res <- ans;
+}
+
