@@ -1,0 +1,10 @@
+*/a
+*.exe
+*.o
+*.dll
+*.d
+*.so
+*.xml
+*.gcov
+*.gcda
+*.gcno
