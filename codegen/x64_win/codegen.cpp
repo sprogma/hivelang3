@@ -288,6 +288,12 @@ private:
         BYTE rex = 0x40;
         bool needrex = false;
 
+        if (op == ASM_IMUL || op == ASM_TEST)
+        {
+            /* swap registers */
+            swap(r1, r2);
+        }
+
         if (r1.first & 8) { needrex = true; rex |= 0x01; }
         if (r2.first & 8) { needrex = true; rex |= 0x04; }
         if (r1.second == 1) { needrex |= (r1.first & 7) >= 4; }
@@ -320,6 +326,16 @@ private:
                 // if (r1.second == r2.second) return printRR(ASM_MOV, r1, r2);
                 
                 assert(r1.second > r2.second);
+                
+                rex = 0x40;
+                needrex = false;
+                
+                if (r1.first & 8) { needrex = true; rex |= 0x04; }
+                if (r2.first & 8) { needrex = true; rex |= 0x01; }
+                if (r1.second == 1) { needrex |= (r1.first & 7) >= 4; }
+                if (r2.second == 1) { needrex |= (r2.first & 7) >= 4; }
+                if (r1.second == 8) { needrex = true; rex |= 0x08; }
+                if (r2.second == 8) { needrex = true; rex |= 0x08; }
 
                 switch (r2.second)
                 {
@@ -353,7 +369,7 @@ private:
                         {
                             pbyte(rex);
                             pbyte(0x63);
-                            pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
+                            pbyte(0xC0 | ((r1.first & 7) << 3) | (r2.first & 7));
                         }
                         break;
                 }
@@ -365,7 +381,7 @@ private:
                 assert(r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
-                pbyte((r1.second == 1 ? 0x32 : 0x33));
+                pbyte((r1.second == 1 ? 0x30 : 0x31));
                 pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
@@ -374,7 +390,7 @@ private:
                 assert(r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
-                pbyte((r1.second == 1 ? 0x22 : 0x23));
+                pbyte((r1.second == 1 ? 0x20 : 0x21));
                 pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
@@ -383,7 +399,7 @@ private:
                 assert(r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
-                pbyte((r1.second == 1 ? 0x0A : 0x0B));
+                pbyte((r1.second == 1 ? 0x08 : 0x09));
                 pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
@@ -417,6 +433,7 @@ private:
             }
             case ASM_TEST:
             {
+                // TODO: check test opcode args order
                 assert(r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
@@ -630,18 +647,18 @@ private:
                     case ASM_SHRX: pp = 0x03; break; // F2 prefix  
                     case ASM_SARX: pp = 0x02; break; // F3 prefix
                 }
-                
+
                 pbyte(0xC4);
                 
-                BYTE r_bit = !!(r1.first & 8);
+                BYTE r_bit = !(r1.first & 8);
                 BYTE x_bit = 1;
-                BYTE b_bit = !!(r3.first & 8);
+                BYTE b_bit = !(r2.first & 8);
                 BYTE map_select = 0x02; // can't use C5 vex
                 
                 pbyte((r_bit << 7) | (x_bit << 6) | (b_bit << 5) | map_select);
                 
                 BYTE W = (r1.second == 8) ? 1 : 0;
-                BYTE vvvv = (~r2.first) << 3;
+                BYTE vvvv = (~r3.first) << 3;
                 BYTE L = 0;
                 
                 pbyte((W << 7) | vvvv | (L << 2) | pp);
@@ -649,7 +666,7 @@ private:
                 // modrm
                 pbyte(0xF7);
                 
-                BYTE modrm = 0xC0 | ((r1.first & 7) << 3) | (r3.first & 7);
+                BYTE modrm = 0xC0 | ((r1.first & 7) << 3) | (r2.first & 7);
                 pbyte(modrm);
                 break;
             }
@@ -822,7 +839,7 @@ private:
 
     bool isSigned(int64_t name)
     {
-        return SCALAR_TYPE(varType(name)->type) == SCALAR_I;
+        return SCALAR_TYPE(varType(name)->_scalar.kind) == SCALAR_I;
     }
 
     bool isScalar(int64_t name)
@@ -893,13 +910,14 @@ private:
             rbp - pointer on locals
             rdi - pointer on inputs table + used in api calls // TODO: optimize?
             rsi - used in api calls
+            rcx - used in api calls
             rax - used for division / api calls
             rdx - used for division / api calls
 
         [rdi is used in api calls, becouse of assumptions of all api calls be after LOAD_INPUT]
     */
 
-    const int64_t registers[5] = {0b0001, 0b1000, 0b1001, 0b1010, 0b1011};
+    const int64_t registers[5] = {0b1000, 0b1001, 0b1010, 0b1011, 0b1100};
 
     const pair<int64_t, int64_t> Register(int64_t var)
     {
@@ -1126,7 +1144,7 @@ private:
                 // rax=size rdx=offset rdi=object rsi=value
                 if (isScalar(op->data[1]))
                 {
-                    InsertInteger({0, 8}, -varSize(op->data[1]));
+                    InsertInteger({1, 8}, -varSize(op->data[1]));
                     InsertInteger({2, 8}, 0);
                     InsertMove({7, 8}, Register(op->data[0]), false);
                     InsertMove({6, 8}, Register(op->data[1]), false);
@@ -1134,12 +1152,13 @@ private:
                 }
                 else
                 {
-                    InsertInteger({0, 8}, varSize(op->data[1]));
+                    InsertInteger({1, 8}, varSize(op->data[1]));
                     InsertInteger({2, 8}, 0);
                     InsertMove({7, 8}, Register(op->data[0]), false);
                     InsertInteger({6, 8}, memTable[op->data[1]]);
                     header[HEADER_ENTRY_PUSH_OBJECT].push_back(printCALL(0x0) - assemblyCode);
                 }
+                break;
             }
             case OP_PUSH_CLASS:   printf("not supported: push_class\n"); break;
                 

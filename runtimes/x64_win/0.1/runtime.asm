@@ -29,24 +29,24 @@ section '.text' code readable executable
 macro EnterCCode {
     ; save used registers
     sub rsp, 8
-    push rcx
     push r8
     push r9
     push r10
+    push r11
 }
 
 macro LeaveCCode {
     ; load used registers
+    pop r11
     pop r10
     pop r9
     pop r8
-    pop rcx
     add rsp, 8
 }
 
 
 
-; rax=size
+; rcx=size
 ; rdx=offset
 ; rdi=object
 ; rsi=source/value
@@ -55,10 +55,12 @@ fastPushObject:
 
     EnterCCode
 
-    mov r12, rax
+    mov r12, rcx
     mov r13, rdx
     mov r14, rdi
     mov r15, rsi
+
+    sub rsp, 32
     
     lea rcx, [format_strA]
     mov rdx, r14
@@ -69,8 +71,10 @@ fastPushObject:
     mov rdx, r15
     mov r8, r12
     call printf
+    
+    add rsp, 32
 
-    mov rax, r12
+    mov rcx, r12
     mov rdx, r13
     mov rdi, r14
     mov rsi, r15
@@ -78,20 +82,20 @@ fastPushObject:
     LeaveCCode
     
     ; for now, simply move to object
-    cmp rax, 0
+    cmp rcx, 0
     jg .copy_block
     ; size < 0 -> need to move rsi to dest
-    cmp rax, -8
+    cmp rcx, -8
     jne .not64
     mov [rdi + rdx], rsi
     ret
 .not64:
-    cmp rax, -4
+    cmp rcx, -4
     jne .not32
     mov [rdi + rdx], esi
     ret
 .not32:
-    cmp rax, -2
+    cmp rcx, -2
     jne .not16
     mov [rdi + rdx], si
     ret
@@ -100,8 +104,6 @@ fastPushObject:
     ret
 .copy_block:
     add rdi, rdx
-    mov rdx, rcx
-    mov rcx, rax
     rep movsb
     ret
     

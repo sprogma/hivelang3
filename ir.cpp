@@ -242,6 +242,9 @@ pair<int64_t, TypeContext *> GetFieldOffset(BuildContext *ctx, Node *node, int64
         if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
         {
             printf("[Usage of dot on not structure/union object]\n");
+            // printf("On type\n");
+            // printType(type);
+            // printf("[On node: %s] %s\n", node->rule->name, Substr(ctx, node).c_str());
             logError(ctx->filename, ctx->code, node->nonTerm(id)->start, node->nonTerm(id)->end);
             break;
         }
@@ -440,9 +443,9 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             string name = Substr(ctx, node->nonTerm(0));
             int64_t varId = ctx->names[name];
             TypeContext *type = ctx->variables[varId];
-            
+
             auto [offset, fldType] = GetFieldOffset(ctx, node, 1, type);
-            
+
             if (ctx->enabled("optimize_query_var") && type->type != TYPE_RECORD)
             {
                 return {ops, varId};
@@ -1086,7 +1089,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                     int64_t varId = ctx->names[Substr(ctx, x->nonTerm(0))];
                     TypeContext *type = ctx->variables[varId];
 
-                    auto [offset, fldType] = GetFieldOffset(ctx, node, 1, type);
+                    auto [offset, fldType] = GetFieldOffset(ctx, x, 1, type);
                     
                     /* check - if this is pushing of equal types */
                     if (is_castable(type, dataType))
