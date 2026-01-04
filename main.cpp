@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 
     CodeAssembler *assembler = new_x64_win_Assembler();
 
-    assembler->Build(newCode, "res.exe");
+    assembler->Build(newCode, "res.bin");
 
     printf("res.exe file generated\n");
 

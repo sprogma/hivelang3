@@ -110,7 +110,6 @@ struct jmpInstruction
     OperationBlock *destOp;
 };
 
-
 class WinX64Assembler : public CodeAssembler
 {
 public:
@@ -295,6 +294,8 @@ private:
         if (r2.second == 1) { needrex |= (r2.first & 7) >= 4; }
         if (r1.second == 8) { needrex = true; rex |= 0x08; }
         if (r2.second == 8) { needrex = true; rex |= 0x08; }
+
+        // TODO: check all operations order
         
         switch (op)
         {
@@ -391,7 +392,7 @@ private:
                 assert(r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
-                pbyte((r1.second == 1 ? 0x02 : 0x03));
+                pbyte((r1.second == 1 ? 0x00 : 0x01));
                 pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
@@ -400,7 +401,7 @@ private:
                 assert(r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
-                pbyte((r1.second == 1 ? 0x2A : 0x2B));
+                pbyte((r1.second == 1 ? 0x28 : 0x29));
                 pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
@@ -428,7 +429,7 @@ private:
                 assert(r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
-                pbyte((r1.second == 1 ? 0x3A : 0x3B));
+                pbyte((r1.second == 1 ? 0x38 : 0x39));
                 pbyte(0xC0 | ((r2.first & 7) << 3) | (r1.first & 7));
                 break;
             }
@@ -794,6 +795,8 @@ public:
             printf(" %02X", *x);
         }
         printf("\n");
+
+        ExportToFile(resultFileName);
     }
 
 private:
@@ -806,6 +809,13 @@ private:
     set<OperationBlock *> usedLabels;
     map<OperationBlock *, BYTE *> addressTable;
     vector<jmpInstruction> JumpInstructions;
+
+    // header key, value
+    #define HEADER_ENTRY_PUSH_OBJECT 0
+    #define HEADER_ENTRY_QUERY_OBJECT 1
+    #define HEADER_ENTRY_NEW_OBJECT 2
+    #define HEADER_ENTRY_CALL_OBJECT 3
+    map<BYTE, vector<int64_t>> header;
 
     // registers configuraion
     static constexpr int64_t registersCount = 5;
@@ -881,9 +891,12 @@ private:
     /*
         registers: 
             rbp - pointer on locals
-            rdi - pointer on inputs table // TODO: optimize
+            rdi - pointer on inputs table + used in api calls // TODO: optimize?
+            rsi - used in api calls
             rax - used for division / api calls
             rdx - used for division / api calls
+
+        [rdi is used in api calls, becouse of assumptions of all api calls be after LOAD_INPUT]
     */
 
     const int64_t registers[5] = {0b0001, 0b1000, 0b1001, 0b1010, 0b1011};
@@ -909,6 +922,10 @@ private:
             const auto &[tbl, sz] = memSprd->spreadMemory(wk);
             memTable = tbl;
             usedMemory = sz;
+            for (auto &[k, v] : memTable)
+            {
+                v += 8;
+            }
         }
 
         // print memory table
@@ -926,6 +943,7 @@ private:
         // get used labels
         addressTable.clear();
         usedLabels.clear();
+        header.clear();
         JumpInstructions.clear();
         UpdateUsedLabels(wk->content->entry);
         
@@ -978,15 +996,15 @@ private:
         InsertMove(Register(dest), Register(from), isSigned(dest));
     }
 
-    void InsertInteger(int64_t dest, int64_t value)
+    void InsertInteger(pair<int64_t, int64_t> dest, int64_t value)
     {
         switch (value)
         {
             case 0:
-                printRR(ASM_XOR, Register(dest), Register(dest));
+                printRR(ASM_XOR, dest, dest);
                 break;
             default:
-                printRC(ASM_MOV_RC, Register(dest), value);
+                printRC(ASM_MOV_RC, dest, value);
                 break;
         }
     }
@@ -1081,7 +1099,7 @@ private:
                 break;
 
             case OP_NEW_INT: 
-                InsertInteger(op->data[0], op->data[1]);
+                InsertInteger({registers[regTable[op->data[0]]], 8}, op->data[1]);
                 break;
                 
             case OP_NEW_FLOAT:
@@ -1105,15 +1123,22 @@ private:
             case OP_PUSH_PIPE:    printf("not supported: push_pipe\n"); break;
             case OP_PUSH_PROMISE:
             {
+                // rax=size rdx=offset rdi=object rsi=value
                 if (isScalar(op->data[1]))
                 {
-                    // PushObject(r1, offset, size, r2)
-                    printRR(ASM_MOV, {0, 0}, Register(op->data[0]));
-                    printCALL(0x0);
+                    InsertInteger({0, 8}, -varSize(op->data[1]));
+                    InsertInteger({2, 8}, 0);
+                    InsertMove({7, 8}, Register(op->data[0]), false);
+                    InsertMove({6, 8}, Register(op->data[1]), false);
+                    header[HEADER_ENTRY_PUSH_OBJECT].push_back(printCALL(0x0) - assemblyCode);
                 }
                 else
                 {
-                    // PushObject(r1, offset, size, PTR src)
+                    InsertInteger({0, 8}, varSize(op->data[1]));
+                    InsertInteger({2, 8}, 0);
+                    InsertMove({7, 8}, Register(op->data[0]), false);
+                    InsertInteger({6, 8}, memTable[op->data[1]]);
+                    header[HEADER_ENTRY_PUSH_OBJECT].push_back(printCALL(0x0) - assemblyCode);
                 }
             }
             case OP_PUSH_CLASS:   printf("not supported: push_class\n"); break;
@@ -1206,6 +1231,7 @@ private:
         vector<int64_t> shortJmp(JumpInstructions.size(), 0); // use everythere shortest form
         vector<BYTE *> currentPosition(JumpInstructions.size());
         map<OperationBlock *, BYTE *> opPosition;
+        map<BYTE *,int64_t> offsets;
         int64_t totalAddSize = 0;
 
 
@@ -1219,8 +1245,6 @@ private:
         {
             // update positions
             {
-                map<BYTE *,int64_t> offsets;
-                
                 offsets[NULL] = 0;
                 
                 int64_t lastOffset = 0;
@@ -1291,9 +1315,68 @@ private:
                 id--;
             }
 
+            // update header
+            for (auto &[k, v] : header)
+            {
+                for (auto &p : v)
+                {                   
+                    int64_t opOffset = prev(offsets.upper_bound(assemblyCode + p))->second;
+                    p += opOffset;
+                }
+            }
+
+            // update addressTable
+            for (auto &[k, v] : addressTable)
+            {
+                int64_t opOffset = prev(offsets.upper_bound(v))->second;
+                v += opOffset;
+            }
+
             // restore end
             assemblyEnd = newAssmeblyEnd;
         }
+    }
+
+    void ExportToFile(const char *filename)
+    {
+        FILE *f = fopen(filename, "wb");
+
+        BYTE *buf = (BYTE *)malloc(1024 * 1024);
+        BYTE *buf_start = buf;
+        
+        /* generate prefix */
+        *buf++ = 'H'; *buf++ = 'I'; *buf++ = 'V'; *buf++ = 'E';
+        
+        *(uint64_t *)buf = 1; // version 0.1
+        buf += 8;
+        
+        /* generate header */
+        *(uint64_t *)buf = 0xBEBEBEBEBEBEBEBE; // version 0.1
+        buf += 8;
+
+        for (auto &[id, value] : header)
+        {
+            *buf++ = id;
+            *(uint64_t *)buf = value.size();
+            buf += 8;
+            for (auto &pos : value)
+            {
+                *(uint64_t *)buf = pos;
+                buf += 8;
+            }
+        }
+
+        /* fill header size */
+        *(uint64_t *)(buf_start + 12) = buf - buf_start;
+        
+
+        int64_t totalBytes = buf - buf_start + assemblyEnd - assemblyCode;
+        fwrite(buf_start, 1, buf - buf_start, f);
+        fwrite(assemblyCode, 1, assemblyEnd - assemblyCode, f);
+
+        fclose(f);
+
+        printf("%lld bytes written\n", totalBytes);
     }
 };
 
