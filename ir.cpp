@@ -242,9 +242,6 @@ pair<int64_t, TypeContext *> GetFieldOffset(BuildContext *ctx, Node *node, int64
         if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
         {
             printf("[Usage of dot on not structure/union object]\n");
-            // printf("On type\n");
-            // printType(type);
-            // printf("[On node: %s] %s\n", node->rule->name, Substr(ctx, node).c_str());
             logError(ctx->filename, ctx->code, node->nonTerm(id)->start, node->nonTerm(id)->end);
             break;
         }

@@ -1,13 +1,22 @@
 [export:yes]
-(i32 x, i32 y)mul(i32? res)
+(i32 x)mul(i32? res)
 {
-    res <- x * y;
-    res <- x << y;
-    res <- x >> y;
-    res <- x | y;
-    res <- x & y;
-    res <- x ^ y;
-    res <- x / y;
-    res <- x % y;
+    i32[] fib;
+    fib <- new i32[](x+1);
+    fib[0] <- 0;
+    fib[1] <- 1;
+    i32 t;
+    t <- 2;
+    while t <= x
+    {
+        i32 a, b;
+        a <- fib[t - 1];
+        b <- fib[t - 2];
+        res <- a;
+        res <- b;
+        fib[t] <- a + b;
+        t <- t + 1;
+    }
+    res <- fib[x];
 }
 

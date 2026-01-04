@@ -71,11 +71,17 @@ enum asm_operation3rm
 enum asm_operation2rc
 {
     ASM_MOV_RC,
+    ASM_ADD_RC,
 };
 
 enum asm_operation3mr
 {
     ASM_MOV_MR,
+};
+
+enum asm_operation3rrc
+{
+    ASM_IMUL_RRC,
 };
 
 enum asm_operation3
@@ -552,13 +558,41 @@ private:
         {
             case ASM_MOV_RC:
             {
-                if (needrex) { pbyte(rex); }
                 if (r1.second == 2) { pbyte(0x66); }
+                
+                if (needrex) { pbyte(rex); }
                 
                 pbyte((r1.second == 1 ? 0xB0 : 0xB8) | (r1.first & 7));
 
                 memcpy(assemblyEnd, &value, r1.second);
                 assemblyEnd += r1.second;
+                
+                break;
+            }
+            case ASM_ADD_RC:
+            {
+                if (r1.second == 2) { pbyte(0x66); }
+                
+                if (needrex) { pbyte(rex); }
+                
+                if (value >= INT8_MIN || value <= INT8_MAX)
+                {
+                    pbyte((r1.second == 1 ? 0x80 : 0x83));
+                    pbyte(0xC0 | (r1.first & 7));
+                    pbyte(value);
+                }
+                else if (value >= INT32_MIN || value <= INT32_MAX)
+                {
+                    pbyte((r1.second == 1 ? 0x80 : 0x81));
+                    pbyte(0xC0 | (r1.first & 7));
+                    memcpy(assemblyEnd, &value, min(4LL, r1.second));
+                    assemblyEnd += min(4LL, r1.second);
+                }
+                else
+                {
+                    printf("Error: Can't use ADD_RC with 64bit constant\n");
+                    return;
+                }
                 
                 break;
             }
@@ -574,7 +608,8 @@ private:
         if (r1.first & 8) { needrex = true; rex |= 0x01; }
         if (r2.first & 8) { needrex = true; rex |= 0x04; }
         if (r2.second == 8) { needrex = true; rex |= 0x08; }
-
+        if (r1.second == 1 && r1.first >= 4) { needrex = true; }
+        if (r2.second == 1 && r2.first >= 4) { needrex = true; }
         switch (op)
         {
             case ASM_MOV_MR:
@@ -628,6 +663,53 @@ private:
         }
     }
 
+    void printRRC(asm_operation3rrc op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t constant)
+    {
+        bool needrex = false;
+        int64_t rex = 0x40;
+
+        if (r1.first & 8) { needrex = true; rex |= 0x04; }
+        if (r2.first & 8) { needrex = true; rex |= 0x01; }
+        if (r2.second == 8) { needrex = true; rex |= 0x08; }
+
+        if (r1.second == 1 && r1.first >= 4) { needrex = true; }
+        if (r2.second == 1 && r2.first >= 4) { needrex = true; }
+        
+        switch (op)
+        {
+            case ASM_IMUL_RRC:
+                assert(r1.second == r2.second);
+                if (r1.second == 1)
+                {
+                    printf("Error: IMUL can't take byte variables\n");
+                }
+
+                if (r2.second == 2) pbyte(0x66);
+                
+                if (needrex) pbyte(rex);
+
+                if (constant >= INT8_MIN && constant <= INT8_MAX)
+                {
+                    pbyte(0x6B);
+                    pbyte(0xC0 | ((r1.first & 7) << 3) | (r2.first & 7));
+                    pbyte(constant);
+                }               
+                else if (constant >= INT32_MIN && constant <= INT32_MAX)
+                {
+                    pbyte(0x69);
+                    pbyte(0xC0 | ((r1.first & 7) << 3) | (r2.first & 7));
+                    memcpy(assemblyEnd, &constant, 8);
+                    assemblyEnd += 8;
+                } 
+                else 
+                {
+                    printf("Error: IMUL can't take 64bit constants\n");
+                    return;
+                }
+                break;
+        }
+    }
+    
     void printRRR(asm_operation3 op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, pair<int64_t, int64_t> r3)
     {
 
@@ -924,6 +1006,11 @@ private:
         return {registers[regTable[var]], varSize(var)};
     }
 
+    const pair<int64_t, int64_t> Register(int64_t var, int64_t size)
+    {
+        return {registers[regTable[var]], size};
+    }
+
     void BuildFn(WorkerDeclarationContext *wk, int64_t workerId)
     {
         current = wk;
@@ -1027,6 +1114,30 @@ private:
         }
     }
 
+    void ExternTo64Bit(pair<int64_t, int64_t> reg, bool is_signed)
+    {
+        switch (reg.second)
+        {
+            case 1:
+            case 2:
+                printRR((is_signed ? ASM_MOVSX : ASM_MOVZX), {reg.first, 8}, reg);
+                break;
+            case 4:
+                if (is_signed)
+                {
+                    printRR(ASM_MOVSX, {reg.first, 8}, reg);
+                }
+                else
+                {
+                    // already ok [top part is cleared after any instruction]
+                }
+                break;
+            case 8:
+                // already casted
+                break;
+        }
+    }
+
     void BuildOperation(OperationBlock *op)
     {
         // return from function
@@ -1117,14 +1228,26 @@ private:
                 break;
 
             case OP_NEW_INT: 
-                InsertInteger({registers[regTable[op->data[0]]], 8}, op->data[1]);
+                InsertInteger(Register(op->data[0], 8), op->data[1]);
                 break;
                 
             case OP_NEW_FLOAT:
                 print("\tOP_NEW_FLOAT [not supported]\n"); 
                 break;
                 
-            case OP_NEW_ARRAY:    printf("not supported: new_array\n"); break;
+            case OP_NEW_ARRAY:
+            {
+                // rcx=OBJECT_OBJECT=3
+                // rdx=total size
+                // rax=size of element
+                InsertInteger({1, 8}, 0x03);
+                ExternTo64Bit(Register(op->data[1]), isSigned(op->data[1]));
+                printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
+                InsertInteger({7, 8}, varType(op->data[0])->_vector.base->size);
+                header[HEADER_ENTRY_NEW_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                InsertMove(Register(op->data[0]), {0, 8}, false);
+                break;
+            }
             case OP_NEW_PIPE:     printf("not supported: new_pipe\n"); break;
             case OP_NEW_PROMISE:  printf("not supported: new_promise\n"); break;
             case OP_NEW_CLASS:    printf("not supported: new_class\n"); break;
@@ -1137,11 +1260,36 @@ private:
                 // (TypeContext *)op->data[2] - type [unused for now]
                 break;
                 
-            case OP_PUSH_ARRAY:   printf("not supported: push_array\n"); break;
-            case OP_PUSH_PIPE:    printf("not supported: push_pipe\n"); break;
+            case OP_PUSH_ARRAY:
+            {
+                // rcx=size rdx=offset rdi=object rsi=value
+                if (isScalar(op->data[4]))
+                {
+                    InsertInteger({1, 8}, -varSize(op->data[4]));
+                    ExternTo64Bit(Register(op->data[1]), isSigned(op->data[1]));
+                    printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
+                    if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
+                    InsertMove({7, 8}, Register(op->data[0]), false);
+                    InsertMove({6, 8}, Register(op->data[4]), false);
+                    header[HEADER_ENTRY_PUSH_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                }
+                else
+                {
+                    InsertInteger({1, 8}, varSize(op->data[4]));
+                    ExternTo64Bit(Register(op->data[1]), isSigned(op->data[1]));
+                    printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
+                    if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
+                    InsertMove({7, 8}, Register(op->data[0]), false);
+                    InsertInteger({6, 8}, memTable[op->data[4]]);
+                    header[HEADER_ENTRY_PUSH_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                }
+                break;
+            }
+            
+            case OP_PUSH_PIPE:
             case OP_PUSH_PROMISE:
             {
-                // rax=size rdx=offset rdi=object rsi=value
+                // rcx=size rdx=offset rdi=object rsi=value
                 if (isScalar(op->data[1]))
                 {
                     InsertInteger({1, 8}, -varSize(op->data[1]));
@@ -1163,15 +1311,42 @@ private:
             case OP_PUSH_CLASS:   printf("not supported: push_class\n"); break;
                 
             case OP_QUERY_VAR: 
+            {
                 // TODO: what if data[3] is not scalar?
                 assert(op->data[2] != 0 || (TypeContext *)op->data[3] != varType(op->data[0]));
                 // mov $0, XX PTR [rbp + $1 + $2]
                 printRM(ASM_MOV_RM, Register(op->data[0]), {5, 8}, memTable[op->data[1]] + op->data[2]);
                 // (TypeContext *)op->data[3] - type [unused for now]
                 break;
+            }
                 
+            case OP_QUERY_INDEX:
+            {
+                // rcx=size rdx=offset rdi=value rsi=object
+                if (isScalar(op->data[0]))
+                {
+                    InsertInteger({1, 8}, -varSize(op->data[0]));
+                    ExternTo64Bit(Register(op->data[4]), isSigned(op->data[4]));
+                    printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[4], 8), varType(op->data[1])->_vector.base->size);
+                    if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
+                    InsertMove({6, 8}, Register(op->data[1]), false);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    InsertMove(Register(op->data[0]), {7, 8}, false);
+                }
+                else
+                {
+                    InsertInteger({1, 8}, varSize(op->data[0]));
+                    ExternTo64Bit(Register(op->data[4]), isSigned(op->data[4]));
+                    printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[4], 8), varType(op->data[1])->_vector.base->size);
+                    if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
+                    InsertInteger({7, 8}, memTable[op->data[0]]);
+                    InsertMove({6, 8}, Register(op->data[4]), false);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                }
+                break;
+            }
+            
             case OP_QUERY_ARRAY:   printf("not supported: query_array\n"); break;
-            case OP_QUERY_INDEX:   printf("not supported: query_index\n"); break;
             case OP_QUERY_PIPE:    printf("not supported: query_pipe\n"); break;
             case OP_QUERY_PROMISE: printf("not supported: query_promise\n"); break;
             case OP_QUERY_CLASS:   printf("not supported: query_class\n"); break;

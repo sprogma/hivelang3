@@ -17,6 +17,7 @@ public:
     set<int64_t> physicVars;
     // write to key, read from value
     map<int64_t, set<int64_t>> readWriteOverlaps;
+    map<int64_t, set<int64_t>> readWriteOverlapsFirstOperand;
     
     // op -> var -> [can TO var, can FROM var]
     map<OperationBlock *, map<int64_t, pair<bool, bool>>> access;
@@ -174,6 +175,7 @@ private:
             {
                 overlaps[i]; // create all vars
                 readWriteOverlaps[i]; // create all vars
+                readWriteOverlapsFirstOperand[i]; // create all vars
                 for (auto &j : vars)
                 {
                     if (i < j) // to add each pair only once
@@ -185,6 +187,10 @@ private:
                             // if we write to I, reading J and after that free J - that means i and j can have one register
                             // [only if writing register is one, to be shure]
                             readWriteOverlaps[i].insert(j);
+                            if (rdv.size() >= 1 && j == rdv[0])
+                            {
+                                readWriteOverlapsFirstOperand[i].insert(j);
+                            }
                         }
                         else
                         {

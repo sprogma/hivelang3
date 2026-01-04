@@ -35,6 +35,10 @@ public:
                 {
                     value += 10.0;
                 }
+                else if (is_one<OP_QUERY_ARRAY, OP_QUERY_INDEX, OP_QUERY_PIPE, OP_QUERY_PROMISE, OP_QUERY_CLASS>(op->type))
+                {
+                    value += 3.5;
+                }
                 else if (is_one<OP_LOAD_INPUT, OP_LOAD_OUTPUT, OP_FREE_TEMP>(op->type))
                 {
                     value += 0.1;

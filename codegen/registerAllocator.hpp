@@ -88,8 +88,73 @@ private:
         }
     }
 
+    void TryColorSame(int64_t rw, int64_t v, map<int64_t, int64_t> &res, RegisterAnalizator &analyser)
+    {
+        // else - try to allocate same register
+        if (res[rw] != -1)
+        {
+            // try to color V into color of rw
+            array<vector<int64_t>, registersCount> color;
+            for (auto &i : analyser.overlaps[v])
+            {
+                if (res[i] == -1) continue;
+                color[res[i]].push_back(i);
+            }
+            if (color[res[rw]].empty())
+            {
+                res[v] = res[rw];
+            }
+        }
+        else if (res[v] != -1)
+        {
+            // try to color RW into color of v
+            array<vector<int64_t>, registersCount> color;
+            for (auto &i : analyser.overlaps[rw])
+            {
+                if (res[i] == -1) continue;
+                color[res[i]].push_back(i);
+            }
+            if (color[res[v]].empty())
+            {
+                res[rw] = res[v];
+            }
+        }
+        else
+        {
+            // try to color both in same color
+            array<vector<int64_t>, registersCount> color;
+            // fill using both rw and v
+            for (auto &i : analyser.overlaps[rw])
+            {
+                if (res[i] == -1) continue;
+                color[res[i]].push_back(i);
+            }
+            for (auto &i : analyser.overlaps[v])
+            {
+                if (res[i] == -1) continue;
+                color[res[i]].push_back(i);
+            }
+            // if ok - color both nodes
+            // color to -1 if can't find
+            res[rw] = res[v] = FindFirst(color);
+        }
+    }
+
     void trySpeadSameRegisters(vector<int64_t> order, map<int64_t, int64_t> &res, RegisterAnalizator &analyser)
     {
+        /* first pass: if X=Y*Z; free Y -> allocate for X same as for Y */
+        for (auto &v : order)
+        {
+            for (auto &rw : analyser.readWriteOverlapsFirstOperand[v])
+            {
+                // if them overlaps in other place - don't create same color
+                if (analyser.overlaps[v].contains(rw))
+                {
+                    continue;
+                }
+                TryColorSame(rw, v, res, analyser);
+            }
+        } 
         /* simple euristic - if operator writes to X from Y and frees Y - allocate for X the same register */
         for (auto &v : order)
         {
@@ -100,54 +165,7 @@ private:
                 {
                     continue;
                 }
-                // else - try to allocate same register
-                if (res[rw] != -1)
-                {
-                    // try to color V into color of rw
-                    array<vector<int64_t>, registersCount> color;
-                    for (auto &i : analyser.overlaps[v])
-                    {
-                        if (res[i] == -1) continue;
-                        color[res[i]].push_back(i);
-                    }
-                    if (color[res[rw]].empty())
-                    {
-                        res[v] = res[rw];
-                    }
-                }
-                else if (res[v] != -1)
-                {
-                    // try to color RW into color of v
-                    array<vector<int64_t>, registersCount> color;
-                    for (auto &i : analyser.overlaps[rw])
-                    {
-                        if (res[i] == -1) continue;
-                        color[res[i]].push_back(i);
-                    }
-                    if (color[res[v]].empty())
-                    {
-                        res[rw] = res[v];
-                    }
-                }
-                else
-                {
-                    // try to color both in same color
-                    array<vector<int64_t>, registersCount> color;
-                    // fill using both rw and v
-                    for (auto &i : analyser.overlaps[rw])
-                    {
-                        if (res[i] == -1) continue;
-                        color[res[i]].push_back(i);
-                    }
-                    for (auto &i : analyser.overlaps[v])
-                    {
-                        if (res[i] == -1) continue;
-                        color[res[i]].push_back(i);
-                    }
-                    // if ok - color both nodes
-                    // color to -1 if can't find
-                    res[rw] = res[v] = FindFirst(color);
-                }
+                TryColorSame(rw, v, res, analyser);
             }
         } 
     }
@@ -186,6 +204,11 @@ private:
                 {
                     // count same colored pairs
                     curColored += (tmpRes[v] == tmpRes[rw] && tmpRes[v] != -1);
+                }
+                for (auto &rw : analyser.readWriteOverlapsFirstOperand[v])
+                {
+                    // count same colored pairs
+                    curColored += 2.0 * (tmpRes[v] == tmpRes[rw] && tmpRes[v] != -1);
                 }
             }
             
