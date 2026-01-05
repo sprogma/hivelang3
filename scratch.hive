@@ -1,0 +1,37 @@
+
+# example of parallel array sum
+
+(i32[] a, i32[] b, i32[] dest, i32 t, i32 end)sumOne()
+{
+    while t < end
+    {
+        dest[t] <- a[t] + b[t];
+        t <- t + 1;
+    }
+}
+
+
+(i32 a, i32 b)min(i32? res)
+{
+    match a < b
+    {
+        0  {res <- b;}
+        -1 {res <- a;}
+    }
+}
+
+
+[export:yes]
+(i32[] a, i32[] b, i32[] dest)sum()
+{
+    i32 t, block;
+    block <- 10000;
+    t <- 0;
+    while t < ?dest
+    {
+        (a, t, b, t, dest, t, ?(?dest, t + block)min(*))sumOne();
+        t <- t + block;
+    }
+}
+
+
