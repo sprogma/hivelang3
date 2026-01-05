@@ -1,28 +1,82 @@
-(i32[] a, i32[] b)dot(i32? res)
-{
-    i32 t, sum;
-    sum <- t <- 0;
-    while t < 3
-    {
-        sum <- sum + a[t] * b[t];
-        t <- t + 1;
-    }
-    res <- sum;
-}
-
 [export:yes]
-(i32 x)mul(i32? res)
+[integer64:yes]
+(i64[] a)dft(i32? res)
 {
-    i32[] a, b;
-    a <- new i32[](3);
-    b <- new i32[](3);
-    a[0] <- 2;
-    a[1] <- 4;
-    a[2] <- 1;
-    b[0] <- -1;
-    b[1] <- 7;
-    b[2] <- -3;
-    (a, b)dot(tmp);
-    res <- ?tmp;
+    i64 mod, root, root_1, root_pw;
+    mod <- 7340033;
+    root <- 5;
+    root_1 <- 4404020;
+    root_pw <- 1 << 20;
+
+    i64 i, j, n;
+    n <- ?a;
+    i <- 1;
+    j <- 0;
+
+    while i < n
+    {
+        i64 bit;
+        bit <- n >> 1;
+        while j >= bit
+        {
+            j <- j - bit;
+            bit <- bit >> 1;
+        }
+        j <- j + bit;
+        match i < j
+        {
+            (i32)-1 {
+                i64 t;
+                t <- a[j];
+                a[j] <- a[i];
+                a[i] <- t;
+            }
+        }
+        i <- i + 1;
+    }
+
+    i64 len;
+    len <- 2;
+    while len <= n
+    {
+        i64 x, wlen;
+        wlen <- root;
+        x <- len;
+        while x < root_pw
+        {
+            wlen <- (wlen * wlen) % mod;
+            x <- x << 1;
+        }
+        x <- 0;
+        while x < n
+        {
+            i64 w, J, lenh;
+            w <- 1;
+            J <- 0;
+            lenh <- len / 2;
+            while J < lenh
+            {
+                i64 u, v;
+                u <- a[x + J];
+                v <- a[x + J + lenh] * w % mod;
+                a[x + J] <- (u + v) % mod;
+                a[x + J + lenh] <- (u - v) % mod;
+                w <- w * wlen % mod;
+                J <- J + 1;
+            }
+            x <- x + len;
+        }
+        len <- len << 1;
+    }
+
+    i64 z;
+    z <- 0;
+    while z < n
+    {
+        a[z] <- (a[z] + mod) % mod;
+        z <- z + 1;
+    }
 }
+ 
+
 

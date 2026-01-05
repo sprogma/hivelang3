@@ -12,6 +12,8 @@ class InlineLayer : public OptimizationLayer
 public:
     double agression;
 
+    const double one_call_multipler = 10.0;
+
     InlineLayer(double agression) : agression(agression)
     { }
 
@@ -26,6 +28,28 @@ public:
         for (auto &[fn, key] : state->workers)
         {
             workerId[key] = fn;
+        }
+
+        /* count calls */
+        for (auto &[fn, key] : state->workers)
+        {
+            if (fn->content == NULL) continue;
+            for (auto &op : fn->content->code)
+            {
+                if (op->type == OP_CALL)
+                {
+                    if (workerId[op->data[0]] == fn)
+                    {
+                        calls[fn] = 1000; // recursive function - many calls
+                        // actually, don't need this, but let it be
+                    }
+                    calls[workerId[op->data[0]]]++;
+                }
+            }
+        }
+        
+        for (auto &[fn, key] : state->workers)
+        {
             if (fn->content == NULL) continue;
             
             double value = 0.0;
@@ -49,24 +73,9 @@ public:
                 }
             }
             cost[fn] = value;
-            printf("cost of %s = %f\n", fn->name.c_str(), value);
-        }
-
-        /* count calls */
-        for (auto &[fn, key] : state->workers)
-        {
-            if (fn->content == NULL) continue;
-            for (auto &op : fn->content->code)
-            {
-                if (op->type == OP_CALL)
-                {
-                    if (workerId[op->data[0]] == fn)
-                    {
-                        calls[fn] = 1000; // recursive function - many calls
-                    }
-                    calls[workerId[op->data[0]]]++;
-                }
-            }
+            printf("cost of %s = %f", fn->name.c_str(), value);
+            if (calls[fn] == 1) printf(" / %f = %f", one_call_multipler, value / one_call_multipler);
+            printf(", %lld calls\n", calls[fn]);
         }
         
         printf("Apply inlinings...\n");
@@ -93,9 +102,9 @@ public:
                     was_allocated = true;
                 }
 
-                bool optimize = cost[wk] < agression || (calls[wk] == 1 && cost[wk] < agression * 10.0);
+                bool optimize = cost[wk] < agression || (calls[wk] == 1 && cost[wk] < agression * one_call_multipler);
                 
-                if (optimize)
+                if (optimize && !wk->attributes.contains("no_inline"))
                 {
                     cost[fn] += cost[wk];
                     

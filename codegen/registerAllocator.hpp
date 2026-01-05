@@ -183,7 +183,7 @@ private:
 
         vector<int64_t> sameOrder(views::keys(res).begin(), views::keys(res).end());
         double bestColored = 0;
-        for (int64_t t = 0; t < 1000; ++t)
+        for (int64_t t = 0; t < 300; ++t)
         {
             for (int64_t i = 1; i < (int64_t)sameOrder.size(); ++i)
             {

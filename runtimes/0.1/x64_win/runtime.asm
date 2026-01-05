@@ -1,19 +1,24 @@
 format MS64 COFF
 
-; debugPrint = 1
+debugPrint = 1
 
 public fastPushObject
 public fastNewObject
 public fastCallObject
 public fastQueryObject
 
-public callExample
+public ExecuteWorker
+public context
 
 
 section '.data' readable writable
 
+; ! important that invoke data is strictly before runtime data, becouse it will be used as (rbp-XX)
 invoke_data db 512 dup 0
 runtime_data db 512 dup 0
+context db 512 dup 0
+
+
 
 format_strA db 'PushObject %p+%lld ', 0
 format_strB db '<- %p of size %lld', 0xA, 0
@@ -29,6 +34,22 @@ extrn object_array
 extrn printf
 
 section '.text' code readable executable
+
+macro StoreContext dest {
+    mov QWORD [dest], r8
+    mov QWORD [dest + 8], r9
+    mov QWORD [dest + 16], r10
+    mov QWORD [dest + 24], r11
+    mov QWORD [dest + 32], r12
+}
+
+macro LoadContext dest {
+    mov r8, QWORD [dest]
+    mov r9, QWORD [dest + 8]
+    mov r10, QWORD [dest + 16]
+    mov r11, QWORD [dest + 24]
+    mov r12, QWORD [dest + 32]
+}
 
 macro EnterCCode {
     ; save used registers
@@ -85,8 +106,10 @@ fastPushObject:
 
     end if
 
-    mov BYTE [rdi + 1], 1 ; mark object as set
-    add rdi, 2 ; common object header size
+    cmp BYTE [rdi - 1], 2 ; if it is promise - set it as set
+    jne .not_promise
+    mov BYTE [rdi - 2], 1
+.not_promise:
     
     ; for now, simply move to object
     cmp rcx, 0
@@ -116,10 +139,10 @@ fastPushObject:
 
 ; reverse to fastPushObject
 ; rsi=object
-; rdi=source/value
+; rdi=dest/value
 ; rcx=size
 ; rdx=offset
-fastQueryObject:
+fastQueryObject:    
     ; TODO: add support of remote objects
     
     if defined debugPrint
@@ -150,7 +173,9 @@ fastQueryObject:
 
     end if
 
-    add rsi, 2 ; common object header size
+    ; if it is promise, and doesn't set - start await
+    cmp BYTE [rsi - 1], 2
+    je .await_promise
     
     ; for now, simply move to object
     cmp rcx, 0
@@ -178,6 +203,27 @@ fastQueryObject:
     rep movsb
     ret
 
+.await_promise:
+    ; extract return address
+    mov rax, [rsp]
+    EnterCCode
+
+    sub rsp, 16 ; more shadow bytes for 2 registers
+
+    ; save context
+    StoreContext context
+
+    ; run C code
+    
+    mov r8, rax
+    mov r9, rbp
+    call QueryObject
+    mov rdi, rax
+    
+    add rsp, 16
+    
+    LeaveCCode
+    ret
 
 
 
@@ -198,23 +244,58 @@ fastNewObject:
 
     ret
 
-; 
+; rdx=workerId rsi=callTable
 fastCallObject:
-    mov eax, 42         ; Example: return 42
+    EnterCCode
+
+    mov rcx, rsi
+
+    call CallObject
+
+    LeaveCCode
+    
     ret
 
+; c style function ExecuteWorker(void *address, int64_t rdi_value, void *rbp_value, void *context)
+ExecuteWorker:
+    push r12
+    push r13
+    push r14
+    push r15
+    push rdi
+    push rsi
+    
+    mov rbp, r8
+    mov rdi, rdx
+    mov rsi, r9
+    
+    LoadContext rsi
 
+    ; must be 8 bytes UNaligned before call
+    call rcx
+
+    pop rsi
+    pop rdi
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    ret
+    
 callExample:
     sub rsp, 8
     push rbp
 
+
     push rcx
-    sub rsp, 32 ; shadow space?
 
     mov rcx, 2
     mov rdx, 8
     mov r8, 8
+    
+    sub rsp, 32 ; shadow space?
     call NewObject
+    add rsp, 32
 
     ; prepare args
     lea rbp, [runtime_data]
@@ -224,11 +305,58 @@ callExample:
     
     ; mov DWORD [rdi + 4], 13
     mov DWORD [rdi + 0], 17
-
+    
     pop rax
     call rax
     
-    add rsp, 32
+    
+    pop rsi
+    pop rdi
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    
     pop rbp
     add rsp, 8
     ret
+
+
+public setjmpUN
+public longjmpUN
+
+; rcx = ptr to jmp_buf
+setjmpUN:
+; volatile regs
+mov [rcx +  0], rbx
+mov [rcx +  8], rbp
+mov [rcx + 16], rdi
+mov [rcx + 24], rsi
+mov [rcx + 32], r12
+mov [rcx + 40], r13
+mov [rcx + 48], r14
+mov [rcx + 56], r15
+; save rsp
+lea rax, [rsp + 8]
+mov [rcx + 64], rax
+; save ret
+mov rax, [rsp]
+mov [rcx + 72], rax
+xor eax, eax
+ret
+
+; rcx = ptr to jmp_buf, rdx = value
+longjmpUN:
+; load regs
+mov rbx, [rcx +  0]
+mov rbp, [rcx +  8]
+mov rdi, [rcx + 16]
+mov rsi, [rcx + 24]
+mov r12, [rcx + 32]
+mov r13, [rcx + 40]
+mov r14, [rcx + 48]
+mov r15, [rcx + 56]
+mov rsp, [rcx + 64]
+; return
+mov rax, rdx
+jmp QWORD [rcx + 72]

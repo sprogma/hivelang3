@@ -126,6 +126,8 @@ enum OperationType
     // used for register allocations
     OP_STORE, // format is [variable, place]
     OP_LOAD, // format is [variable, place]
+    // used for generating input table, to call using it
+    OP_STORE_INPUT, // format is [variable, offset]
 
     // used only in parsing - don't use it.
     OP_JMP,
@@ -198,6 +200,7 @@ struct BuildContext
     vector<TypeContext *> types;
     map<string, int64_t> names;
     map<int64_t, TypeContext *> variables;
+    WorkerDeclarationContext *current;
     int64_t nextVarId;
     int64_t nextTempId;
     BuildResult *result;

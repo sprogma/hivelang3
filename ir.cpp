@@ -219,17 +219,25 @@ map<string, string> getAttributeList(BuildContext *ctx, Node *node)
 
 pair<int64_t, TypeContext *> GetFieldOffset(BuildContext *ctx, TypeContext *type, int64_t field)
 {
-    (void)ctx;
-    int64_t res = 0;
-    for (auto &i : type->_struct.fields)
+    if (type->type == TYPE_RECORD)
     {
-        if (field-- == 0)
+        (void)ctx;
+        int64_t res = 0;
+        for (auto &i : type->_struct.fields)
         {
-            return {res, i};
+            if (field-- == 0)
+            {
+                return {res, i};
+            }
+            res += i->size;
         }
-        res += i->size;
+        return {res, NULL};
     }
-    return {res, NULL};
+    else if (type->type == TYPE_UNION)
+    {
+        return {0, type->_struct.fields[field]};
+    }
+    return {0, NULL};
 }
 
 pair<int64_t, TypeContext *> GetFieldOffset(BuildContext *ctx, Node *node, int64_t fromId, TypeContext *type)
@@ -420,8 +428,15 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
         case 1: // integer
         {
             char *end;
-            int64_t intValue = strtoll(Substr(ctx, node->nonTerm(0)).c_str(), &end, 0);
-            int64_t tmp = newTemp(ctx, getIntegerType(ctx, intValue));
+            int64_t intValue = strtoll(Substr(ctx, node->nonTerm(0)).c_str(), &end, 0), tmp;
+            if (ctx->current->attributes.contains("integer64"))
+            {
+                tmp = newTemp(ctx, getBaseType(ctx, "i64"));
+            }
+            else
+            {
+                tmp = newTemp(ctx, getIntegerType(ctx, intValue));
+            }
             append(ops, {OP_NEW_INT, {tmp, intValue}});
             return {ops, tmp};
         }
@@ -773,7 +788,7 @@ pair<vector<Operation>, int64_t> buildPrefixOperation(BuildContext *ctx, Node *n
             
             append(ops, t);
             int64_t tmp = newTemp(ctx, type);
-            append(ops, {OP_CAST, {pos, tmp, pos}}); 
+            append(ops, {OP_CAST, {tmp, pos}}); 
             freeTemp(ops, pos);
             
             return {ops, tmp};
@@ -1467,11 +1482,11 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
                             auto [pattern, patternPos] = buildExpression(ctx, var->nonTerm(0));
                             if (handleNotNull(ctx, patternPos, var->nonTerm(0))) { break; }
                             auto block = buildCodeBlock(ctx, var->nonTerm(1));
-                            int64_t temp = ctx->nextTempId++;
+                            int64_t temp = newTemp(ctx, getBaseType(ctx, "i32"));
                             append(ops, pattern);
                             append(ops, {OP_EQ, {temp, matchPos, patternPos}});
                             freeTemp(ops, patternPos);
-                            append(ops, {OP_JNZ, {2 + (int64_t)block.size(), temp}});
+                            append(ops, {OP_JZ, {2 + (int64_t)block.size(), temp}});
                             freeTemp(ops, temp);
                             append(ops, block);
                             freeTemp(ops, temp);
@@ -1510,6 +1525,7 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     ctx->nextTempId = FIRST_TEMP_ID;
     ctx->names.clear();
     ctx->variables.clear();
+    ctx->current = wk;
 
     vector<Operation> ops;
     
@@ -1763,6 +1779,7 @@ void applyNamesTranslition(OperationBlock *op, const map<int64_t, int64_t> &tran
 
         // first arg
         case OP_STORE:
+        case OP_STORE_INPUT:
         case OP_LOAD:
         case OP_NEW_INT:
         case OP_NEW_FLOAT:
@@ -1831,6 +1848,7 @@ vector<int64_t> getWritedVariables(OperationBlock *op)
         case OP_JZ:
         case OP_JNZ:
         case OP_STORE:
+        case OP_STORE_INPUT:
             return {};
         
         // first arg
@@ -1904,6 +1922,7 @@ vector<int64_t> getUsedVariables(OperationBlock *op)
 
         // first arg
         case OP_STORE:
+        case OP_STORE_INPUT:
         case OP_LOAD:
         case OP_NEW_CLASS:
         case OP_NEW_INT:
@@ -1990,6 +2009,7 @@ vector<int64_t> getReadVariables(OperationBlock *op)
         case OP_JZ:
         case OP_JNZ:
         case OP_STORE:
+        case OP_STORE_INPUT:
             return {op->data[0]};
         
         
@@ -2045,6 +2065,7 @@ void dumpIR(WorkerDeclarationContext *fn)
                 
                 case OP_STORE: printf("OP_STORE "); break;
                 case OP_LOAD: printf("OP_LOAD "); break;
+                case OP_STORE_INPUT: printf("OP_STORE_INPUT "); break;
                 
                 case OP_CALL: printf("OP_CALL "); break;
                 case OP_CAST: printf("OP_CAST "); break;

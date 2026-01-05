@@ -449,6 +449,7 @@ private:
             }
             case ASM_CMP:
             {
+                // printf("%lld %lld\n", r1.second, r2.second);
                 assert(r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
@@ -865,6 +866,8 @@ private:
     }
     
 public:
+    map<int64_t, int64_t> resultWorkerPositions;
+    
     void Build(BuildResult *input, const char *resultFileName) override 
     {
         ir = input;
@@ -953,6 +956,18 @@ private:
         return res;
     }
 
+    int64_t GetWorkerInputTableSize(int64_t id)
+    {
+        int64_t res = 0;
+        
+        for (auto &[name, type] : array{views::all(idToWorker[id]->inputs), 
+                                        views::all(idToWorker[id]->outputs)} | views::join)
+        {
+            res += type->size;
+        }
+        return res;
+    }
+
     int64_t GetOutputOffset(int64_t id)
     {
         // sum all sizes from inputs and outputs
@@ -1017,6 +1032,9 @@ private:
     {
         current = wk;
 
+        // update call instructions
+        ExpandCallInstructions(wk);
+
         // create registers translation
         {
             SpreadRegisters<registersCount> regSprd;
@@ -1050,11 +1068,12 @@ private:
         // get used labels
         addressTable.clear();
         usedLabels.clear();
-        header.clear();
         JumpInstructions.clear();
         UpdateUsedLabels(wk->content->entry);
         
         // generate code
+
+        resultWorkerPositions[workerId] = assemblyEnd - assemblyCode;
         
         print("worker_%lld:\n", workerId);
         if (wk->content == NULL)
@@ -1077,6 +1096,26 @@ private:
         InsertJumpInstructions();
 
         delete analyzer;
+    }
+
+    void ExpandCallInstructions(WorkerDeclarationContext *wk)
+    {
+        for (int64_t i = 0; i < (int64_t)wk->content->code.size(); ++i)
+        {
+            auto op = wk->content->code[i];
+            if (op->type == OP_CALL)
+            {
+                // insert before it input table generation
+                int64_t id = 1, offset = 0, inputTableSize = GetWorkerInputTableSize(op->data[0]);
+                for (auto &[name, type] : array{views::all(idToWorker[op->data[0]]->inputs), 
+                                                views::all(idToWorker[op->data[0]]->outputs)} | views::join)
+                {
+                    auto *newOp = new OperationBlock(OP_STORE_INPUT, {op->data[id++], offset - inputTableSize});
+                    connectBeforeOp(wk, op, newOp);
+                    offset += type->size;
+                }
+            }
+        }
     }
 
     void UpdateUsedLabels(OperationBlock *op)
@@ -1176,6 +1215,7 @@ private:
                 printRR(T, Register(op->data[0]), Register(op->data[2])); \
             }
         #define CMPOP(A, B) { \
+            printf("%lld %lld %lld [%p %p %p]\n", op->data[0], op->data[1], op->data[2], varType(op->data[0]), varType(op->data[1]), varType(op->data[2])); \
             printRR(ASM_CMP, Register(op->data[1]), Register(op->data[2])); \
             printRC(ASM_MOV_RC, Register(op->data[0]), 0); \
             auto reg = Register(op->data[0]); \
@@ -1224,10 +1264,24 @@ private:
                 printRM(ASM_MOV_RM, Register(op->data[1]), {7, 8}, GetOutputOffset(op->data[0]));
                 break;
             
-            
-            case OP_CALL: 
-                print("OP_CALL [not supported]\n"); 
+            case OP_STORE_INPUT:
+            {
+                printMR(ASM_MOV_MR, {5, 8}, Register(op->data[0]), op->data[1]);
                 break;
+            }
+            
+            case OP_CALL:
+            {
+                // call table was generated, use it
+                int64_t callTableSize = GetWorkerInputTableSize(op->data[0]);
+                // rdx=worker id
+                // rsi=call table
+                InsertInteger({2, 8}, op->data[0]);
+                InsertMove({6, 8}, {5, 8}, false);
+                printRC(ASM_ADD_RC, {6, 8}, -callTableSize);
+                header[HEADER_ENTRY_CALL_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                break;
+            }
                 
             case OP_CAST: 
                 InsertMove(op->data[0], op->data[1]);
@@ -1247,9 +1301,9 @@ private:
                 
             case OP_NEW_ARRAY:
             {
-                // rcx=OBJECT_OBJECT=3
+                // rcx=OBJECT_ARRAY=3
                 // rdx=total size
-                // rax=size of element
+                // rdi=size of element
                 InsertInteger({1, 8}, 0x03);
                 ExternTo64Bit(Register(op->data[1]), isSigned(op->data[1]));
                 printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
@@ -1258,8 +1312,19 @@ private:
                 InsertMove(Register(op->data[0]), {0, 8}, false);
                 break;
             }
+            case OP_NEW_PROMISE:
+            {
+                // rcx=OBJECT_PROMISE=2
+                // rdx=total size
+                // rdi=size of element = total size
+                InsertInteger({1, 8}, 0x02);
+                InsertInteger({2, 8}, varType(op->data[0])->_vector.base->size);
+                InsertMove({7, 8}, {2, 8}, false);
+                header[HEADER_ENTRY_NEW_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                InsertMove(Register(op->data[0]), {0, 8}, false);
+                break;
+            }
             case OP_NEW_PIPE:     printf("not supported: new_pipe\n"); break;
-            case OP_NEW_PROMISE:  printf("not supported: new_promise\n"); break;
             case OP_NEW_CLASS:    printf("not supported: new_class\n"); break;
             
             case OP_PUSH_VAR:
@@ -1356,9 +1421,51 @@ private:
                 break;
             }
             
-            case OP_QUERY_ARRAY:   printf("not supported: query_array\n"); break;
+            case OP_QUERY_ARRAY:
+            {
+                // rcx=size rdx=offset rdi=value rsi=object
+                if (isScalar(op->data[0]))
+                {
+                    InsertInteger({1, 8}, -varSize(op->data[0]));
+                    InsertInteger({2, 8}, -16);
+                    InsertMove({6, 8}, Register(op->data[1]), false);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    InsertMove(Register(op->data[0]), {7, 8}, false);
+                }
+                else
+                {
+                    InsertInteger({1, 8}, varSize(op->data[0]));
+                    InsertInteger({2, 8}, -16);
+                    InsertInteger({7, 8}, memTable[op->data[0]]);
+                    InsertMove({6, 8}, Register(op->data[1]), false);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                }
+                break;
+            }
+            
+            case OP_QUERY_PROMISE:
+            {
+                // rcx=size rdx=offset rdi=value rsi=object
+                if (isScalar(op->data[0]))
+                {
+                    InsertInteger({1, 8}, -varSize(op->data[0]));
+                    InsertInteger({2, 8}, 0);
+                    InsertMove({6, 8}, Register(op->data[1]), false);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    InsertMove(Register(op->data[0]), {7, 8}, false);
+                }
+                else
+                {
+                    InsertInteger({1, 8}, varSize(op->data[0]));
+                    InsertInteger({2, 8}, 0);
+                    InsertInteger({7, 8}, memTable[op->data[0]]);
+                    InsertMove({6, 8}, Register(op->data[1]), false);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                }
+                break;
+            }
+            
             case OP_QUERY_PIPE:    printf("not supported: query_pipe\n"); break;
-            case OP_QUERY_PROMISE: printf("not supported: query_promise\n"); break;
             case OP_QUERY_CLASS:   printf("not supported: query_class\n"); break;
              
             case OP_BOR:   ABEL_BINOP(ASM_OR) break;
@@ -1558,6 +1665,7 @@ private:
         *(uint64_t *)buf = 0xBEBEBEBEBEBEBEBE; // version 0.1
         buf += 8;
 
+        /* add relocations */
         for (auto &[id, value] : header)
         {
             *buf++ = id;
@@ -1569,6 +1677,27 @@ private:
                 buf += 8;
             }
         }
+
+        /* add workers positions */
+        {
+            *buf++ = 16;
+            *(uint64_t *)buf = resultWorkerPositions.size();
+            buf += 8;
+            for (auto &[id, pos] : resultWorkerPositions)
+            {
+                printf("Export worker %lld with offset %016llx\n", id, pos);
+                /* export id */
+                *(uint64_t *)buf = id;
+                buf += 8;
+                /* export position */
+                *(uint64_t *)buf = pos;
+                buf += 8;
+                /* export input table size */
+                *(uint64_t *)buf = GetWorkerInputTableSize(id);
+                buf += 8;
+            }
+        }
+        
 
         /* fill header size */
         *(uint64_t *)(buf_start + 12) = buf - buf_start;
