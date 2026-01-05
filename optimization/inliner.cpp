@@ -199,6 +199,7 @@ private:
                 {
                     OperationBlock *res = new OperationBlock(copy->type, copy->data, copy->attributes);
                     fn->content->code.push_back(res);
+                    codeMap[copy] = res;
                     
                     for (auto &n : copy->next)
                     {
@@ -221,8 +222,6 @@ private:
                         /* apply map table */
                         applyNamesTranslition(res, mapTable);
                     }
-                    
-                    codeMap[copy] = res;
                 }
             }
         }

@@ -45,7 +45,8 @@ public:
 
         vector<int64_t> best = order;
         int64_t usedMem = getMemory(order);
-        for (int64_t i = 0; i < 1000; ++i)
+        // for (int64_t i = 0; i < 1000; ++i)
+        for (int64_t i = 0; i < 1; ++i)
         {
             for (int64_t j = 1; j < (int64_t)order.size(); ++j)
             {
@@ -104,7 +105,7 @@ private:
                 {
                     used[j].insert(var);
                 }
-                return lastBad + 1;
+                return i - varSize + 1;
             }
             ++i;
         }

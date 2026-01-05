@@ -916,6 +916,8 @@ private:
     #define HEADER_ENTRY_CALL_OBJECT 3
     map<BYTE, vector<int64_t>> header;
 
+    vector<OperationBlock *> toBuild;
+
     // registers configuraion
     static constexpr int64_t registersCount = 5;
 
@@ -1062,7 +1064,12 @@ private:
         else
         {
             addressTable.clear();
-            BuildOperation(wk->content->entry);
+
+            toBuild.push_back(wk->content->entry);
+            while (!toBuild.empty())
+            {
+                BuildOperation();
+            }
         }
 
         // join code using JumpInstructions
@@ -1138,8 +1145,11 @@ private:
         }
     }
 
-    void BuildOperation(OperationBlock *op)
+    void BuildOperation()
     {
+        OperationBlock *op = toBuild.back();
+        toBuild.pop_back();
+        
         // return from function
         if (op == NULL)
         {
@@ -1413,9 +1423,9 @@ private:
                 break;
         }
 
-        for (auto &n : op->next)
+        for (auto &n : views::reverse(op->next))
         {
-            BuildOperation(n);
+            toBuild.push_back(n);
         }
     }
 
