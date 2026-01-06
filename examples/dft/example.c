@@ -71,16 +71,18 @@ void dft(int64_t *a, int64_t n, int64_t inv)
 	}
 }
 
-int main(int argc, char **argv)
+int main()
 {
-    int64_t t = argc-2;
+    int64_t t;
+    scanf("%lld", &t);
+    t--;
     int64_t len = (t | (t >> 1) | (t >> 2) | (t >> 4) | (t >> 8) | (t >> 16) | (t >> 32)) + 1;
-    int64_t *arr = malloc(8 * argc);
+    int64_t *arr = malloc(8 * len);
     for (int i = 0; i < len; ++i)
     {
-        if (i + 1 < argc)
+        if (i < t + 1)
         {
-            arr[i] = atoll(argv[i + 1]);
+            scanf("%lld", &arr[i]);
         }
         else
         {
@@ -89,10 +91,15 @@ int main(int argc, char **argv)
     }
     // dft(arr, len, argv[1][0] == 'i');
     dft(arr, len, 0);
+
+    int64_t res = 0;
+    
     for (int i = 0; i < len; ++i)
     {
-        printf("%lld ", arr[i]);
+        // printf("%lld ", arr[i]);
+        res += arr[i];
     }
-    printf("\n");
-    return 0;
+    // printf("\n");
+    
+    return res;
 }

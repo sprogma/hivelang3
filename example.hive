@@ -69,13 +69,16 @@
         len <- len << 1;
     }
 
-    i64 z;
-    z <- 0;
+    i64 z, sum;
+    sum <- z <- 0;
     while z < n
     {
         a[z] <- (a[z] + mod) % mod;
+        sum <- sum + a[z];
         z <- z + 1;
     }
+
+    res <- (i32)sum;
 }
  
 

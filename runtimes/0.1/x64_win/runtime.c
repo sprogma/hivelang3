@@ -20,6 +20,12 @@ extern void longjmpUN(struct jmpbuf *, int64_t val);
 extern int64_t setjmpUN(struct jmpbuf *);
 
 
+#ifndef NDEBUG
+    #define log(...) printf(__VA_ARGS__)
+#else
+    #define log(...)
+#endif
+
 
 struct waiting_worker
 {
@@ -109,29 +115,29 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param)
     {
         case OBJECT_ARRAY:
         {
-            printf("Object of %lld bytes, element of size %lld allocated\n", size, param);
+            log("Object of %lld bytes, element of size %lld allocated\n", size, param);
             struct object_array *res = malloc(sizeof(*res) + size);
             memcpy(res->_, &param, 8);
             res->type = type;
             res->length = size / param;
             int64_t id = (int64_t)res + DATA_OFFSET(struct object_array);
             object_array[object_array_len++] = (struct object *)id;
-            printf("[id=%016llx]\n", id);
+            log("[id=%016llx]\n", id);
             return id;
         }
         case OBJECT_PROMISE:
         {
-            printf("Promise for size %lld allocated\n", size);
+            log("Promise for size %lld allocated\n", size);
             struct object_promise *res = malloc(sizeof(*res) + size);
             res->type = type;
             res->ready = 0;
             int64_t id = (int64_t)res + DATA_OFFSET(struct object_promise);
             object_array[object_array_len++] = (struct object *)id;
-            printf("[id=%016llx]\n", id);
+            log("[id=%016llx]\n", id);
             return id;
         }
         default:
-            printf("Wrong type in NewObject\n");
+            log("Wrong type in NewObject\n");
     }
     return -1;
 }
@@ -157,7 +163,7 @@ int64_t QueryObject(void *destination, void *object, int64_t offset, int64_t siz
     t->destination = destination;
     t->object = object;
     
-    printf("Awaiting promise at %p\n", object);
+    log("Awaiting promise at %p\n", object);
 
     WaitListWorker(t);
     
@@ -175,26 +181,26 @@ int64_t queue_len = 0;
 void WaitListWorker(struct waiting_worker *t)
 {
     wait_list[wait_list_len++] = t;
-    printf("Worker add to wait list [next=%p]\n", t->ptr);
+    log("Worker add to wait list [next=%p]\n", t->ptr);
 }
 
 void EnqueueWorker(struct queued_worker *t)
 {
     queue[queue_len++] = t;
-    printf("Worker enqueued [next=%p]\n", t->ptr);
+    log("Worker enqueued [next=%p]\n", t->ptr);
 }
 
 void SheduleWorker()
 {
     setjmpUN(&ShedulerBuffer);
 
-    printf("Sheduling new worker\n");
+    log("Sheduling new worker\n");
 
     // call next worker
     if (queue_len > 0)
     {
         --queue_len;
-        printf("Continue worker from %p [rdi=%016llX] [context=%p] [rbp=%p]\n", 
+        log("Continue worker from %p [rdi=%016llX] [context=%p] [rbp=%p]\n", 
                 queue[queue_len]->ptr, queue[queue_len]->rdiValue, queue[queue_len]->context, queue[queue_len]->rbpValue);
         ExecuteWorker(
             queue[queue_len]->ptr,
@@ -240,7 +246,7 @@ void SheduleWorker()
 
 void StartNewWorker(int64_t workerId, BYTE *inputTable)
 {
-    printf("Starting new worker %lld [input table %p]\n", workerId, inputTable);
+    log("Starting new worker %lld [input table %p]\n", workerId, inputTable);
     
     struct queued_worker *t = malloc(sizeof(*t));
     t->ptr = Workers[workerId].ptr;
@@ -254,13 +260,13 @@ void CallObject(BYTE *param, int64_t workerId)
 {
     int64_t tableSize = Workers[workerId].inputSize;
     
-    printf("Calling worker %lld [data=%p]\n", workerId, param);
-    printf("Table = ");
+    log("Calling worker %lld [data=%p]\n", workerId, param);
+    log("Table = ");
     for (int64_t i = 0; i < tableSize; ++i)
     {
-        printf("%02X ", param[i]);
+        log("%02X ", param[i]);
     }
-    printf("\n");
+    log("\n");
 
     void *data = malloc(tableSize + 512);
     memcpy(data, param, tableSize);
@@ -275,29 +281,29 @@ void PrintObject(struct object *object_ptr)
     switch (ptr[-1])
     {
         case OBJECT_PROMISE:
-            printf("Promise(set=%d, first4bytes=", ptr[-2]);
+            log("Promise(set=%d, first4bytes=", ptr[-2]);
             for (int i = 0; i < 4; ++i)
-                printf("%02X ", ptr[i]);
-            printf(")\n");
+                log("%02X ", ptr[i]);
+            log(")\n");
             break;
         case OBJECT_ARRAY:
         {
             int64_t len = ((uint64_t *)ptr)[-2];
             int64_t elem = ((uint64_t *)ptr)[-1] & 0x00FFFFFFFFFFFFFF;
-            printf("Array(length=%lld, element_size=%lld, ", len, elem);
+            log("Array(length=%lld, element_size=%lld, ", len, elem);
             for (int i = 0; i < len; ++i)
             {
-                printf("{ ");
+                log("{ ");
                 for (int j = 0; j < elem; ++j)
-                    printf("%02X ", ptr[i * elem + j]);
-                printf("}");
-                if (i != len - 1) printf(", ");
+                    log("%02X ", ptr[i * elem + j]);
+                log("}");
+                if (i != len - 1) log(", ");
             }
-            printf(")\n");
+            log(")\n");
             break;
         }
         default:
-            printf("Object of unknown type: %d\n", ptr[-1]);
+            log("Object of unknown type: %d\n", ptr[-1]);
     }
 }
 
@@ -342,13 +348,13 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
     /* read prefix */
     if (file[0] != 'H' || file[1] != 'I' || file[2] != 'V' || file[3] != 'E')
     {
-        printf("Error: this isn't hive executable\n");
+        log("Error: this isn't hive executable\n");
         return NULL;
     }
     uint64_t version = *(uint64_t *)&file[4];
     if (version / 1000 != 0)
     {
-        printf("Error: this is executable of not 0 version [%llu]\n", version / 1000);
+        log("Error: this is executable of not 0 version [%llu]\n", version / 1000);
         return NULL;
     }
     uint64_t codePosition = *(uint64_t *)&file[12];
@@ -356,7 +362,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
     void *mem = VirtualAlloc(NULL, fileLength - codePosition, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (mem == NULL)
     {
-        printf("Error: winapi error %ld\n", GetLastError());
+        log("Error: winapi error %ld\n", GetLastError());
         return NULL;
     }
     memcpy(mem, file + codePosition, fileLength - codePosition);
@@ -378,7 +384,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 pos += 8;
                 for (int64_t i = 0; i < count; ++i)
                 {
-                    printf("set to %lld ", *(int64_t *)pos);
+                    log("set to %lld ", *(int64_t *)pos);
                     uint64_t *callPosition = (uint64_t *)(mem + *(int64_t *)pos);
                     pos += 8;
                     switch (type)
@@ -388,7 +394,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                         case 2: *callPosition = (uint64_t)&fastNewObject; break;
                         case 3: *callPosition = (uint64_t)&fastCallObject; break;
                     }
-                    printf("ptr=%p\n", (void *)*callPosition);
+                    log("ptr=%p\n", (void *)*callPosition);
                 }
                 break;
             }
@@ -399,7 +405,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                     i64 positions length
                     i64[] positions
                 */
-                printf("Error: DLL Calls are unsupported in version 0.1\n");
+                log("Error: DLL Calls are unsupported in version 0.1\n");
                 break;
             case 16: // Worker positions
             {
@@ -417,12 +423,12 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                     // set data
                     void *ptr = mem + offset;
                     Workers[id] = (struct worker_info){ptr, tableSize};
-                    printf("Worker %lld have been loaded to %p [offset %016llx] with input table of size %lld\n", id, ptr, offset, tableSize);
+                    log("Worker %lld have been loaded to %p [offset %016llx] with input table of size %lld\n", id, ptr, offset, tableSize);
                 }
                 break;
             }
             default:
-                printf("Error: unknown header type %u\n", type);
+                log("Error: unknown header type %u\n", type);
                 break;
         }
     }
@@ -432,11 +438,13 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
 
 int main(int argc, char **argv)
 {
+    (void) argc;
+    (void) argv;
     // read file
     FILE *f = fopen("../../../res.bin", "rb");
     if (f == NULL)
     {
-        printf("Error: file doesn't exists\n");
+        log("Error: file doesn't exists\n");
         return 1;
     }
     
@@ -449,30 +457,42 @@ int main(int argc, char **argv)
     void *res = LoadWorker(buf, len, &res_len);
     if (res == NULL)
     {
-        printf("Error: at loading file\n");
+        log("Error: at loading file\n");
         return 1;
     }
     
     // print it
     for (int i = 0; i < res_len; ++i)
     {
-        printf("%02X ", ((BYTE *)res)[i]);
+        log("%02X ", ((BYTE *)res)[i]);
     }
-    printf("\n");
+    log("\n");
 
     // run first worker with comand line arguments as i32 array
-    
-    int64_t *input = malloc(8 * (argc - 1));
-    printf("READING INPUT AS: ");
+
+    int64_t inputLen = 0;
+    #ifdef _DEBUG
+    inputLen = argc - 1;
+    int64_t *input = malloc(8 * inputLen);
+    log("READING INPUT AS: ");
     for (int i = 1; i < argc; ++i)
     {
         input[i - 1] = atoll(argv[i]);
-        printf("%lld ", input[i]);
+        log("%lld ", input[i]);
     }
-    printf("\n");
+    log("\n");
+    #else
+    scanf("%lld", &inputLen);
+    int64_t *input = malloc(8 * inputLen);
+    for (int i = 0; i < inputLen; ++i)
+    {
+        scanf("%lld", input + i);
+    }
+    log("\n");
+    #endif
 
-    int64_t inputId = NewObject(3, 8 * (argc - 1), 8);
-    memcpy((void *)inputId, input, 8 * (argc - 1));
+    int64_t inputId = NewObject(3, 8 * inputLen, 8);
+    memcpy((void *)inputId, input, 8 * inputLen);
     
     int64_t resCodeId = NewObject(2, 4, 4);
 
@@ -482,25 +502,31 @@ int main(int argc, char **argv)
     
     StartNewWorker(0, tbl);
         
-    printf("Running...\n");
+    log("Running...\n");
 
     while (queue_len > 0)
     {
         SheduleWorker();
     }
 
-    printf("At end objects:\n");
+    log("At end objects:\n");
     for (int i = 0; i < object_array_len; ++i)
     {
-        printf("%d=", i); PrintObject(object_array[i]);
+        log("%d=", i); PrintObject(object_array[i]);
     }
+
+    // for (int i = 0; i < argc - 1; ++i)
+    // {
+    //     printf("%lld ", ((int64_t *)inputId)[i]);
+    // }
+    // printf("\n");
 
     struct object_promise *p = (struct object_promise *)(resCodeId - DATA_OFFSET(struct object_promise));
     if (p->ready)
     {
-        printf("Program exited with code %d\n", *(int *)p->data);
+        log("Program exited with code %d\n", *(int *)p->data);
         return *(int *)p->data;
     }
-    printf("Result of main function isn't ready after program end\n");
+    log("Result of main function isn't ready after program end\n");
     return 1;
 }

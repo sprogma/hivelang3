@@ -1,6 +1,5 @@
 format MS64 COFF
 
-debugPrint = 1
 
 public fastPushObject
 public fastNewObject

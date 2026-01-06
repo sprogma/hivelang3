@@ -1,4 +1,5 @@
 [export:yes]
+[integer64:yes]
 (i64[] a)dft(i32? res)
 {
     i64 mod, root, root_1, root_pw;
@@ -21,16 +22,17 @@
             j <- j - bit;
             bit <- bit >> 1;
         }
-        i <- i + 1;
+        j <- j + bit;
         match i < j
         {
-            -1 {
+            (i32)-1 {
                 i64 t;
                 t <- a[j];
                 a[j] <- a[i];
-                a[i] = t;
+                a[i] <- t;
             }
         }
+        i <- i + 1;
     }
 
     i64 len;
@@ -57,8 +59,8 @@
                 i64 u, v;
                 u <- a[x + J];
                 v <- a[x + J + lenh] * w % mod;
-                a[i + J] = (u + v) % mod;
-                a[i + J + lenh] = (u - v) % mod;
+                a[x + J] <- (u + v) % mod;
+                a[x + J + lenh] <- (u - v) % mod;
                 w <- w * wlen % mod;
                 J <- J + 1;
             }
@@ -67,10 +69,17 @@
         len <- len << 1;
     }
 
-    i64 z <- 0;
+    i64 z, sum;
+    sum <- z <- 0;
     while z < n
     {
-        a[z] = (a[z] + mod) % mod;
+        a[z] <- (a[z] + mod) % mod;
+        sum <- sum + a[z];
+        z <- z + 1;
     }
+
+    res <- (i32)sum;
 }
  
+
+
