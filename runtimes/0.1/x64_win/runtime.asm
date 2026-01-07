@@ -10,7 +10,7 @@ public ExecuteWorker
 public context
 
 
-section '.data' readable writable
+section '.data' readable writable align 64
 
 ; ! important that invoke data is strictly before runtime data, becouse it will be used as (rbp-XX)
 invoke_data db 512 dup 0
@@ -57,12 +57,24 @@ macro EnterCCode {
     push r10
     push r11
     push r12
+    
+    push rbx
+    push r13
+    push r14
+    push r15
+    
     sub rsp, 0+32
 }
 
 macro LeaveCCode {
     ; load used registers
     add rsp, 0+32
+
+    pop r15
+    pop r14
+    pop r13
+    pop rbx
+    
     pop r12
     pop r11
     pop r10
@@ -112,25 +124,40 @@ fastPushObject:
     
     ; for now, simply move to object
     cmp rcx, 0
-    jg .copy_block
-    ; size < 0 -> need to move rsi to dest
-    cmp rcx, -8
-    jne .not64
+    jg .copy_block    
+    
+    lea rax, [.jump_table]
+    jmp qword [rax + rcx * 8]
+        
+    
+section ".data" readable writable align 64
+align 64
+    dq .push64
+    dq 0
+    dq 0
+    dq 0
+    dq .push32
+    dq 0
+    dq .push16
+    dq .push8
+.jump_table:
+
+section ".text" code readable executable align 16
+align 16
+.push64:
     mov [rdi + rdx], rsi
     ret
-.not64:
-    cmp rcx, -4
-    jne .not32
+.push32:
     mov [rdi + rdx], esi
     ret
-.not32:
-    cmp rcx, -2
-    jne .not16
+.push16:
     mov [rdi + rdx], si
     ret
-.not16:
+.push8:
     mov BYTE [rdi + rdx], sil
     ret
+    
+align 16
 .copy_block:
     add rdi, rdx
     rep movsb
@@ -179,24 +206,40 @@ fastQueryObject:
     ; for now, simply move to object
     cmp rcx, 0
     jg .copy_blockq
-    ; size < 0 -> need to move rsi to dest
-    cmp rcx, -8
-    jne .not64q
+
+    
+    lea rax, [.jump_table]
+    jmp qword [rax + rcx * 8]
+        
+    
+section ".data" readable writable align 64
+align 64
+    dq .query64
+    dq 0
+    dq 0
+    dq 0
+    dq .query32
+    dq 0
+    dq .query16
+    dq .query8
+.jump_table:
+
+section ".text" code readable executable align 16
+align 16
+.query64:
     mov rdi, [rsi + rdx]
     ret
-.not64q:
-    cmp rcx, -4
-    jne .not32q
+.query32:
     mov edi, [rsi + rdx]
     ret
-.not32q:
-    cmp rcx, -2
-    jne .not16q
+.query16:
     movzx edi, WORD [rsi + rdx]
     ret
-.not16q:
+.query8:
     movzx edi, BYTE [rsi + rdx]
     ret
+    
+align 16
 .copy_blockq:
     add rsi, rdx
     rep movsb

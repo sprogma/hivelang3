@@ -921,9 +921,6 @@ private:
 
     vector<OperationBlock *> toBuild;
 
-    // registers configuraion
-    static constexpr int64_t registersCount = 5;
-
     bool isSigned(int64_t name)
     {
         return SCALAR_TYPE(varType(name)->_scalar.kind) == SCALAR_I;
@@ -1016,7 +1013,11 @@ private:
         [rdi is used in api calls, becouse of assumptions of all api calls be after LOAD_INPUT]
     */
 
-    const int64_t registers[5] = {0b1000, 0b1001, 0b1010, 0b1011, 0b1100};
+
+    // registers configuraion
+    static constexpr int64_t registersCount = 9;
+    // all other registers
+    const int64_t registers[registersCount] = {0b0011, 0b1000, 0b1001, 0b1010, 0b1011, 0b1100, 0b1101, 0b1110, 0b1111};
 
     const pair<int64_t, int64_t> Register(int64_t var)
     {
