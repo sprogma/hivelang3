@@ -1038,6 +1038,11 @@ private:
 
     void BuildFn(WorkerDeclarationContext *wk, int64_t workerId)
     {
+        if (wk->content == NULL)
+        {
+            return;
+        }
+        
         current = wk;
 
         // update call instructions

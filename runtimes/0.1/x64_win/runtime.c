@@ -277,7 +277,6 @@ void CallObject(BYTE *param, int64_t workerId)
 
 void PrintObject(struct object *object_ptr)
 {
-    printf("[%p]", object_ptr);
     BYTE *ptr = (BYTE *)object_ptr;
     switch (ptr[-1])
     {
@@ -400,6 +399,24 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 break;
             }
             case 4: // DLL call
+                // read positions and replace calls
+                int64_t count = *(int64_t *)pos;
+                pos += 8;
+                for (int64_t i = 0; i < count; ++i)
+                {
+                    log("set to %lld ", *(int64_t *)pos);
+                    uint64_t *callPosition = (uint64_t *)(mem + *(int64_t *)pos);
+                    pos += 8;
+                    switch (type)
+                    {
+                        case 0: *callPosition = (uint64_t)&fastPushObject; break;
+                        case 1: *callPosition = (uint64_t)&fastQueryObject; break;
+                        case 2: *callPosition = (uint64_t)&fastNewObject; break;
+                        case 3: *callPosition = (uint64_t)&fastCallObject; break;
+                    }
+                    log("ptr=%p\n", (void *)*callPosition);
+                }
+                break;
                 /*   
                     i64 name_len
                     byte[] name
