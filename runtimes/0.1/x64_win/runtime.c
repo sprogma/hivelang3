@@ -29,7 +29,7 @@ extern int64_t setjmpUN(struct jmpbuf *);
 
 struct waiting_worker
 {
-    int64_t context[5]; // registers
+    int64_t context[9]; // registers
     // return address
     void *ptr;
     // object awaiting data
@@ -44,7 +44,7 @@ struct waiting_worker
 
 struct queued_worker
 {
-    int64_t context[5]; // registers
+    int64_t context[9]; // registers
     // return address
     void *ptr;
     // object awaiting data
@@ -98,7 +98,7 @@ struct worker_info
     void *ptr;
     int64_t inputSize;
 };
-struct worker_info Workers[10] = {};
+struct worker_info Workers[100] = {};
 
 
 struct object *object_array[1000] = {};
@@ -115,7 +115,7 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param)
     {
         case OBJECT_ARRAY:
         {
-            log("Object of %lld bytes, element of size %lld allocated\n", size, param);
+            log("Array of %lld bytes, element of size %lld allocated\n", size, param);
             struct object_array *res = malloc(sizeof(*res) + size);
             memcpy(res->_, &param, 8);
             res->type = type;
@@ -194,7 +194,7 @@ void SheduleWorker()
 {
     setjmpUN(&ShedulerBuffer);
 
-    log("Sheduling new worker\n");
+    log("\nSheduling new worker\n");
 
     // call next worker
     if (queue_len > 0)
@@ -277,6 +277,7 @@ void CallObject(BYTE *param, int64_t workerId)
 
 void PrintObject(struct object *object_ptr)
 {
+    printf("[%p]", object_ptr);
     BYTE *ptr = (BYTE *)object_ptr;
     switch (ptr[-1])
     {
@@ -478,7 +479,7 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; ++i)
     {
         input[i - 1] = atoll(argv[i]);
-        log("%lld ", input[i]);
+        log("%lld ", input[i - 1]);
     }
     log("\n");
     #else
@@ -520,6 +521,11 @@ int main(int argc, char **argv)
     //     printf("%lld ", ((int64_t *)inputId)[i]);
     // }
     // printf("\n");
+    
+    if (wait_list_len != 0)
+    {
+        printf("!!!ALL EXISTING WORKERS ARE DEADLOCKED!!!\n");
+    }
 
     struct object_promise *p = (struct object_promise *)(resCodeId - DATA_OFFSET(struct object_promise));
     if (p->ready)

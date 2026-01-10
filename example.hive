@@ -1,85 +1,79 @@
 [export:yes]
 [integer64:yes]
-(i64[] a)dft(i32? res)
+(i64[] a)main(i32? res)
 {
-    i64 mod, root, root_1, root_pw;
-    mod <- 7340033;
-    root <- 5;
-    root_1 <- 4404020;
-    root_pw <- 1 << 20;
-
-    i64 i, j, n;
-    n <- ?a;
-    i <- 1;
-    j <- 0;
-
-    while i < n
+    (a, 0, ?a)sort(tmpR);
+    i64[] tmp;
+    tmp <- ?tmpR;
+    i64 x, sum;
+    sum <- x <- 0;
+    while x < ?tmp
     {
-        i64 bit;
-        bit <- n >> 1;
-        while j >= bit
-        {
-            j <- j - bit;
-            bit <- bit >> 1;
-        }
-        j <- j + bit;
-        match i < j
-        {
-            (i32)-1 {
-                i64 t;
-                t <- a[j];
-                a[j] <- a[i];
-                a[i] <- t;
-            }
-        }
-        i <- i + 1;
+        sum <- sum + tmp[x] * x;
+        x <- x + 1;
     }
-
-    i64 len;
-    len <- 2;
-    while len <= n
-    {
-        i64 x, wlen;
-        wlen <- root;
-        x <- len;
-        while x < root_pw
-        {
-            wlen <- (wlen * wlen) % mod;
-            x <- x << 1;
-        }
-        x <- 0;
-        while x < n
-        {
-            i64 w, J, lenh;
-            w <- 1;
-            J <- 0;
-            lenh <- len / 2;
-            while J < lenh
-            {
-                i64 u, v;
-                u <- a[x + J];
-                v <- a[x + J + lenh] * w % mod;
-                a[x + J] <- (u + v) % mod;
-                a[x + J + lenh] <- (u - v) % mod;
-                w <- w * wlen % mod;
-                J <- J + 1;
-            }
-            x <- x + len;
-        }
-        len <- len << 1;
-    }
-
-    i64 z, sum;
-    sum <- z <- 0;
-    while z < n
-    {
-        a[z] <- (a[z] + mod) % mod;
-        sum <- sum + a[z];
-        z <- z + 1;
-    }
-
     res <- (i32)sum;
 }
  
+
+
+[integer64:yes]
+(i64[] a, i64[] b)merge(i64[]? ret)
+{
+    i64 alen, blen, i, j;
+    alen <- ?a;
+    blen <- ?b;
+    i64[] res;
+    res <- new i64[](alen + blen);
+    i <- j <- 0;
+    while i < alen && j < blen
+    {
+        match a[i] < b[j]
+        {
+            (i32)-1 {
+                res[i + j] <- a[i];
+                i <- i + 1;
+            }
+            (i32)0 {
+                res[i + j] <- b[j];
+                j <- j + 1;
+            }
+        }
+    }
+    while i < alen
+    {
+        res[i + j] <- a[i];
+        i <- i + 1;
+    }
+    while j < blen
+    {
+        res[i + j] <- b[j];
+        j <- j + 1;
+    }
+    ret <- res;
+}
+
+
+[integer64:yes]
+(i64[] a, i64 l, i64 r)sort(i64[]? res)
+{
+    match (r - l) <= 1
+    {
+        (i32)-1 {
+            i64[] x;
+            x <- new i64[](1);
+            x[0] <- a[l];
+            res <- x;
+        }
+        (i32)0 {
+            i64 m;
+            m <- (l + r) / 2;
+            (a, l, m)sort(t1);
+            (a, m, r)sort(t2);
+            (?t1, ?t2)merge(tmp);
+            res <- ?tmp;
+        }
+    }
+}
 
 

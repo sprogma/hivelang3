@@ -113,6 +113,7 @@ struct jmpInstruction
 {
     asm_operation_jmp jmpType;
     BYTE *codePos;
+    int64_t codeOrder;
     OperationBlock *destOp;
 };
 
@@ -908,16 +909,22 @@ private:
     map<int64_t, int64_t> regTable;
     map<int64_t, int64_t> memTable;
     int64_t usedMemory;
-    set<OperationBlock *> usedLabels;
     map<OperationBlock *, BYTE *> addressTable;
+    map<OperationBlock *, int64_t> orderTable;
     vector<jmpInstruction> JumpInstructions;
+
+    struct header_entry
+    {
+        int64_t position;
+        int64_t order;
+    };
 
     // header key, value
     #define HEADER_ENTRY_PUSH_OBJECT 0
     #define HEADER_ENTRY_QUERY_OBJECT 1
     #define HEADER_ENTRY_NEW_OBJECT 2
     #define HEADER_ENTRY_CALL_OBJECT 3
-    map<BYTE, vector<int64_t>> header;
+    map<BYTE, vector<header_entry>> header;
 
     vector<OperationBlock *> toBuild;
 
@@ -926,9 +933,9 @@ private:
         return SCALAR_TYPE(varType(name)->_scalar.kind) == SCALAR_I;
     }
 
-    bool isScalar(int64_t name)
+    bool isApiScalar(int64_t name)
     {
-        return varType(name)->type == TYPE_SCALAR;
+        return (varType(name)->type != TYPE_RECORD && varType(name)->type != TYPE_UNION);
     }
 
     TypeContext *varType(int64_t name)
@@ -1067,10 +1074,7 @@ private:
         analyzer = new RegisterAnalizator(wk);
 
         // get used labels
-        addressTable.clear();
-        usedLabels.clear();
         JumpInstructions.clear();
-        UpdateUsedLabels(wk->content->entry);
         
         // generate code
 
@@ -1084,6 +1088,7 @@ private:
         else
         {
             addressTable.clear();
+            orderTable.clear();
 
             toBuild.push_back(wk->content->entry);
             while (!toBuild.empty())
@@ -1116,17 +1121,6 @@ private:
                     offset += type->size;
                 }
             }
-        }
-    }
-
-    void UpdateUsedLabels(OperationBlock *op)
-    {
-        if (op == NULL) return;
-        if (!addressTable.insert({op, 0}).second) { usedLabels.insert(op); return; }
-        if (op->next.size() > 0)
-        {
-            UpdateUsedLabels(op->next[0]);
-            for (auto &n : op->next | views::drop(1)) { UpdateUsedLabels(n); usedLabels.insert(n); }
         }
     }
 
@@ -1196,13 +1190,18 @@ private:
             pbyte(0xC3);
             return;
         }
+
+        int64_t currentOrder = orderTable.size();
+        
         // if already this block is compiled - jump to it
         // TODO: here can take some place of "assembly inlining"
         if (!addressTable.insert({op, assemblyEnd}).second) 
         { 
-            JumpInstructions.push_back({ASM_JMP, assemblyEnd, op});
+            JumpInstructions.push_back({ASM_JMP, assemblyEnd, currentOrder, op});
             return;
         }
+
+        orderTable[op] = currentOrder;
 
         // if instruction have many next:
         #define ABEL_BINOP(T) \
@@ -1238,13 +1237,13 @@ private:
             case OP_JZ:
             {
                 printRR(ASM_TEST, Register(op->data[0]), Register(op->data[0]));
-                JumpInstructions.push_back({ASM_JZ, assemblyEnd, op->next[1]});
+                JumpInstructions.push_back({ASM_JZ, assemblyEnd, currentOrder, op->next[1]});
                 break;
             }   
             case OP_JNZ: 
             {
                 printRR(ASM_TEST, Register(op->data[0]), Register(op->data[0]));
-                JumpInstructions.push_back({ASM_JNZ, assemblyEnd, op->next[1]});
+                JumpInstructions.push_back({ASM_JNZ, assemblyEnd, currentOrder, op->next[1]});
                 break;
             }
             case OP_LOAD:
@@ -1280,7 +1279,7 @@ private:
                 InsertInteger({2, 8}, op->data[0]);
                 InsertMove({6, 8}, {5, 8}, false);
                 printRC(ASM_ADD_RC, {6, 8}, -callTableSize);
-                header[HEADER_ENTRY_CALL_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                header[HEADER_ENTRY_CALL_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 break;
             }
                 
@@ -1309,7 +1308,7 @@ private:
                 ExternTo64Bit(Register(op->data[1]), isSigned(op->data[1]));
                 printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
                 InsertInteger({7, 8}, varType(op->data[0])->_vector.base->size);
-                header[HEADER_ENTRY_NEW_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                header[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 InsertMove(Register(op->data[0]), {0, 8}, false);
                 break;
             }
@@ -1321,7 +1320,7 @@ private:
                 InsertInteger({1, 8}, 0x02);
                 InsertInteger({2, 8}, varType(op->data[0])->_vector.base->size);
                 InsertMove({7, 8}, {2, 8}, false);
-                header[HEADER_ENTRY_NEW_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                header[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 InsertMove(Register(op->data[0]), {0, 8}, false);
                 break;
             }
@@ -1339,7 +1338,7 @@ private:
             case OP_PUSH_ARRAY:
             {
                 // rcx=size rdx=offset rdi=object rsi=value
-                if (isScalar(op->data[4]))
+                if (isApiScalar(op->data[4]))
                 {
                     InsertInteger({1, 8}, -varSize(op->data[4]));
                     ExternTo64Bit(Register(op->data[1]), isSigned(op->data[1]));
@@ -1347,7 +1346,7 @@ private:
                     if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertMove({7, 8}, Register(op->data[0]), false);
                     InsertMove({6, 8}, Register(op->data[4]), false);
-                    header[HEADER_ENTRY_PUSH_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    header[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 else
                 {
@@ -1357,7 +1356,7 @@ private:
                     if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertMove({7, 8}, Register(op->data[0]), false);
                     InsertInteger({6, 8}, memTable[op->data[4]]);
-                    header[HEADER_ENTRY_PUSH_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    header[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1366,13 +1365,13 @@ private:
             case OP_PUSH_PROMISE:
             {
                 // rcx=size rdx=offset rdi=object rsi=value
-                if (isScalar(op->data[1]))
+                if (isApiScalar(op->data[1]))
                 {
                     InsertInteger({1, 8}, -varSize(op->data[1]));
                     InsertInteger({2, 8}, 0);
                     InsertMove({7, 8}, Register(op->data[0]), false);
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_PUSH_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    header[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 else
                 {
@@ -1380,7 +1379,7 @@ private:
                     InsertInteger({2, 8}, 0);
                     InsertMove({7, 8}, Register(op->data[0]), false);
                     InsertInteger({6, 8}, memTable[op->data[1]]);
-                    header[HEADER_ENTRY_PUSH_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    header[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1399,14 +1398,14 @@ private:
             case OP_QUERY_INDEX:
             {
                 // rcx=size rdx=offset rdi=value rsi=object
-                if (isScalar(op->data[0]))
+                if (isApiScalar(op->data[0]))
                 {
                     InsertInteger({1, 8}, -varSize(op->data[0]));
                     ExternTo64Bit(Register(op->data[4]), isSigned(op->data[4]));
                     printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[4], 8), varType(op->data[1])->_vector.base->size);
                     if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                     InsertMove(Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1417,7 +1416,7 @@ private:
                     if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertInteger({7, 8}, memTable[op->data[0]]);
                     InsertMove({6, 8}, Register(op->data[4]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1425,12 +1424,12 @@ private:
             case OP_QUERY_ARRAY:
             {
                 // rcx=size rdx=offset rdi=value rsi=object
-                if (isScalar(op->data[0]))
+                if (isApiScalar(op->data[0]))
                 {
                     InsertInteger({1, 8}, -varSize(op->data[0]));
                     InsertInteger({2, 8}, -16);
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                     InsertMove(Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1439,7 +1438,7 @@ private:
                     InsertInteger({2, 8}, -16);
                     InsertInteger({7, 8}, memTable[op->data[0]]);
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1447,12 +1446,12 @@ private:
             case OP_QUERY_PROMISE:
             {
                 // rcx=size rdx=offset rdi=value rsi=object
-                if (isScalar(op->data[0]))
+                if (isApiScalar(op->data[0]))
                 {
                     InsertInteger({1, 8}, -varSize(op->data[0]));
                     InsertInteger({2, 8}, 0);
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                     InsertMove(Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1461,7 +1460,7 @@ private:
                     InsertInteger({2, 8}, 0);
                     InsertInteger({7, 8}, memTable[op->data[0]]);
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back(printCALL(0x0) - assemblyCode);
+                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1543,12 +1542,12 @@ private:
         vector<int64_t> shortJmp(JumpInstructions.size(), 0); // use everythere shortest form
         vector<BYTE *> currentPosition(JumpInstructions.size());
         map<OperationBlock *, BYTE *> opPosition;
-        map<BYTE *,int64_t> offsets;
+        map<pair<BYTE *, int64_t>, int64_t> offsets;
         int64_t totalAddSize = 0;
 
 
         stable_sort(JumpInstructions.begin(), JumpInstructions.end(), [](const jmpInstruction &a, const jmpInstruction &b){
-            return a.codePos < b.codePos;
+            return a.codePos < b.codePos || (a.codePos == b.codePos && a.codeOrder < b.codeOrder);
         });
 
 
@@ -1557,7 +1556,7 @@ private:
         {
             // update positions
             {
-                offsets[NULL] = 0;
+                offsets[{NULL, 0}] = 0;
                 
                 int64_t lastOffset = 0;
                 int64_t id = 0;
@@ -1567,7 +1566,7 @@ private:
                 {
                     currentPosition[id] = i.codePos + lastOffset;
                     lastOffset += JMPsize(i.jmpType, 0, shortJmp[id]).first;
-                    offsets[i.codePos] = lastOffset;
+                    offsets[{i.codePos, i.codeOrder}] = lastOffset;
                     
                     id++;
                 }
@@ -1579,7 +1578,7 @@ private:
                 opPosition.clear();
                 for (auto &[op, addr] : addressTable)
                 {
-                    int64_t opOffset = prev(offsets.upper_bound(addr))->second;
+                    int64_t opOffset = prev(offsets.upper_bound({addr, orderTable[op]}))->second;
                     opPosition[op] = addr + opOffset;
                 }
             }
@@ -1618,10 +1617,14 @@ private:
                     memmove(codeDest, codeSrc, blockSize);
                 }
 
-                printf("inserted %lld to %lld ... [to %lld]\n", shortJmp[id], currentPosition[id] - assemblyCode, opPosition[i.destOp] - currentPosition[id]);
+                printf("inserted %lld to %lld ... [jmp to %lld [+%lld]] [to instruction %p]\n", shortJmp[id], currentPosition[id] - assemblyCode, opPosition[i.destOp] - assemblyCode, opPosition[i.destOp] - currentPosition[id], i.destOp);
                 // insert jump instruction
                 codeDest -= JMPsize(i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]).first;
+                
                 assemblyEnd = codeDest;
+                
+                assert(codeDest - assemblyCode == currentPosition[id] - assemblyCode);
+                
                 assert(printJMP(i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]) == shortJmp[id]);
                 
                 id--;
@@ -1632,15 +1635,15 @@ private:
             {
                 for (auto &p : v)
                 {                   
-                    int64_t opOffset = prev(offsets.upper_bound(assemblyCode + p))->second;
-                    p += opOffset;
+                    int64_t opOffset = prev(offsets.upper_bound({assemblyCode + p.position, p.order}))->second;
+                    p.position += opOffset;
                 }
             }
 
             // update addressTable
             for (auto &[k, v] : addressTable)
             {
-                int64_t opOffset = prev(offsets.upper_bound(v))->second;
+                int64_t opOffset = prev(offsets.upper_bound({v, orderTable[k]}))->second;
                 v += opOffset;
             }
 
@@ -1674,7 +1677,7 @@ private:
             buf += 8;
             for (auto &pos : value)
             {
-                *(uint64_t *)buf = pos;
+                *(uint64_t *)buf = pos.position;
                 buf += 8;
             }
         }

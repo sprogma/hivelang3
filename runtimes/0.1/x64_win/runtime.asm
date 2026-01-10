@@ -40,6 +40,10 @@ macro StoreContext dest {
     mov QWORD [dest + 16], r10
     mov QWORD [dest + 24], r11
     mov QWORD [dest + 32], r12
+    mov QWORD [dest + 40], rbx
+    mov QWORD [dest + 48], r13
+    mov QWORD [dest + 56], r14
+    mov QWORD [dest + 64], r15
 }
 
 macro LoadContext dest {
@@ -48,6 +52,10 @@ macro LoadContext dest {
     mov r10, QWORD [dest + 16]
     mov r11, QWORD [dest + 24]
     mov r12, QWORD [dest + 32]
+    mov rbx, QWORD [dest + 40]
+    mov r13, QWORD [dest + 48]
+    mov r14, QWORD [dest + 56]
+    mov r15, QWORD [dest + 64]
 }
 
 macro EnterCCode {
@@ -201,8 +209,12 @@ fastQueryObject:
 
     ; if it is promise, and doesn't set - start await
     cmp BYTE [rsi - 1], 2
+    jne .not_promise
+    
+    cmp BYTE [rsi - 2], 0
     je .await_promise
     
+.not_promise:
     ; for now, simply move to object
     cmp rcx, 0
     jg .copy_blockq

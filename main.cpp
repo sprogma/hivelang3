@@ -35,9 +35,19 @@ int main(int argc, char **argv)
         }
     }
 
+
     
-    const char *filename = "example.hive";
+    const char *filename = "D:/mipt/lang3/example.hive";
+    if (configs.contains("input_file"))
+    {
+        // filename = configs["input_file"].c_str();
+    }
     FILE *f = fopen(filename, "r");
+    if (f == NULL)
+    {
+        printf("Error: input file %s not found\n", filename);
+        return 1;
+    }
     char *code = (char *)malloc(1024 * 1024);
     code[fread(code, 1, 1024 * 1024, f)] = 0;
     fclose(f);
@@ -73,6 +83,11 @@ int main(int argc, char **argv)
     }
     
     printf("Ast builded\n");
+
+    if (configs.contains("syntax-only"))
+    {
+        return 0;
+    }
 
     for (auto &[fn, key] : Code->workers)
     {
