@@ -7,6 +7,7 @@ public fastCallObject
 public fastQueryObject
 
 public ExecuteWorker
+public DllCall
 public context
 
 
@@ -262,7 +263,7 @@ align 16
     mov rax, [rsp]
     EnterCCode
 
-    sub rsp, 16 ; more shadow bytes for 2 registers
+    sub rsp, 32 ; more shadow bytes for 2 registers
 
     ; save context
     StoreContext context
@@ -274,7 +275,7 @@ align 16
     call QueryObject
     mov rdi, rax
     
-    add rsp, 16
+    add rsp, 32
     
     LeaveCCode
     ret
@@ -318,7 +319,11 @@ ExecuteWorker:
     push r15
     push rdi
     push rsi
+    push rbx
+    push rbp
+
     
+
     mov rbp, r8
     mov rdi, rdx
     mov rsi, r9
@@ -328,52 +333,17 @@ ExecuteWorker:
     ; must be 8 bytes UNaligned before call
     call rcx
 
-    pop rsi
-    pop rdi
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    ret
-    
-callExample:
-    sub rsp, 8
-    push rbp
-
-
-    push rcx
-
-    mov rcx, 2
-    mov rdx, 8
-    mov r8, 8
-    
-    sub rsp, 32 ; shadow space?
-    call NewObject
-    add rsp, 32
-
-    ; prepare args
-    lea rbp, [runtime_data]
-    lea rdi, [invoke_data]
-    
-    mov QWORD [rdi + 4], rax
-    
-    ; mov DWORD [rdi + 4], 13
-    mov DWORD [rdi + 0], 17
-    
-    pop rax
-    call rax
-    
-    
-    pop rsi
-    pop rdi
-    pop r15
-    pop r14
-    pop r13
-    pop r12
     
     pop rbp
-    add rsp, 8
+    pop rbx
+    pop rsi
+    pop rdi
+    pop r15
+    pop r14
+    pop r13
+    pop r12
     ret
+    
 
 
 public setjmpUN
@@ -382,7 +352,7 @@ public longjmpUN
 ; rcx = ptr to jmp_buf
 setjmpUN:
 ; volatile regs
-mov [rcx +  0], rbx
+mov [rcx     ], rbx
 mov [rcx +  8], rbp
 mov [rcx + 16], rdi
 mov [rcx + 24], rsi
@@ -402,7 +372,7 @@ ret
 ; rcx = ptr to jmp_buf, rdx = value
 longjmpUN:
 ; load regs
-mov rbx, [rcx +  0]
+mov rbx, [rcx     ]
 mov rbp, [rcx +  8]
 mov rdi, [rcx + 16]
 mov rsi, [rcx + 24]
@@ -414,3 +384,69 @@ mov rsp, [rcx + 64]
 ; return
 mov rax, rdx
 jmp QWORD [rcx + 72]
+
+
+
+; c style function DllCall(struct dll_call_data *data, int64_t *input_data, void *promise)
+; struct dll_call_data
+;    void *loaded_function;      // + 0
+;    int64_t output_size;        // + 8
+;    int64_t sizes_len;          // +16
+;    int64_t *sizes;             // +24
+;    int64_t call_stack_usage;   // +32 // precalculated stack usage value
+DllCall:
+    push r12
+    push r13
+    push r14
+    push r15
+    push rdi
+
+    mov r12, QWORD [rcx + 32]
+    mov r13, r8
+    mov r14, QWORD [rcx + 8]
+    sub rsp, r12 
+
+    mov rdi, rdx
+    mov rax, QWORD [rcx]
+
+    ; move data as needed
+    mov rcx, [rdi + 0]
+    mov rdx, [rdi + 8]
+    mov r8, [rdi + 16]
+    mov r9, [rdi + 24]
+    ; TODO: move args to stack
+
+    ; call dll entry
+    call rax
+
+    ; if result size is 1 2 4 8 or 16 - save result
+    test r13, r13
+    jz .noRet
+    mov BYTE [r13 - 2], 1
+    cmp r14, 1
+    jne .not1
+    mov [r13], dl
+    jmp .noRet
+.not1:
+    cmp r14, 2
+    jne .not2
+    mov [r13], dx
+    jmp .noRet
+.not2:
+    cmp r14, 4
+    jne .not4
+    mov [r13], edx
+    jmp .noRet
+.not4:
+    mov [r13], rdx
+.noRet:
+    add rsp, r12
+
+    ; restore volatile args
+    pop rdi
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    ret
+    

@@ -51,6 +51,7 @@ public:
         for (auto &[fn, key] : state->workers)
         {
             if (fn->content == NULL) continue;
+                
             
             double value = 0.0;
             for (auto &op : fn->content->code)
@@ -104,7 +105,7 @@ public:
 
                 bool optimize = cost[wk] < agression || (calls[wk] == 1 && cost[wk] < agression * one_call_multipler);
                 
-                if (optimize && !wk->attributes.contains("no_inline"))
+                if (optimize && !wk->attributes.contains("noinline"))
                 {
                     cost[fn] += cost[wk];
                     

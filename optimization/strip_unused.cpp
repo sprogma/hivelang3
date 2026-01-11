@@ -26,7 +26,7 @@ public:
             notCalled.insert(fn);
         }
 
-        /* count is called */
+        /* count is called */        
         for (auto &[fn, key] : state->workers)
         {
             if (fn->attributes.find("export") != fn->attributes.end())
@@ -37,7 +37,7 @@ public:
 
         for (auto &fn : notCalled)
         {
-            printf("not used function %s\n", fn->name.c_str());
+            printf("not used function %s [! waring, it may be inlined]\n", fn->name.c_str());
             state->workers.erase(fn);
         }
     }

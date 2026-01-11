@@ -913,7 +913,7 @@ private:
     map<OperationBlock *, int64_t> orderTable;
     vector<jmpInstruction> JumpInstructions;
 
-    struct header_entry
+    struct api_call_entry
     {
         int64_t position;
         int64_t order;
@@ -924,7 +924,18 @@ private:
     #define HEADER_ENTRY_QUERY_OBJECT 1
     #define HEADER_ENTRY_NEW_OBJECT 2
     #define HEADER_ENTRY_CALL_OBJECT 3
-    map<BYTE, vector<header_entry>> header;
+    map<BYTE, vector<api_call_entry>> runtimeApiHeader;
+    
+    #define HEADER_ENTRY_DLL_IMPORT 4
+    // worker id -> vector of input sizes + output size
+    struct dll_import_entry
+    {
+        int64_t output;
+        vector<int64_t> inputs;
+        string library;
+        string entry;
+    };
+    map<int64_t, dll_import_entry> dllImportHeader;
 
     vector<OperationBlock *> toBuild;
 
@@ -1040,6 +1051,31 @@ private:
     {
         if (wk->content == NULL)
         {
+            // if this function is extern, create it's header
+            if (wk->attributes.contains("dllimport"))
+            {
+                string &lib = wk->attributes["dllimport"];
+                string entry = (wk->attributes.contains("dllimport.entry") ? wk->attributes["dllimport.entry"] : wk->name);
+                if (wk->outputs.size() > 1)
+                {
+                    printf("Error: DLLIMPORT function have more than 1 return argument\n");
+                    return;
+                }
+                if (!wk->outputs.empty() && wk->outputs[0].second->type != TYPE_PROMISE)
+                {
+                    printf("Error: DLLIMPORT function's return argument isn't promise\n");
+                    return;
+                }
+                int64_t out_size = (wk->outputs.empty() ? -1 : wk->outputs[0].second->_vector.base->size);
+                // generate parameter sizes
+                vector<int64_t> sizes;
+                for (auto &[name, type] : wk->inputs)
+                {
+                    sizes.push_back(type->size);
+                }
+                // for now, there is no extra marshalling
+                dllImportHeader[workerId] = {out_size, sizes, lib, entry};
+            }
             return;
         }
         
@@ -1284,7 +1320,7 @@ private:
                 InsertInteger({2, 8}, op->data[0]);
                 InsertMove({6, 8}, {5, 8}, false);
                 printRC(ASM_ADD_RC, {6, 8}, -callTableSize);
-                header[HEADER_ENTRY_CALL_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                runtimeApiHeader[HEADER_ENTRY_CALL_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 break;
             }
                 
@@ -1313,7 +1349,7 @@ private:
                 ExternTo64Bit(Register(op->data[1]), isSigned(op->data[1]));
                 printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
                 InsertInteger({7, 8}, varType(op->data[0])->_vector.base->size);
-                header[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 InsertMove(Register(op->data[0]), {0, 8}, false);
                 break;
             }
@@ -1325,7 +1361,7 @@ private:
                 InsertInteger({1, 8}, 0x02);
                 InsertInteger({2, 8}, varType(op->data[0])->_vector.base->size);
                 InsertMove({7, 8}, {2, 8}, false);
-                header[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 InsertMove(Register(op->data[0]), {0, 8}, false);
                 break;
             }
@@ -1351,7 +1387,7 @@ private:
                     if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertMove({7, 8}, Register(op->data[0]), false);
                     InsertMove({6, 8}, Register(op->data[4]), false);
-                    header[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 else
                 {
@@ -1361,7 +1397,7 @@ private:
                     if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertMove({7, 8}, Register(op->data[0]), false);
                     InsertInteger({6, 8}, memTable[op->data[4]]);
-                    header[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1376,7 +1412,7 @@ private:
                     InsertInteger({2, 8}, 0);
                     InsertMove({7, 8}, Register(op->data[0]), false);
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 else
                 {
@@ -1384,7 +1420,7 @@ private:
                     InsertInteger({2, 8}, 0);
                     InsertMove({7, 8}, Register(op->data[0]), false);
                     InsertInteger({6, 8}, memTable[op->data[1]]);
-                    header[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1410,7 +1446,7 @@ private:
                     printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[4], 8), varType(op->data[1])->_vector.base->size);
                     if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                     InsertMove(Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1421,7 +1457,7 @@ private:
                     if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertInteger({7, 8}, memTable[op->data[0]]);
                     InsertMove({6, 8}, Register(op->data[4]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1434,7 +1470,7 @@ private:
                     InsertInteger({1, 8}, -varSize(op->data[0]));
                     InsertInteger({2, 8}, -16);
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                     InsertMove(Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1443,7 +1479,7 @@ private:
                     InsertInteger({2, 8}, -16);
                     InsertInteger({7, 8}, memTable[op->data[0]]);
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1456,7 +1492,7 @@ private:
                     InsertInteger({1, 8}, -varSize(op->data[0]));
                     InsertInteger({2, 8}, 0);
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                     InsertMove(Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1465,7 +1501,7 @@ private:
                     InsertInteger({2, 8}, 0);
                     InsertInteger({7, 8}, memTable[op->data[0]]);
                     InsertMove({6, 8}, Register(op->data[1]), false);
-                    header[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1636,7 +1672,7 @@ private:
             }
 
             // update header
-            for (auto &[k, v] : header)
+            for (auto &[k, v] : runtimeApiHeader)
             {
                 for (auto &p : v)
                 {                   
@@ -1675,7 +1711,7 @@ private:
         buf += 8;
 
         /* add relocations */
-        for (auto &[id, value] : header)
+        for (auto &[id, value] : runtimeApiHeader)
         {
             *buf++ = id;
             *(uint64_t *)buf = value.size();
@@ -1684,6 +1720,40 @@ private:
             {
                 *(uint64_t *)buf = pos.position;
                 buf += 8;
+            }
+        }
+
+        /* add dll import data */
+        {
+            for (auto &[id, data] : dllImportHeader)
+            {
+                printf("Export dllimport data for worker %lld\n", id);
+                *buf++ = HEADER_ENTRY_DLL_IMPORT;
+                /* export id */
+                *(uint64_t *)buf = id;
+                buf += 8;
+                /* export library name */
+                *(uint64_t *)buf = data.library.size();
+                buf += 8;
+                memcpy(buf, data.library.c_str(), data.library.size());
+                buf += data.library.size();
+                /* export function name */
+                *(uint64_t *)buf = data.entry.size();
+                buf += 8;
+                memcpy(buf, data.entry.c_str(), data.entry.size());
+                buf += data.entry.size();
+                /* export output size [base from promise] */
+                *(uint64_t *)buf = data.output;
+                buf += 8;
+                /* export inputs count */
+                *(uint64_t *)buf = data.inputs.size();
+                buf += 8;
+                /* export inputs */
+                for (auto &size : data.inputs)
+                {
+                    *(uint64_t *)buf = size;
+                    buf += 8;
+                }
             }
         }
 

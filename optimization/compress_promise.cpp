@@ -48,12 +48,12 @@ private:
                         if (op2->type == OP_QUERY_PROMISE)
                         {
                             // if data[1] == id - it is normal
-                            found = op2->data[0] == id;
+                            found |= op2->data[0] == id;
                         }
                         else if (op2->type == OP_PUSH_PROMISE)
                         {
                             // if data[0] == id - it is normal
-                            found = op2->data[1] == id;
+                            found |= op2->data[1] == id;
                         }
                         else
                         {    
@@ -87,7 +87,7 @@ private:
                             op2->type = OP_MOV;
                             op2->attributes.clear();
                         }
-                        if (op2->type == OP_NEW_PROMISE)
+                        if (op2->type == OP_NEW_PROMISE && op->data[0] == id)
                         {
                             // remove instruction
                             removeOp(fn, op2);

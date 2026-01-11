@@ -50,6 +50,27 @@ int main(int argc, char **argv)
     }
     char *code = (char *)malloc(1024 * 1024);
     code[fread(code, 1, 1024 * 1024, f)] = 0;
+
+    // TODO: better comments support
+    // replace all comments with spaces
+    {
+        char *s = code;
+        while (*s)
+        {
+            if (s[0] == '#')
+            {
+                while (*s && *s != '\n')
+                {
+                    *s++ = ' ';
+                }
+            }
+            else
+            {
+                s++;
+            }
+        }
+    }
+    
     fclose(f);
 
     grammar = generateGrammar();
