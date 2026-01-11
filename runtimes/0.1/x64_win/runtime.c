@@ -332,11 +332,13 @@ void SheduleWorker()
             }
             log("output is %p [->to promise %p]\n", output, result_promise);
             
-            DllCall(
-                queue[queue_len]->ptr,
-                call_data,
-                (output == NULL || data->output_size == -1 ? result_promise : output)
-            );
+            // DllCall(
+            //     queue[queue_len]->ptr,
+            //     call_data,
+            //     (output == NULL || data->output_size == -1 ? result_promise : output)
+            // );
+            printf("CALLING %p\n", ((void(*)(int64_t,void*,void*,int32_t))((struct dll_call_data *)queue[queue_len]->ptr)->loaded_function));
+            ((void(*)(int64_t,void*,void*,int32_t))((struct dll_call_data *)queue[queue_len]->ptr)->loaded_function)(0, L"A", L"B", 0x40);
 
             printf("returned\n");
 
@@ -578,6 +580,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 
                 // log data
                 log("worker %lld is dll call of library %s %s -> result function is %p\n", id, lib_name, entry, data->loaded_function);
+                log("stack usage: %lld\n", data->call_stack_usage);
                 log("output have size %lld [and args of total size %lld]\n", output_size, totalSize);
                 for (int64_t i = 0; i < sizes_len; ++i)
                 {

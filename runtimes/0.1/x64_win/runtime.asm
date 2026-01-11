@@ -425,20 +425,20 @@ DllCall:
     mov BYTE [r13 - 2], 1
     cmp r14, 1
     jne .not1
-    mov [r13], dl
+    mov [r13], al
     jmp .noRet
 .not1:
     cmp r14, 2
     jne .not2
-    mov [r13], dx
+    mov [r13], ax
     jmp .noRet
 .not2:
     cmp r14, 4
     jne .not4
-    mov [r13], edx
+    mov [r13], eax
     jmp .noRet
 .not4:
-    mov [r13], rdx
+    mov [r13], rax
 .noRet:
     add rsp, r12
 
