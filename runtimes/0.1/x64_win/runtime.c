@@ -1,4 +1,6 @@
-#include "inttypes.h"
+#define UNICODE 1
+#define _UNICODE 1
+
 #include "inttypes.h"
 #include "stdio.h"
 #include "windows.h"
@@ -40,12 +42,12 @@ extern int64_t setjmpUN(struct jmpbuf *);
 #endif
 
 
-BYTE buffer[1024 * 1024 * 64], *buffer_end = buffer;
+BYTE buffer[1024 * 1024 * 64] = {}, *buffer_end = buffer;
 
 void *myMalloc(int64_t size)
 {
     void *res = buffer_end;
-    buffer_end += size;
+    buffer_end += size + 100;
     return res;
 }
 
@@ -332,13 +334,13 @@ void SheduleWorker()
             }
             log("output is %p [->to promise %p]\n", output, result_promise);
             
-            // DllCall(
-            //     queue[queue_len]->ptr,
-            //     call_data,
-            //     (output == NULL || data->output_size == -1 ? result_promise : output)
-            // );
-            printf("CALLING %p\n", ((void(*)(int64_t,void*,void*,int32_t))((struct dll_call_data *)queue[queue_len]->ptr)->loaded_function));
-            ((void(*)(int64_t,void*,void*,int32_t))((struct dll_call_data *)queue[queue_len]->ptr)->loaded_function)(0, L"A", L"B", 0x40);
+            DllCall(
+                queue[queue_len]->ptr,
+                call_data,
+                (output == NULL || data->output_size == -1 ? result_promise : output)
+            );
+
+            // MessageBox(0, L"Text", L"Caption", 0x40);
 
             printf("returned\n");
 
@@ -568,7 +570,11 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 // set information
                 struct dll_call_data *data = myMalloc(sizeof(*data));
 
-                HINSTANCE lib = LoadLibrary(lib_name);
+                // int64_t num_chars = strlen(lib_name) + 1;
+                // wchar_t *utf16 = myMalloc(sizeof(*utf16) * num_chars);
+                // MultiByteToWideChar(CP_UTF8, 0, lib_name, -1, utf16, num_chars);
+
+                HINSTANCE lib = LoadLibraryA(lib_name);
                 data->loaded_function = GetProcAddress(lib, entry);
                 FreeLibrary(lib);
                 
@@ -585,7 +591,11 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 for (int64_t i = 0; i < sizes_len; ++i)
                 {
                     log("argument %lld have size %lld\n", i, sizes[i]);
-                }
+                }                
+
+                // void(*fn)(int32_t,void*,void*,int64_t) = data->loaded_function; //(void *)GetProcAddress(lib, "MessageBoxW");
+                // printf("CALLING %p\n", ((void(*)(int64_t,void*,void*,int32_t))(data)->loaded_function));
+                // fn(0, L"Text", L"Caption", 0x40);
                 break;
             case 16: // Worker positions
             {
@@ -620,6 +630,7 @@ int main(int argc, char **argv)
 {
     (void) argc;
     (void) argv;
+    
     // read file
     FILE *f = fopen("../../../res.bin", "rb");
     if (f == NULL)
