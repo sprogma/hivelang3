@@ -4,3 +4,4 @@ new(array + 3)Rule(3, "identifer", vector<RuleVariant>{RuleVariant(0, vector<Ato
 new(array + 4)Rule(4, "identifer_or_number", vector<RuleVariant>{RuleVariant(0, vector<Atom>{grammar_fn_identifer_or_number})});
 new(array + 5)Rule(5, "integer", vector<RuleVariant>{RuleVariant(0, vector<Atom>{grammar_fn_integer})});
 new(array + 6)Rule(6, "float", vector<RuleVariant>{RuleVariant(0, vector<Atom>{grammar_fn_float})});
+new(array + 7)Rule(7, "quotedstring", vector<RuleVariant>{RuleVariant(0, vector<Atom>{grammar_fn_quotedstring})});

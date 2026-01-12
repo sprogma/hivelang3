@@ -11,6 +11,7 @@ $id = @{
     identifer_or_number=4;
     integer=5;
     float=6;
+    quotedstring=7;
 }
 $special = $id.Keys
 $unbound = $special + (

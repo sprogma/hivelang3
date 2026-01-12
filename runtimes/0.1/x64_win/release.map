@@ -1,0 +1,92 @@
+ a
+
+ Timestamp is 69656042 (Mon Jan 12 23:57:38 2026)
+
+ Preferred load address is 0000000140000000
+
+ Start         Length     Name                   Class
+ 0001:00000000 000018ddH .text                   CODE
+ 0002:00000000 00000034H .rdata                  DATA
+ 0003:00000000 00000008H .data                   DATA
+ 0003:00000010 00003f78H .bss                    DATA
+ 0004:00000000 00000740H .data                   DATA
+
+  Address         Publics by Value              Rva+Base               Lib:Object
+
+ 0001:00000000       NewObject                  0000000140001000     runtime.o
+ 0001:000000c0       PushObject                 00000001400010c0     runtime.o
+ 0001:000000d0       QueryObject                00000001400010d0     runtime.o
+ 0001:00000170       WaitListWorker             0000000140001170     runtime.o
+ 0001:00000190       PrintObject                0000000140001190     runtime.o
+ 0001:000001a0       EnqueueWorker              00000001400011a0     runtime.o
+ 0001:000001c0       SheduleWorker              00000001400011c0     runtime.o
+ 0001:000004e0       StartNewWorker             00000001400014e0     runtime.o
+ 0001:00000540       CallObject                 0000000140001540     runtime.o
+ 0001:000005d0       LoadWorker                 00000001400015d0     runtime.o
+ 0001:00000b50       entry                      0000000140001b50     runtime.o
+ 0001:00000d50       myMalloc                   0000000140001d50     runtime_lib.o
+ 0001:00000dd0       myPrintf                   0000000140001dd0     runtime_lib.o
+ 0001:000010d0       myFree                     00000001400020d0     runtime_lib.o
+ 0001:000010e0       memset                     00000001400020e0     runtime_lib.o
+ 0001:000011c0       myMemcpy                   00000001400021c0     runtime_lib.o
+ 0001:00001330       myAtoll                    0000000140002330     runtime_lib.o
+ 0001:000013e0       myScanI64                  00000001400023e0     runtime_lib.o
+ 0001:000014a0       PrintI64                   00000001400024a0     runtime_lib.o
+ 0001:00001520       PrintI64H                  0000000140002520     runtime_lib.o
+ 0001:00001560       Print2H                    0000000140002560     runtime_lib.o
+ 0001:000015a0       init_lib                   00000001400025a0     runtime_lib.o
+ 0001:00001630       fastPushObject             0000000140002630     asm.o
+ 0001:00001676       fastQueryObject            0000000140002676     asm.o
+ 0001:0000174a       fastNewObject              000000014000274a     asm.o
+ 0001:0000177d       fastCallObject             000000014000277d     asm.o
+ 0001:000017b0       ExecuteWorker              00000001400027b0     asm.o
+ 0001:000017f7       setjmpUN                   00000001400027f7     asm.o
+ 0001:0000182a       longjmpUN                  000000014000282a     asm.o
+ 0001:00001853       DllCall                    0000000140002853     asm.o
+ 0002:00000030       __real@00000008            0000000140003030     runtime.o
+ 0002:00000034       ??_C@_1CC@DEIAIPBB@?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AAr?$AAe?$AAs?$AA?4?$AAb?$AAi?$AAn?$AA?$AA@ 0000000140003034     runtime.o
+ 0002:00000056       ??_C@_1FC@OGJDIOEJ@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAc?$AAa?$AAn?$AA?8?$AAt?$AA?5?$AAo?$AAp?$AAe?$AAn?$AA?5?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AAr?$AAe?$AAs?$AA?4?$AAb@ 0000000140003056     runtime.o
+ 0002:000000a8       ??_C@_1BI@DOGCPILG@?$AAE?$AAR?$AAR?$AAO?$AAR?$AA?5?$AA?$CF?$AAl?$AAl?$AAd?$AA?6?$AA?$AA@ 00000001400030a8     runtime_lib.o
+ 0002:000000c0       ??_C@_1BE@PAAAOKJI@?$AAr?$AAe?$AAt?$AAu?$AAr?$AAn?$AAe?$AAd?$AA?6?$AA?$AA@ 00000001400030c0     runtime.o
+ 0002:000000d4       ??_C@_1FG@DPFHIKFA@?$AA?$CB?$AA?$CB?$AA?$CB?$AAA?$AAL?$AAL?$AA?5?$AAE?$AAX?$AAI?$AAS?$AAT?$AAI?$AAN?$AAG?$AA?5?$AAW?$AAO?$AAR?$AAK?$AAE?$AAR?$AAS?$AA?5?$AAA?$AAR?$AAE?$AA?5?$AAD?$AAE?$AAA?$AAD@ 00000001400030d4     runtime.o
+ 0002:000001d0       __imp_CloseHandle          00000001400031d0     kernel32:KERNEL32.dll
+ 0002:000001d8       __imp_CreateFileW          00000001400031d8     kernel32:KERNEL32.dll
+ 0002:000001e0       __imp_ExitProcess          00000001400031e0     kernel32:KERNEL32.dll
+ 0002:000001e8       __imp_FreeLibrary          00000001400031e8     kernel32:KERNEL32.dll
+ 0002:000001f0       __imp_GetFileSizeEx        00000001400031f0     kernel32:KERNEL32.dll
+ 0002:000001f8       __imp_GetLastError         00000001400031f8     kernel32:KERNEL32.dll
+ 0002:00000200       __imp_GetProcAddress       0000000140003200     kernel32:KERNEL32.dll
+ 0002:00000208       __imp_GetStdHandle         0000000140003208     kernel32:KERNEL32.dll
+ 0002:00000210       __imp_LoadLibraryA         0000000140003210     kernel32:KERNEL32.dll
+ 0002:00000218       __imp_MultiByteToWideChar  0000000140003218     kernel32:KERNEL32.dll
+ 0002:00000220       __imp_ReadConsoleW         0000000140003220     kernel32:KERNEL32.dll
+ 0002:00000228       __imp_ReadFile             0000000140003228     kernel32:KERNEL32.dll
+ 0002:00000230       __imp_VirtualAlloc         0000000140003230     kernel32:KERNEL32.dll
+ 0002:00000238       __imp_WriteConsoleW        0000000140003238     kernel32:KERNEL32.dll
+ 0003:00000000       runningId                  0000000140004000     runtime.o
+ 0003:00000010       Workers                    0000000140004010     runtime.o
+ 0003:00000970       object_array               0000000140004970     runtime.o
+ 0003:000028b0       object_array_len           00000001400068b0     runtime.o
+ 0003:000028b8       ShedulerBuffer             00000001400068b8     runtime.o
+ 0003:00002908       wait_list_len              0000000140006908     runtime.o
+ 0003:00002910       queue_len                  0000000140006910     runtime.o
+ 0003:00002920       wait_list                  0000000140006920     runtime.o
+ 0003:00002c40       queue                      0000000140006c40     runtime.o
+ 0003:00002f60       buffer_end                 0000000140006f60     runtime_lib.o
+ 0003:00002f68       buffer                     0000000140006f68     runtime_lib.o
+ 0003:00002f70       commited                   0000000140006f70     runtime_lib.o
+ 0003:00002f78       hInput                     0000000140006f78     runtime_lib.o
+ 0003:00002f80       buf                        0000000140006f80     runtime_lib.o
+ 0003:00003f80       hOutput                    0000000140007f80     runtime_lib.o
+ 0004:00000400       context                    0000000140008400     asm.o
+
+ entry point at         0001:00000b50
+
+ Static symbols
+
+ 0001:00001630       .text                      0000000140002630     asm.o
+ 0001:00001650       .text                      0000000140002650     asm.o
+ 0001:000016a0       .text                      00000001400026a0     asm.o
+ 0004:00000000       .data                      0000000140008000     asm.o
+ 0004:000006c0       .data                      00000001400086c0     asm.o
+ 0004:00000700       .data                      0000000140008700     asm.o

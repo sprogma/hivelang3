@@ -351,79 +351,97 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             
             assert_type(newOp, "new_operator");
 
-            TypeContext *type = getType(ctx, newOp->nonTerm(0));
-            map<string, string> attributes = getAttributeList(ctx, newOp->nonTerm(1));
-            
-            vector<int> args;
-            for (auto &ch : newOp->nonTerm(2)->childs)
+            if (newOp->variant == 0)
             {
-                if (is(ch, "expression"))
+                TypeContext *type = getType(ctx, newOp->nonTerm(0));
+                map<string, string> attributes = getAttributeList(ctx, newOp->nonTerm(1));
+                
+                vector<int> args;
+                for (auto &ch : newOp->nonTerm(2)->childs)
                 {
-                    auto [code, pos] = buildExpression(ctx, ch);
-                    HANDLE_NOT_NULL(pos, ch);
-                    append(ops, code);
-                    args.push_back(pos);
+                    if (is(ch, "expression"))
+                    {
+                        auto [code, pos] = buildExpression(ctx, ch);
+                        HANDLE_NOT_NULL(pos, ch);
+                        append(ops, code);
+                        args.push_back(pos);
+                    }
                 }
+                
+                switch (type->type)
+                {
+                    case TYPE_UNION: 
+                    case TYPE_RECORD: 
+                    case TYPE_SCALAR: 
+                        printf("Error: can't use NEW expression with union/record/scalar types\n");
+                        logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                        return {{}, -1};
+                    case TYPE_CLASS: 
+                    {
+                        if (args.size() > 0)
+                        {
+                            printf("Error: NEW expression with class doesn't support field initialization for now\n");
+                            logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                            return {{}, -1};
+                        }
+                        int64_t resultPos = newTemp(ctx, type);
+                        append(ops, {OP_NEW_CLASS, {resultPos}, attributes});
+                        return {ops, resultPos};
+                    }
+                    case TYPE_ARRAY:
+                    {
+                        if (args.size() != 1)
+                        {
+                            printf("Error: NEW expression with array need 1 parameter - length\n");
+                            logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                            return {{}, -1};
+                        }
+                        int64_t resultPos = newTemp(ctx, type);
+                        append(ops, {OP_NEW_ARRAY, {resultPos, args[0]}, attributes});
+                        return {ops, resultPos};
+                    }
+                    case TYPE_PIPE: 
+                    {
+                        if (args.size() > 0)
+                        {
+                            printf("Error: NEW expression with pipe can't take any parameters\n");
+                            logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                            return {{}, -1};
+                        }
+                        int64_t resultPos = newTemp(ctx, type);
+                        append(ops, {OP_NEW_PIPE, {resultPos}, attributes});
+                        return {ops, resultPos};
+                    }
+                    case TYPE_PROMISE: 
+                    {
+                        if (args.size() > 0)
+                        {
+                            printf("Error: NEW expression with promise can't take any parameters\n");
+                            logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                            return {{}, -1};
+                        }
+                        int64_t resultPos = newTemp(ctx, type);
+                        append(ops, {OP_NEW_PROMISE, {resultPos}, attributes});
+                        return {ops, resultPos};
+                    } 
+                }
+                return {{}, -1};
             }
-            
-            switch (type->type)
+            else
             {
-                case TYPE_UNION: 
-                case TYPE_RECORD: 
-                case TYPE_SCALAR: 
-                    printf("Error: can't use NEW expression with union/record/scalar types\n");
+                // this is new string
+                // get type
+                TypeContext *type = getType(ctx, newOp->nonTerm(0));
+                map<string, string> attributes = getAttributeList(ctx, newOp->nonTerm(1));
+                if (type->type != TYPE_ARRAY)
+                {
+                    printf("Error: NEW expression string variant must be used only with arrays\n");
                     logError(ctx->filename, ctx->code, newOp->start, newOp->end);
                     return {{}, -1};
-                case TYPE_CLASS: 
-                {
-                    if (args.size() > 0)
-                    {
-                        printf("Error: NEW expression with class doesn't support field initialization for now\n");
-                        logError(ctx->filename, ctx->code, newOp->start, newOp->end);
-                        return {{}, -1};
-                    }
-                    int64_t resultPos = newTemp(ctx, type);
-                    append(ops, {OP_NEW_CLASS, {resultPos}, attributes});
-                    return {ops, resultPos};
                 }
-                case TYPE_ARRAY:
-                {
-                    if (args.size() != 1)
-                    {
-                        printf("Error: NEW expression with array need 1 parameter - length\n");
-                        logError(ctx->filename, ctx->code, newOp->start, newOp->end);
-                        return {{}, -1};
-                    }
-                    int64_t resultPos = newTemp(ctx, type);
-                    append(ops, {OP_NEW_ARRAY, {resultPos, args[0]}, attributes});
-                    return {ops, resultPos};
-                }
-                case TYPE_PIPE: 
-                {
-                    if (args.size() > 0)
-                    {
-                        printf("Error: NEW expression with pipe can't take any parameters\n");
-                        logError(ctx->filename, ctx->code, newOp->start, newOp->end);
-                        return {{}, -1};
-                    }
-                    int64_t resultPos = newTemp(ctx, type);
-                    append(ops, {OP_NEW_PIPE, {resultPos}, attributes});
-                    return {ops, resultPos};
-                }
-                case TYPE_PROMISE: 
-                {
-                    if (args.size() > 0)
-                    {
-                        printf("Error: NEW expression with promise can't take any parameters\n");
-                        logError(ctx->filename, ctx->code, newOp->start, newOp->end);
-                        return {{}, -1};
-                    }
-                    int64_t resultPos = newTemp(ctx, type);
-                    append(ops, {OP_NEW_PROMISE, {resultPos}, attributes});
-                    return {ops, resultPos};
-                } 
+                // TODO: strings
+                append(ops, {OP_NEW_ARRAY, {resultPos, args[0]}, attributes});
             }
-            return {{}, -1};
         }
         case 1: // integer
         {

@@ -84,6 +84,31 @@ pair<Node *, int64_t>grammar_fn_float(char *content, int64_t position)
 
 
 
+pair<Node *, int64_t>grammar_fn_quotedstring(char *content, int64_t position)
+{
+    char *end = content + position;
+    if (*end != '"')
+    {
+        return {NULL, position};
+    }
+    end++;
+    while (*end != '"')
+    {
+        if (*end == '\\')
+        {
+            end += 2;
+        }
+        else
+        {
+            end++;
+        }
+    }
+    end++;
+    return {new Node(grammar + 6, 0, position, end - content, {}), end - content};
+}
+
+
+
 Rule *grammarGetRule(const char *name)
 {
     for (int64_t i = 20; i < grammar_len; ++i)

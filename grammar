@@ -150,4 +150,5 @@ rule "SimpleTerm" [
 ]
 rule "new_operator" [
     v [Sn; "new"; S; var_type; attribute_list; Sn; "("; call_arg_list; Sn; ")"] [] []
+    v [Sn; "new"; S; var_type; attribute_list; Sn; quotedstring] [] []
 ]

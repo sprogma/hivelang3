@@ -20,18 +20,18 @@ context db 512 dup 0
 
 
 
-format_strA db 'PushObject %p+%lld ', 0
-format_strB db '<- %p of size %lld', 0xA, 0
-format_strC db 'QueryObject %p <- %p', 0
-format_strD db '+%lld of size %lld', 0xA, 0
+format_strA du 'PushObject %p+%lld ', 0
+format_strB du '<- %p of size %lld', 0xA, 0
+format_strC du 'QueryObject %p <- %p', 0
+format_strD du '+%lld of size %lld', 0xA, 0
     
 extrn PushObject
 extrn NewObject
 extrn QueryObject
 extrn CallObject
+extrn myPrintf
 
 extrn object_array
-extrn printf
 
 section '.text' code readable executable
 
@@ -110,12 +110,12 @@ fastPushObject:
         lea rcx, [format_strA]
         mov rdx, r14
         mov r8, r13
-        call printf
+        call myPrintf
         
         lea rcx, [format_strB]
         mov rdx, r15
         mov r8, r12
-        call printf
+        call myPrintf
 
         mov rcx, r12
         mov rdx, r13
@@ -192,12 +192,12 @@ fastQueryObject:
         lea rcx, [format_strC]
         mov rdx, r14
         mov r8, r15
-        call printf
+        call myPrintf
         
         lea rcx, [format_strD]
         mov rdx, r13
         mov r8, r12
-        call printf
+        call myPrintf
 
         mov rcx, r12
         mov rdx, r13
@@ -404,17 +404,27 @@ DllCall:
     mov r12, QWORD [rcx + 32]
     mov r13, r8
     mov r14, QWORD [rcx + 8]
+    mov r15, QWORD [rcx + 16]
     sub rsp, r12 
 
     mov rdi, rdx
     mov rax, QWORD [rcx]
 
+    ; move all other arguments to stack
+    cmp r15, 4
+    jle .L1e
+.L1:
+    sub r15, 1
+    mov rax, [rdi + 8 * r15]
+    mov [rsp + 8 * r15], rax
+    cmp r15, 4
+    jg .L1
+.L1e:
     ; move data as needed
     mov rcx, [rdi + 0]
     mov rdx, [rdi + 8]
     mov r8, [rdi + 16]
     mov r9, [rdi + 24]
-    ; TODO: move args to stack
 
     ; call dll entry
     call rax
