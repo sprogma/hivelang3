@@ -143,7 +143,7 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param)
             res->length = size / param;
             int64_t id = (int64_t)res + DATA_OFFSET(struct object_array);
             object_array[object_array_len++] = (struct object *)id;
-            log("[id=%016llx]\n", id);
+            log("[id=%llx]\n", id);
             return id;
         }
         case OBJECT_PROMISE:
@@ -154,7 +154,7 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param)
             res->ready = 0;
             int64_t id = (int64_t)res + DATA_OFFSET(struct object_promise);
             object_array[object_array_len++] = (struct object *)id;
-            log("[id=%016llx]\n", id);
+            log("[id=%llx]\n", id);
             return id;
         }
         default:
@@ -202,7 +202,7 @@ void PrintObject(struct object *object_ptr)
     switch (ptr[-1])
     {
         case OBJECT_PROMISE:
-            log("Promise(set=%d, first4bytes=", ptr[-2]);
+            log("Promise(set=%02x, first4bytes=", ptr[-2]);
             for (int i = 0; i < 4; ++i)
                 log("%02x ", ptr[i]);
             log(")\n");
@@ -224,7 +224,7 @@ void PrintObject(struct object *object_ptr)
             break;
         }
         default:
-            log("Object of unknown type: %d\n", ptr[-1]);
+            log("Object of unknown type: %02x\n", ptr[-1]);
     }
 }
 
@@ -256,7 +256,7 @@ void SheduleWorker()
     if (queue_len > 0)
     {
         --queue_len;
-        log("Continue worker %lld from %p [rdi=%016llX] [context=%p] [rbp=%p]\n", 
+        log("Continue worker %lld from %p [rdi=%llx] [context=%p] [rbp=%p]\n", 
                 queue[queue_len]->id, queue[queue_len]->ptr, queue[queue_len]->rdiValue, queue[queue_len]->context, queue[queue_len]->rbpValue);
 
         runningId = queue[queue_len]->id;
@@ -598,7 +598,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                     // set data
                     void *ptr = mem + offset;
                     Workers[id] = (struct worker_info){0, ptr, tableSize};
-                    log("Worker %lld have been loaded to %p [offset %016llx] with input table of size %lld\n", id, ptr, offset, tableSize);
+                    log("Worker %lld have been loaded to %p [offset %llx] with input table of size %lld\n", id, ptr, offset, tableSize);
                 }
                 break;
             }
@@ -708,7 +708,7 @@ int entry()
     log("At end objects:\n");
     for (int i = 0; i < object_array_len; ++i)
     {
-        log("%d=", i); PrintObject(object_array[i]);
+        log("%02x=[%llx]", i, object_array[i]); PrintObject(object_array[i]);
     }
     
     if (wait_list_len != 0)
@@ -719,7 +719,7 @@ int entry()
     struct object_promise *p = (struct object_promise *)(resCodeId - DATA_OFFSET(struct object_promise));
     if (p->ready)
     {
-        log("Program exited with code %d\n", *(int *)p->data);
+        log("Program exited with code %llx\n", *(int *)p->data);
         ExitProcess(*(int *)p->data);
     }
     log("Result of main function isn't ready after program end\n");

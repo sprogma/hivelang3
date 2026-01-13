@@ -440,7 +440,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                     return {{}, -1};
                 }
                 // TODO: strings
-                append(ops, {OP_NEW_ARRAY, {resultPos, args[0]}, attributes});
+                // append(ops, {OP_NEW_ARRAY, {resultPos, args[0]}, attributes});
             }
         }
         case 1: // integer

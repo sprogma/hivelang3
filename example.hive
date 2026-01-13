@@ -3,7 +3,8 @@
 (i64[] a)main(i32? res)
 {
     i16[] text;
-    text <- new i16[]"hello";
+    # text <- new i16[]"hello";
+    text <- new i16[](16);
     text[0] <- (i16)72;
     text[1] <- (i16)101;
     text[2] <- (i16)108;
@@ -22,7 +23,7 @@
 
 
 # use 0x00020000 : type=SND_FILENAME
-[dllimport:Winmm.dll]
-[dllimport.entry:PlaySoundW]
-[noinline:true]
-(i16[] sound, i64 module, u32 type)MessageBox(i32? result);
+# [dllimport:Winmm.dll]
+# [dllimport.entry:PlaySoundW]
+# [noinline:true]
+# (i16[] sound, i64 module, u32 type)MessageBox(i32? result);
