@@ -84,10 +84,11 @@ void WaitListWorker(struct waiting_worker *t);
 typedef uint8_t BYTE;
 
 
-#define OBJECT_PIPE    0x01
-#define OBJECT_PROMISE 0x02
-#define OBJECT_ARRAY   0x03
-#define OBJECT_OBJECT  0x04
+#define OBJECT_PIPE           0x01
+#define OBJECT_PROMISE        0x02
+#define OBJECT_ARRAY          0x03
+#define OBJECT_OBJECT         0x04
+#define OBJECT_DEFINED_ARRAY  0x05
 
 
 #define DATA_OFFSET(T) ((int64_t)&(((T *)NULL)->data))
@@ -125,6 +126,12 @@ struct worker_info Workers[100] = {};
 struct object *object_array[1000] = {};
 int64_t object_array_len = 0;
 
+struct defined_array
+{
+    BYTE *start;
+    int64_t size;
+} *defined_arrays;
+
 
 // if allocating ARRAY, param must be element size.
 // [it can be used to split big arrays on diffrent hives]
@@ -139,7 +146,7 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param)
             log("Array of %lld bytes, element of size %lld allocated\n", size, param);
             struct object_array *res = myMalloc(sizeof(*res) + size);
             myMemcpy(res->_, &param, 8);
-            res->type = type;
+            res->type = OBJECT_ARRAY;
             res->length = size / param;
             int64_t id = (int64_t)res + DATA_OFFSET(struct object_array);
             object_array[object_array_len++] = (struct object *)id;
@@ -150,9 +157,31 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param)
         {
             log("Promise for size %lld allocated\n", size);
             struct object_promise *res = myMalloc(sizeof(*res) + size);
-            res->type = type;
+            res->type = OBJECT_PROMISE;
             res->ready = 0;
             int64_t id = (int64_t)res + DATA_OFFSET(struct object_promise);
+            object_array[object_array_len++] = (struct object *)id;
+            log("[id=%llx]\n", id);
+            return id;
+        }
+        case OBJECT_DEFINED_ARRAY:
+        {
+            // size is ID
+            BYTE *objStart = defined_arrays[size].start;
+            int64_t objSize = defined_arrays[size].size;
+            log("Defined array for size %lld allocated\n", objSize);
+            struct object_array *res = myMalloc(sizeof(*res) + objSize);
+            myMemcpy(res->_, &param, 8);
+            res->type = OBJECT_ARRAY;
+            res->length = objSize / param;
+            // fill data
+            myMemcpy(res->data, objStart, objSize);
+            for (int i = 0; i < objSize; ++i)
+            {
+                myPrintf(L" %02x", res->data[i]);
+            }
+            myPrintf(L"\n");
+            int64_t id = (int64_t)res + DATA_OFFSET(struct object_array);
             object_array[object_array_len++] = (struct object *)id;
             log("[id=%llx]\n", id);
             return id;
@@ -578,9 +607,10 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                     log("argument %lld have size %lld\n", i, sizes[i]);
                 }                
 
-                // void(*fn)(int32_t,void*,void*,int64_t) = data->loaded_function; //(void *)GetProcAddress(lib, "MessageBoxW");
-                // myPrintf(L"CALLING %p\n", ((void(*)(int64_t,void*,void*,int32_t))(data)->loaded_function));
-                // fn(0, L"Text", L"Caption", 0x40);
+                // play sound
+
+                // why it fails without this string?
+                myPrintf(L"%llx\n", mciSendStringW);
                 break;
             case 16: // Worker positions
             {
@@ -602,8 +632,47 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 }
                 break;
             }
+            case 17: // String table
+            {
+                // read table size
+                int64_t size = *(int64_t *)pos;
+                pos += 8;
+                // read data encoding
+                int8_t encoding = *pos++;
+                
+                defined_arrays = myMalloc(sizeof(*defined_arrays) * size);
+                switch (encoding)
+                {
+                    case 0x0:
+                    {
+                        // read raw data size
+                        int64_t rawsize = *(int64_t *)pos;
+                        pos += 8;
+                        // raw bytes
+                        BYTE *data = pos + (size * 16); // pos + header size
+                        BYTE *data_copy = myMalloc(rawsize);
+                        myMemcpy(data_copy, data, rawsize);
+                        // read table header [offset+size]
+                        for (int64_t i = 0; i < size; ++i)
+                        {
+                            int64_t el_offset = *(int64_t *)pos;
+                            pos += 8;
+                            int64_t el_size = *(int64_t *)pos;
+                            pos += 8;
+                            defined_arrays[i].start = data_copy + el_offset;
+                            defined_arrays[i].size = el_size;
+                        }
+                        pos += rawsize;
+                        break;
+                    }
+                    default:
+                        myPrintf(L"Error: runtime doesn't support string table encoding: %lld\n", (int64_t)encoding);
+                        return NULL;
+                }
+                break;
+            }
             default:
-                log("Error: unknown header type %u\n", type);
+                log("Error: unknown header type %lld\n", (int64_t)type);
                 break;
         }
     }

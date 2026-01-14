@@ -1,0 +1,33 @@
+[export:yes]
+[integer64:yes]
+(i64[] a)main(i32? res)
+{
+    i16[] text;
+    text <- new i16[]"Press OK to listen some music!";
+    ?(0, text, text, 0x40)MessageBox(*);
+
+    text <- new i16[]"open \"C:\\Windows\\Media\\onestop.mid\" type sequencer alias music";
+    ?(text, 0, 0, 0)mciSendString(*);
+
+    text <- new i16[]"play music";
+    ?(text, 0, 0, 0)mciSendString(*);
+    
+    text <- new i16[]"Press OK to stop music!";
+    ?(0, text, text, 0x40)MessageBox(*);
+
+    text <- new i16[]"stop music";
+    ?(text, 0, 0, 0)mciSendString(*);
+
+    text <- new i16[]"close music";
+    ?(text, 0, 0, 0)mciSendString(*);
+}
+
+[dllimport:User32.dll]
+[dllimport.entry:MessageBoxW]
+[noinline:true]
+(i64 hwnd, i16[] text, i16[] caption, u32 type)MessageBox(i32? result);
+
+[dllimport:Winmm.dll]
+[dllimport.entry:mciSendStringW]
+[noinline:true]
+(i16[] text, i16[] res, i32 res_size, i64 callback_hwnd)mciSendString(i32? result);

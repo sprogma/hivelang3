@@ -24,6 +24,7 @@ using namespace std;
 #define switch_var(x) switch ((x)->variant)
 
 
+
 /* pre-intermediate representation */
 struct Operation
 {
@@ -140,6 +141,13 @@ pair<bool, TypeContext *> operation_types(TypeContext *t1, TypeContext *t2)
         return {false, NULL};
     }
     return {false, NULL};
+}
+
+int64_t GetStringId(BuildContext *ctx, const vector<BYTE> &value)
+{
+    //TODO: find same string inside context
+    ctx->result->strings.push_back(value);
+    return ctx->result->strings.size() - 1;
 }
 
 WorkerDeclarationContext *getWorkerByName(BuildContext *ctx, string name)
@@ -430,17 +438,66 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             else
             {
                 // this is new string
+                map<string, string> attributes = getAttributeList(ctx, newOp->nonTerm(1));
                 // get type
                 TypeContext *type = getType(ctx, newOp->nonTerm(0));
-                map<string, string> attributes = getAttributeList(ctx, newOp->nonTerm(1));
                 if (type->type != TYPE_ARRAY)
                 {
                     printf("Error: NEW expression string variant must be used only with arrays\n");
                     logError(ctx->filename, ctx->code, newOp->start, newOp->end);
                     return {{}, -1};
                 }
-                // TODO: strings
-                // append(ops, {OP_NEW_ARRAY, {resultPos, args[0]}, attributes});
+                TypeContext *element = type->_vector.base;
+                if (element->type != TYPE_SCALAR || (
+                    SCALAR_TYPE(element->_scalar.kind) != SCALAR_U &&
+                    SCALAR_TYPE(element->_scalar.kind) != SCALAR_I
+                ))
+                {
+                    printf("Error: NEW expression string element must be integer scalar\n");
+                    logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                    return {{}, -1};
+                }
+                // get value
+                string value = Substr(ctx, newOp->nonTerm(2));
+                vector<BYTE> content((value.size() - 1) * element->size, 0); // - 2 [""] + 1 terminating zero
+                // TODO: utf8->16/32 conversion
+                int64_t used_len = 0;
+                for (int64_t i = 1; i + 1 < (int64_t)value.size(); ++i)
+                {
+                    if ((value[i] & 0x80) && element->size != 1)
+                    {
+                        printf("Warning: string literals doen't support UTF8->UTF16/32 encoding conversion for now\n");
+                        logError(ctx->filename, ctx->code, newOp->start, newOp->end);
+                        return {{}, -1};
+                    }
+                    if (value[i] == '\\')
+                    {
+                        switch (value[i + 1])
+                        {
+                            case '\\': content[element->size * (used_len++)] = '\\'; break;
+                            case '\"': content[element->size * (used_len++)] = '\"'; break;
+                            case '\'': content[element->size * (used_len++)] = '\''; break;
+                            case 'n':  content[element->size * (used_len++)] = '\n'; break;
+                            case 't':  content[element->size * (used_len++)] = '\t'; break;
+                            case 'v':  content[element->size * (used_len++)] = '\v'; break;
+                            case 'e':  content[element->size * (used_len++)] = '\e'; break;
+                            case 'a':  content[element->size * (used_len++)] = '\a'; break;
+                            case 'r':  content[element->size * (used_len++)] = '\r'; break;
+                            default:
+                                printf("Error: unknown string literal escaped symbol: %c\n", value[i + 1]);
+                        }
+                        i++;
+                    }
+                    else
+                    {
+                        content[element->size * (used_len++)] = value[i];
+                    }
+                }
+                content.resize((used_len + 1) * element->size);
+                int64_t vid = GetStringId(ctx, content);
+                int64_t resultPos = newTemp(ctx, type);
+                append(ops, {OP_NEW_STRING, {resultPos, vid}, attributes});
+                return {ops, resultPos};
             }
         }
         case 1: // integer
@@ -1800,6 +1857,7 @@ void applyNamesTranslition(OperationBlock *op, const map<int64_t, int64_t> &tran
         case OP_STORE_INPUT:
         case OP_LOAD:
         case OP_NEW_INT:
+        case OP_NEW_STRING:
         case OP_NEW_FLOAT:
             T(op->data[0]);
             break;
@@ -1881,6 +1939,7 @@ vector<int64_t> getWritedVariables(OperationBlock *op)
         case OP_NEW_INT:
         case OP_NEW_FLOAT:
         case OP_NEW_ARRAY:
+        case OP_NEW_STRING:
         case OP_NEW_PIPE:
         case OP_NEW_PROMISE:
         case OP_NEW_CLASS:
@@ -1943,6 +2002,7 @@ vector<int64_t> getUsedVariables(OperationBlock *op)
         case OP_STORE_INPUT:
         case OP_LOAD:
         case OP_NEW_CLASS:
+        case OP_NEW_STRING:
         case OP_NEW_INT:
         case OP_NEW_FLOAT:
             return {op->data[0]};
@@ -1995,6 +2055,7 @@ vector<int64_t> getReadVariables(OperationBlock *op)
         case OP_NEW_CLASS:
         case OP_NEW_INT:
         case OP_NEW_FLOAT:
+        case OP_NEW_STRING:
         case OP_NEW_PIPE:
         case OP_NEW_PROMISE:
             return {};
@@ -2095,6 +2156,7 @@ void dumpIR(WorkerDeclarationContext *fn)
                 case OP_NEW_PIPE: printf("OP_NEW_PIPE "); break;
                 case OP_NEW_PROMISE: printf("OP_NEW_PROMISE "); break;
                 case OP_NEW_CLASS: printf("OP_NEW_CLASS "); break;
+                case OP_NEW_STRING: printf("OP_NEW_STRING "); break;
                 
                 case OP_PUSH_VAR: printf("OP_PUSH_VAR "); break;
                 case OP_PUSH_ARRAY: printf("OP_PUSH_ARRAY "); break;

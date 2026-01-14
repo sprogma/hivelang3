@@ -1340,6 +1340,18 @@ private:
                 print("\tOP_NEW_FLOAT [not supported]\n"); 
                 break;
                 
+            case OP_NEW_STRING:
+            {
+                // rcx=OBJECT_DEFINED_ARRAY=5
+                // rdx=defined object ID
+                // rdi=size of element
+                InsertInteger({1, 8}, 0x05);
+                InsertInteger({2, 8}, op->data[1]);
+                InsertInteger({7, 8}, varType(op->data[0])->_vector.base->size);
+                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                InsertMove(Register(op->data[0]), {0, 8}, false);
+                break;
+            }
             case OP_NEW_ARRAY:
             {
                 // rcx=OBJECT_ARRAY=3
@@ -1775,6 +1787,40 @@ private:
                 *(uint64_t *)buf = GetWorkerInputTableSize(id);
                 buf += 8;
             }
+        }
+
+        /* add string table */
+        {
+            *buf++ = 17;
+            // insert strings count
+            *(int64_t *)buf = ir->strings.size();
+            buf += 8;
+            // insert encoding [0x0=RAW]
+            *buf++ = 0x0;
+            // push data using encoding:
+            int64_t total_size = 0;
+            for (auto &k : ir->strings)
+            {
+                total_size += k.size();
+            }
+            *(int64_t *)buf = total_size;
+            buf += 8;
+            // table [offset+size] + raw strings
+            int64_t of = 0;
+            for (auto &k : ir->strings)
+            {
+                *(int64_t *)buf = of;
+                buf += 8;
+                *(int64_t *)buf = k.size();
+                buf += 8;
+                of += k.size();
+            }
+            for (auto &k : ir->strings)
+            {
+                memcpy(buf, k.data(), k.size());
+                buf += k.size();
+            }
+            printf("Exported %lld strings used in sum %lld bytes\n", ir->strings.size(), of);
         }
         
 

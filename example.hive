@@ -1,29 +1,326 @@
-[export:yes]
-[integer64:yes]
-(i64[] a)main(i32? res)
-{
-    i16[] text;
-    # text <- new i16[]"hello";
-    text <- new i16[](16);
-    text[0] <- (i16)72;
-    text[1] <- (i16)101;
-    text[2] <- (i16)108;
-    text[3] <- (i16)108;
-    text[4] <- (i16)111;
-    text[5] <- (i16)33;
-    text[6] <- (i16)0;
-    (0, text, text, 0x40)MessageBox(result);
-    res <- ?result;
-}
+#include <windows.h>
+#include <stdio.h>
+
+#define RECT_SIZE 50
+#define MOVE_SPEED 5
+
+
+[dllimport:Kernel32.dll]
+[dllimport.entry:SleepEx]
+(i32 time, i32 alertable)SleepEx(i32? error);
+
+[dllimport:Kernel32.dll]
+[dllimport.entry:GetModuleHandleW]
+(i16[] moduleName)GetModuleHandle(i64? hInstance);
+
+[dllimport:Kernel32.dll]
+[dllimport.entry:GetTickCount]
+()GetTickCount(i32? miliseconds);
+
+[dllimport:User32.dll]
+[dllimport.entry:GetDC]
+(i64 window)GetDC(i64? handle);
+
+[dllimport:User32.dll]
+[dllimport.entry:GetAsyncKeyState]
+(i32 key)GetAsyncKeyState(i16? result);
+
+[dllimport:User32.dll]
+[dllimport.entry:PeekMessageW]
+(
+    i8[]  lpMsg,
+    i64   hWnd,
+    i32   wMsgFilterMin,
+    i32   wMsgFilterMax,
+    i32   wRemoveMsg
+)PeekMessage(i64? handle);
+
+[dllimport:User32.dll]
+[dllimport.entry:TranslateMessage]
+(i8[] lpMsg)TranslateMessage(i32? resultCode);
+
+[dllimport:User32.dll]
+[dllimport.entry:FillRect]
+(i64 allocator, i32[] rect, i64 brush)FillRect(i32? resultCode);
+
+[dllimport:User32.dll]
+[dllimport.entry:DispatchMessage]
+(i8[] lpMsg)DispatchMessage(i32? resultCode);
+
+[dllimport:Gdi32.dll]
+[dllimport.entry:CreateCompatibleDC]
+(i64 screen)CreateCompatibleDC(i64? handle);
+
+[dllimport:Gdi32.dll]
+[dllimport.entry:CreateSolidBrush]
+(i32 color)CreateSolidBrush(i64? handle);
+
+[dllimport:Gdi32.dll]
+[dllimport.entry:CreateSolidBrush]
+(i32 style, i32 width, i32 color)CreatePen(i64? handle);
+
+[dllimport:Gdi32.dll]
+[dllimport.entry:CreateCompatibleBitmap]
+(i64 allocator, i32 x, i32 y)CreateCompatibleBitmap(i64? handle);
+
+[dllimport:Gdi32.dll]
+[dllimport.entry:SelectObject]
+(i64 allocator, i64 object)SelectObject(i64? oldObject);
+
+[dllimport:Gdi32.dll]
+[dllimport.entry:CreateFontW]
+(
+    i32    cHeight,
+    i32    cWidth,
+    i32    cEscapement,
+    i32    cOrientation,
+    i32    cWeight,
+    i32    bItalic,
+    i32    bUnderline,
+    i32    bStrikeOut,
+    i32    iCharSet,
+    i32    iOutPrecision,
+    i32    iClipPrecision,
+    i32    iQuality,
+    i32    iPitchAndFamily,
+    i16[]  pszFaceName
+)CreateFont(i64? handle);
+
+[dllimport:User32.dll]
+[dllimport.entry:GetClientRect]
+(i64 window, i32[] rect)GetClientRect(i32? resultCode);
+
+
+[dllimport:User32.dll]
+[dllimport.entry:CreateWindowExW]
+(
+    i32     dwExStyle,
+    i16[]   lpClassName,
+    i16[]   lpWindowName,
+    i32     dwStyle,
+    i32     X,
+    i32     Y,
+    i32     nWidth,
+    i32     nHeight,
+    i64     hWndParent,
+    i64     hMenu,
+    i64     hInstance,
+    i64     lpParam,
+)CreateWindowEx(i64? hwnd);
+
 
 [dllimport:User32.dll]
 [dllimport.entry:MessageBoxW]
-[noinline:true]
 (i64 hwnd, i16[] text, i16[] caption, u32 type)MessageBox(i32? result);
 
+[export:yes]
+(i64[] args)main(i32? resultCode) 
+{
+    ?(0)GetModuleHandle(hInstance);
+    ?(xyz,)GetModuleHandle(hInstance);
 
-# use 0x00020000 : type=SND_FILENAME
-# [dllimport:Winmm.dll]
-# [dllimport.entry:PlaySoundW]
-# [noinline:true]
-# (i16[] sound, i64 module, u32 type)MessageBox(i32? result);
+    i32 rect_size;
+    rect_size <- 50;
+
+    i64 hwnd;
+    
+    hwnd <- ?(
+        0x200,
+        new i16[]"Static",
+        new i16[]"Polling Only - Use Arrow Keys, ESC to exit",
+        (0x00000000 | 0x00C00000 | 0x00080000 | 0x00040000 | 0x00020000 | 0x00010000) | 0x10000000,
+        0x80000000, 
+        0x80000000, 
+        800, 
+        600,
+        0, 
+        0, 
+        ?hInstance, 
+        0
+    )CreateWindowEx(*);
+
+    match (hwnd)
+    {
+        0 {
+            ?(0, new i16[]"Failed to create window", new i16[]"Error", 0x10)MessageBox(*);
+        }
+    }
+
+    i32 rectX, rectY;
+    rectX <- rectY <- 100;
+
+    i64 screen, allocator;
+    screen <- ?(hwnd)GetDC(*);
+    allocator <- ?(screen)CreateCompatibleDC(*);
+
+    i32[] clientRect;
+    clientRect <- new i32[](4);
+    ?(hwnd, clientRect)GetClientRect(*);
+
+    i32 width, height;
+    width <- clientRect[2] - clientRect[0];
+    height <- clientRect[3] - clientRect[1];
+
+    i64 buffer, oldBuffer;
+    buffer <- ?(screen, width, height)CreateCompatibleBitmap(*);
+    oldBuffer <- ?(allocator, buffer)SelectObject(*);
+
+    i64 font, oldFont;
+    font <- ?(
+        16,
+        0,
+        0,
+        0,
+        400,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        new i16[]"Arial"
+    )CreateFont(*);
+
+    oldFont <- ?(allocator, font)SelectObject(*);
+
+    i64 backgroundBrush, rectBrush, rectPen;
+    
+    
+    hBackgroundBrush <- ?(0xFFFFFF)CreateSolidBrush(*);
+    hRectBrush <- ?(0xFF8800)CreateSolidBrush(*);
+    hRectPen <- ?(0, 2, 0x000000)CreatePen(*);
+
+    i8[] msg;
+    i32 running, lastTime, frameCount, fps;
+    
+    msg <- new i8[](48);
+    running <- 1;
+    lastTime <- ?()GetTickCount(*);
+    frameCount <- fps <- 0;
+    
+    i32[] rect;
+    rect <- new i32[](4);
+
+    i16[] text;
+    text <- new i16[]"Text!";
+    
+    while running = 1
+    {
+        while ?(msg, 0, 0, 0, 1)PeekMessage(*)
+        {
+            # TODO: msg.message == WM_QUIT or WM_DESTROY
+            ?(msg)TranslateMessage(*);
+            ?(msg)DispatchMessage(*);
+        }
+
+        match ?(0x1B)GetAsyncKeyState(*) < 0
+        {
+            -1 {
+                running <- 0;
+            }
+        }
+
+        match ?(0x25)GetAsyncKeyState(*) < 0
+        {
+            -1 {
+                rectX <- rectX - 15;
+            }
+        }
+
+        match ?(0x27)GetAsyncKeyState(*) < 0
+        {
+            -1 {
+                rectX <- rectX + 15;
+            }
+        }
+
+        match ?(0x26)GetAsyncKeyState(*) < 0
+        {
+            -1 {
+                rectY <- rectY - 15;
+            }
+        }
+
+        match ?(0x28)GetAsyncKeyState(*) < 0
+        {
+            -1 {
+                rectY <- rectY + 15;
+            }
+        }
+
+        match rectX < 0 {-1{
+            rectX <- 0;
+        }}
+        match rectX > width - rect_size {-1{
+            rectX <- width - rect_size;
+        }}
+        match rectY < 0 {-1{
+            rectY <- 0;
+        }}
+        match rectY > height - rect_size {-1{
+            rectY <- height - rect_size;
+        }}
+
+        
+        ?(allocator, &clientRect, hBackgroundBrush)FillRect(*);
+
+        rect[0] <- rectX;
+        rect[1] <- rectY;
+        rect[2] <- rectX + rect_size;
+        rect[3] <- rectY + rect_size;
+        ?(allocator, rect, hRectBrush)FillRect(*);
+
+        i64 oldPen, oldBrush;
+        oldPen <- ?(allocator, rectPen)SelectObject(*);
+        oldBrush <- ?(allocator, ?(5)GetStockObject(*))SelectObject(*);
+        
+        ?(allocator, rectX, rectY, rectX + rect_size, rectY + rect_size)Rectangle(*);
+        
+        ?(allocator, oldBrush)SelectObject(*);
+        ?(allocator, oldPen)SelectObject(*);
+
+
+
+        ?(allocator, TRANSPARENT)SetBkMode(*);
+        ?(allocator, 0x000000)SetTextColor(*);
+        
+        ?(allocator, 10, 10, text, ?text)TextOut(*);
+
+        i32 currentTime;
+        
+        frameCount <- frameCount + 1;
+        currentTime <- GetTickCount();
+
+        match currentTime - lastTime >= 1000
+        {
+            -1 {
+                fps <- frameCount * 1000 / (currentTime - lastTime);
+                frameCount <- 0;
+                lastTime <- currentTime;
+            }
+        }
+
+
+        ?(hdcScreen, 0, 0, width, height, allocator, 0, 0, 0xCC0020)BitBlt(*);
+        
+        ?(16, 1)SleepEx(*);
+    }
+
+    # TODO: update this part
+    # SelectObject(allocator, oldFont);
+    # SelectObject(allocator, oldBuffer);
+    # DeleteObject(font);
+    # DeleteObject(buffer);
+    # DeleteObject(backgroundBrush);
+    # DeleteObject(rectBrush);
+    # DeleteObject(rectPen);
+    # DeleteDC(allocator);
+    # ReleaseDC(hwnd, screen);
+    
+    # DestroyWindow(hwnd);
+
+    resultCode <- 0;
+}

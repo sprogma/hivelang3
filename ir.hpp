@@ -11,6 +11,8 @@ using namespace std;
 #include "ast.hpp"
 #include "utils.hpp"
 
+typedef uint8_t BYTE;
+
 
 enum TypeContextType
 {
@@ -102,6 +104,7 @@ enum OperationType
     OP_NEW_PIPE, // format is [dest]
     OP_NEW_PROMISE, // format is [dest]
     OP_NEW_CLASS, // format is [dest]
+    OP_NEW_STRING, // format is [dest, id] id is from global string buffer
 
     // PUSH_VAR is used only with structures - owerwise MOV is generated
     OP_PUSH_VAR, // format is [var, offset, type?, source]
@@ -177,6 +180,7 @@ struct BuildResult
     double cost;
     map<WorkerDeclarationContext *, int64_t> workers;
     map<string, int64_t> names;
+    vector<vector<BYTE>> strings;
     int64_t nextWorkerId;
 
     ~BuildResult()
