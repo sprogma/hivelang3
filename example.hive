@@ -32,8 +32,9 @@
         }
     }
 
-    i32 rectX, rectY;
+    i32 rectX, rectY, rectDY;
     rectX <- rectY <- 100;
+    rectDY <- 0;
 
     i64 screen, allocator;
     screen <- ?(hwnd)GetDC(*);
@@ -145,7 +146,8 @@
         match ?(0x26)GetAsyncKeyState(*) < `i16`0
         {
             -1 {
-                rectY <- rectY - 15;
+                # rectY <- rectY - 15;
+                rectDY <- -15;
             }
         }
 
@@ -155,6 +157,9 @@
                 rectY <- rectY + 15;
             }
         }
+        
+        rectY <- rectY + rectDY;
+        rectDY <- rectDY + 1;
 
         match rectX < 0 {-1{
             rectX <- 0;
@@ -164,9 +169,11 @@
         }}
         match rectY < 0 {-1{
             rectY <- 0;
+            rectDY <- 1;
         }}
         match rectY > height - rect_size {-1{
             rectY <- height - rect_size;
+            rectDY <- 0;
         }}
 
         ?(allocator, clientRect, backgroundBrush)FillRect(*);

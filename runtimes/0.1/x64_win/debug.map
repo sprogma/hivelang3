@@ -1,6 +1,6 @@
  d
 
- Timestamp is 69699156 (Fri Jan 16 04:16:06 2026)
+ Timestamp is 6969989a (Fri Jan 16 04:47:06 2026)
 
  Preferred load address is 0000000140000000
 
@@ -11,7 +11,7 @@
  0002:00000f20 00000000H .edata                  DATA
  0002:00000f20 00000169H .rdata$zzzdbg           DATA
  0003:00000000 00000a30H .data                   DATA
- 0003:00000a30 00019db3H .bss                    DATA
+ 0003:00000a30 000eccb3H .bss                    DATA
  0004:00000000 00000210H .idata$5                DATA
  0004:00000210 00000050H .idata$2                DATA
  0004:00000260 00000018H .idata$3                DATA
@@ -157,78 +157,78 @@
  0003:00000440       context                    0000000140009440     asm_dbg.o
  0003:00000a30       Workers                    0000000140009a30     runtime_dbg.o
  0003:00001390       object_array               000000014000a390     runtime_dbg.o
- 0003:00014c10       object_array_len           000000014001dc10     runtime_dbg.o
- 0003:00014c18       defined_arrays             000000014001dc18     runtime_dbg.o
- 0003:00014c20       ShedulerBuffer             000000014001dc20     runtime_dbg.o
- 0003:00014c70       wait_list_len              000000014001dc70     runtime_dbg.o
- 0003:00014c78       queue_len                  000000014001dc78     runtime_dbg.o
- 0003:00014c80       wait_list                  000000014001dc80     runtime_dbg.o
- 0003:00014fa0       queue                      000000014001dfa0     runtime_dbg.o
- 0003:00019480       data_buffer_end            0000000140022480     runtime_lib_dbg.o
- 0003:00019488       data_buffer                0000000140022488     runtime_lib_dbg.o
- 0003:00019490       commited                   0000000140022490     runtime_lib_dbg.o
- 0003:00019498       hInput                     0000000140022498     runtime_lib_dbg.o
- 0003:000194a0       buf                        00000001400224a0     runtime_lib_dbg.o
- 0003:0001a4a0       hOutput                    00000001400234a0     runtime_lib_dbg.o
- 0004:00000000       __imp_SelectObject         0000000140024000     gdi32:GDI32.dll
- 0004:00000008       __imp_CreateFontW          0000000140024008     gdi32:GDI32.dll
- 0004:00000010       \177GDI32_NULL_THUNK_DATA  0000000140024010     gdi32:GDI32.dll
- 0004:00000068       __imp_GetProcAddress       0000000140024068     kernel32:KERNEL32.dll
- 0004:00000070       __imp_FreeLibrary          0000000140024070     kernel32:KERNEL32.dll
- 0004:00000078       __imp_CreateFileW          0000000140024078     kernel32:KERNEL32.dll
- 0004:00000080       __imp_GetFileSizeEx        0000000140024080     kernel32:KERNEL32.dll
- 0004:00000088       __imp_ReadFile             0000000140024088     kernel32:KERNEL32.dll
- 0004:00000090       __imp_VirtualAlloc         0000000140024090     kernel32:KERNEL32.dll
- 0004:00000098       __imp_GetCommandLineW      0000000140024098     kernel32:KERNEL32.dll
- 0004:000000a0       __imp_ExitProcess          00000001400240a0     kernel32:KERNEL32.dll
- 0004:000000a8       __imp_ReadConsoleW         00000001400240a8     kernel32:KERNEL32.dll
- 0004:000000b0       __imp_MultiByteToWideChar  00000001400240b0     kernel32:KERNEL32.dll
- 0004:000000b8       __imp_WriteConsoleW        00000001400240b8     kernel32:KERNEL32.dll
- 0004:000000c0       __imp_GetStdHandle         00000001400240c0     kernel32:KERNEL32.dll
- 0004:000000c8       __imp_LoadLibraryA         00000001400240c8     kernel32:KERNEL32.dll
- 0004:000000d0       __imp_CloseHandle          00000001400240d0     kernel32:KERNEL32.dll
- 0004:000000d8       __imp_GetLastError         00000001400240d8     kernel32:KERNEL32.dll
- 0004:000000e0       \177KERNEL32_NULL_THUNK_DATA 00000001400240e0     kernel32:KERNEL32.dll
- 0004:00000150       __imp_CommandLineToArgvW   0000000140024150     shell32:SHELL32.dll
- 0004:00000158       \177SHELL32_NULL_THUNK_DATA 0000000140024158     shell32:SHELL32.dll
- 0004:000001b0       __imp_mciSendStringW       00000001400241b0     winmm:WINMM.dll
- 0004:000001b8       \177WINMM_NULL_THUNK_DATA  00000001400241b8     winmm:WINMM.dll
- 0004:00000210       __IMPORT_DESCRIPTOR_KERNEL32 0000000140024210     kernel32:KERNEL32.dll
- 0004:00000224       __IMPORT_DESCRIPTOR_WINMM  0000000140024224     winmm:WINMM.dll
- 0004:00000238       __IMPORT_DESCRIPTOR_GDI32  0000000140024238     gdi32:GDI32.dll
- 0004:0000024c       __IMPORT_DESCRIPTOR_SHELL32 000000014002424c     shell32:SHELL32.dll
- 0004:00000260       __NULL_IMPORT_DESCRIPTOR   0000000140024260     kernel32:KERNEL32.dll
+ 0003:000c4890       object_array_len           00000001400cd890     runtime_dbg.o
+ 0003:000c4898       defined_arrays             00000001400cd898     runtime_dbg.o
+ 0003:000c48a0       ShedulerBuffer             00000001400cd8a0     runtime_dbg.o
+ 0003:000c48f0       wait_list_len              00000001400cd8f0     runtime_dbg.o
+ 0003:000c48f8       queue_len                  00000001400cd8f8     runtime_dbg.o
+ 0003:000c4900       wait_list                  00000001400cd900     runtime_dbg.o
+ 0003:000c4c20       queue                      00000001400cdc20     runtime_dbg.o
+ 0003:000ec380       data_buffer_end            00000001400f5380     runtime_lib_dbg.o
+ 0003:000ec388       data_buffer                00000001400f5388     runtime_lib_dbg.o
+ 0003:000ec390       commited                   00000001400f5390     runtime_lib_dbg.o
+ 0003:000ec398       hInput                     00000001400f5398     runtime_lib_dbg.o
+ 0003:000ec3a0       buf                        00000001400f53a0     runtime_lib_dbg.o
+ 0003:000ed3a0       hOutput                    00000001400f63a0     runtime_lib_dbg.o
+ 0004:00000000       __imp_SelectObject         00000001400f7000     gdi32:GDI32.dll
+ 0004:00000008       __imp_CreateFontW          00000001400f7008     gdi32:GDI32.dll
+ 0004:00000010       \177GDI32_NULL_THUNK_DATA  00000001400f7010     gdi32:GDI32.dll
+ 0004:00000068       __imp_GetProcAddress       00000001400f7068     kernel32:KERNEL32.dll
+ 0004:00000070       __imp_FreeLibrary          00000001400f7070     kernel32:KERNEL32.dll
+ 0004:00000078       __imp_CreateFileW          00000001400f7078     kernel32:KERNEL32.dll
+ 0004:00000080       __imp_GetFileSizeEx        00000001400f7080     kernel32:KERNEL32.dll
+ 0004:00000088       __imp_ReadFile             00000001400f7088     kernel32:KERNEL32.dll
+ 0004:00000090       __imp_VirtualAlloc         00000001400f7090     kernel32:KERNEL32.dll
+ 0004:00000098       __imp_GetCommandLineW      00000001400f7098     kernel32:KERNEL32.dll
+ 0004:000000a0       __imp_ExitProcess          00000001400f70a0     kernel32:KERNEL32.dll
+ 0004:000000a8       __imp_ReadConsoleW         00000001400f70a8     kernel32:KERNEL32.dll
+ 0004:000000b0       __imp_MultiByteToWideChar  00000001400f70b0     kernel32:KERNEL32.dll
+ 0004:000000b8       __imp_WriteConsoleW        00000001400f70b8     kernel32:KERNEL32.dll
+ 0004:000000c0       __imp_GetStdHandle         00000001400f70c0     kernel32:KERNEL32.dll
+ 0004:000000c8       __imp_LoadLibraryA         00000001400f70c8     kernel32:KERNEL32.dll
+ 0004:000000d0       __imp_CloseHandle          00000001400f70d0     kernel32:KERNEL32.dll
+ 0004:000000d8       __imp_GetLastError         00000001400f70d8     kernel32:KERNEL32.dll
+ 0004:000000e0       \177KERNEL32_NULL_THUNK_DATA 00000001400f70e0     kernel32:KERNEL32.dll
+ 0004:00000150       __imp_CommandLineToArgvW   00000001400f7150     shell32:SHELL32.dll
+ 0004:00000158       \177SHELL32_NULL_THUNK_DATA 00000001400f7158     shell32:SHELL32.dll
+ 0004:000001b0       __imp_mciSendStringW       00000001400f71b0     winmm:WINMM.dll
+ 0004:000001b8       \177WINMM_NULL_THUNK_DATA  00000001400f71b8     winmm:WINMM.dll
+ 0004:00000210       __IMPORT_DESCRIPTOR_KERNEL32 00000001400f7210     kernel32:KERNEL32.dll
+ 0004:00000224       __IMPORT_DESCRIPTOR_WINMM  00000001400f7224     winmm:WINMM.dll
+ 0004:00000238       __IMPORT_DESCRIPTOR_GDI32  00000001400f7238     gdi32:GDI32.dll
+ 0004:0000024c       __IMPORT_DESCRIPTOR_SHELL32 00000001400f724c     shell32:SHELL32.dll
+ 0004:00000260       __NULL_IMPORT_DESCRIPTOR   00000001400f7260     kernel32:KERNEL32.dll
 
  entry point at        0001:00000014
 
  Static symbols
 
- 0000:fffdb000       .debug$S                   0000000140000000     gdi32:GDI32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     gdi32:GDI32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     shell32:SHELL32.dll
- 0000:fffdb000       .debug$S                   0000000140000000     winmm:WINMM.dll
+ 0000:fff08000       .debug$S                   0000000140000000     gdi32:GDI32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     gdi32:GDI32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     kernel32:KERNEL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     shell32:SHELL32.dll
+ 0000:fff08000       .debug$S                   0000000140000000     winmm:WINMM.dll
  0001:00003214       .text                      0000000140004214     asm_dbg.o
  0001:000032c0       .text                      00000001400042c0     asm_dbg.o
  0001:000033a0       .text                      00000001400043a0     asm_dbg.o
  0003:00000040       .data                      0000000140009040     asm_dbg.o
  0003:00000840       .data                      0000000140009840     asm_dbg.o
  0003:000008c0       .data                      00000001400098c0     asm_dbg.o
- 0004:00000576       .idata$6                   0000000140024576     kernel32:KERNEL32.dll
- 0004:00000596       .idata$6                   0000000140024596     winmm:WINMM.dll
- 0004:000005be       .idata$6                   00000001400245be     gdi32:GDI32.dll
- 0004:000005de       .idata$6                   00000001400245de     shell32:SHELL32.dll
+ 0004:00000576       .idata$6                   00000001400f7576     kernel32:KERNEL32.dll
+ 0004:00000596       .idata$6                   00000001400f7596     winmm:WINMM.dll
+ 0004:000005be       .idata$6                   00000001400f75be     gdi32:GDI32.dll
+ 0004:000005de       .idata$6                   00000001400f75de     shell32:SHELL32.dll

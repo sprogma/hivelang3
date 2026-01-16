@@ -124,7 +124,7 @@ struct worker_info
 struct worker_info Workers[100] = {};
 
 
-struct object *object_array[10000] = {};
+struct object *object_array[100000] = {};
 int64_t object_array_len = 0;
 
 struct defined_array
@@ -347,7 +347,7 @@ void SheduleWorker()
             log("calling worker %lld\n", runningId);
             for (int64_t i = 0; i < data->sizes_len; ++i)
             {
-                myPrintf(L"ARG[%lld] = %lld\n", i, call_data[i]);
+                log("ARG[%lld] = %lld\n", i, call_data[i]);
             }
             log("output is %p [->to promise %p]\n", output, result_promise);
 
