@@ -115,6 +115,12 @@ struct object_promise
     BYTE data[];
 }; __attribute__((packed));
 
+struct object_object
+{
+    int8_t type;
+    BYTE data[];
+}; __attribute__((packed));
+
 struct worker_info
 {
     int64_t isDllCall;
@@ -161,6 +167,16 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param)
             res->type = OBJECT_PROMISE;
             res->ready = 0;
             int64_t id = (int64_t)res + DATA_OFFSET(struct object_promise);
+            object_array[object_array_len++] = (struct object *)id;
+            log("[id=%llx]\n", id);
+            return id;
+        }
+        case OBJECT_OBJECT:
+        {
+            log("Class for size %lld allocated\n", size);
+            struct object_object *res = myMalloc(sizeof(*res) + size);
+            res->type = OBJECT_OBJECT;
+            int64_t id = (int64_t)res + DATA_OFFSET(struct object_object);
             object_array[object_array_len++] = (struct object *)id;
             log("[id=%llx]\n", id);
             return id;
@@ -253,6 +269,12 @@ void PrintObject(struct object *object_ptr)
             log(")\n");
             break;
         }
+        case OBJECT_OBJECT:
+            log("Class(first4bytes=");
+            for (int i = 0; i < 4; ++i)
+                log("%02x ", ptr[i]);
+            log(")\n");
+            break;
         default:
             log("Object of unknown type: %02x\n", ptr[-1]);
     }

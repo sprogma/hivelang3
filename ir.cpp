@@ -231,7 +231,7 @@ map<string, string> getAttributeList(BuildContext *ctx, Node *node)
 
 pair<int64_t, TypeContext *> GetFieldOffset(BuildContext *ctx, TypeContext *type, int64_t field)
 {
-    if (type->type == TYPE_RECORD)
+    if (type->type == TYPE_RECORD || type->type == TYPE_CLASS)
     {
         (void)ctx;
         int64_t res = 0;
@@ -259,9 +259,14 @@ pair<int64_t, TypeContext *> GetFieldOffset(BuildContext *ctx, Node *node, int64
     while (node->nonTerm(id))
     {
         string field = Substr(ctx, node->nonTerm(id));
-        if (type->type != TYPE_RECORD && type->type != TYPE_UNION)
+        if (type->type != TYPE_RECORD &&type->type != TYPE_RECORD && type->type != TYPE_UNION)
         {
             logError(ctx->filename, ctx->code, node->nonTerm(id)->start, node->nonTerm(id)->end, "Usage of dot on not structure/union object");
+            break;
+        }
+        if (!type->_struct.names.contains(field))
+        {
+            logError(ctx->filename, ctx->code, node->nonTerm(id)->start, node->nonTerm(id)->end, "No field %s in structure", field.c_str());
             break;
         }
         tie(offset, type) = GetFieldOffset(ctx, type, type->_struct.names[field]);
@@ -302,6 +307,10 @@ void processStructure(BuildContext *ctx, TypeContextType type, Node *node)
                 }
             }
         }
+    }
+    if (type == TYPE_CLASS)
+    {
+        total_size = 8;
     }
     printf("Type %s generated\n", name.data());
     for (auto &[k, v] : names)
@@ -802,8 +811,24 @@ pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *no
                 break;
             }
             Node *path = node->nonTerm(2);
-            /* parse path to field */
-            auto [offset, fldType] = GetFieldOffset(ctx, path, 0, type);
+            /* get first field manually */
+            Node *first = path->nonTerm(0);
+            if (first == NULL)
+            {
+                logError(ctx->filename, ctx->code, path->start, path->end, "In infix form of class query, no path to field");
+                break;
+            }
+            string fname = Substr(ctx, first);
+            if (!type->_struct.names.contains(fname))
+            {
+                logError(ctx->filename, ctx->code, first->start, first->end, "In infix form of class query, no field named %s", fname.c_str());
+                break;
+            }
+            TypeContext *pptype = type;
+            type = type->_struct.fields[type->_struct.names[fname]];
+            /* parse path to final field */
+            auto [offset, fldType] = GetFieldOffset(ctx, path, 1, type);
+            offset += GetFieldOffset(ctx, pptype, pptype->_struct.names[fname]).first;
             int64_t tmp = newTemp(ctx, fldType);
             append(ops, code);
             append(ops, {OP_QUERY_CLASS, {tmp, position, offset, (int64_t)fldType}, attributes, node->start, node->end});
@@ -1434,8 +1459,27 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                     break;
                 }
 
-                /* parse path to field */
-                auto [offset, fldType] = GetFieldOffset(ctx, path, 0, type);
+                /* get first field manually */
+                Node *first = path->nonTerm(0);
+                if (first == NULL)
+                {
+                    logError(ctx->filename, ctx->code, path->start, path->end, "In infix form of class query, no path to field");
+                    break;
+                }
+                string fname = Substr(ctx, first);
+                if (!type->_struct.names.contains(fname))
+                {
+                    logError(ctx->filename, ctx->code, first->start, first->end, "In infix form of class query, no field named %s", fname.c_str());
+                    break;
+                }
+                TypeContext *pptype = type;
+                type = type->_struct.fields[type->_struct.names[fname]];
+                
+                /* parse path to final field */
+                auto [offset, fldType] = GetFieldOffset(ctx, path, 1, type);
+                
+                offset += GetFieldOffset(ctx, pptype, pptype->_struct.names[fname]).first;
+
 
                 append(ops, code);
                 append(ops, {OP_PUSH_CLASS, {position, offset, (int64_t)fldType, dataPos}, attributes, x->start, x->end});

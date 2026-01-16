@@ -1231,6 +1231,16 @@ private:
         }
     }
 
+    int64_t GetClassSize(TypeContext *type)
+    {
+        int64_t sum = 0;
+        for (auto &i : type->_struct.fields)
+        {
+            sum += i->size;
+        }
+        return sum;
+    }
+
     void BuildOperation()
     {
         OperationBlock *op = toBuild.back().first;
@@ -1389,8 +1399,20 @@ private:
                 InsertMove(op, Register(op->data[0]), {0, 8}, false);
                 break;
             }
+            case OP_NEW_CLASS:
+            {
+                // rcx=OBJECT_OBJECT=4
+                // rdx=total size
+                // rdi=size of element = total size
+                int64_t cls_size = GetClassSize(varType(op->data[0]));
+                InsertInteger(op, {1, 8}, 0x04);
+                InsertInteger(op, {2, 8}, cls_size);
+                InsertMove(op, {7, 8}, {2, 8}, false);
+                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                InsertMove(op, Register(op->data[0]), {0, 8}, false);
+                break;
+            }
             case OP_NEW_PIPE:     printf("not supported: new_pipe\n"); break;
-            case OP_NEW_CLASS:    printf("not supported: new_class\n"); break;
             
             case OP_PUSH_VAR:
                 // TODO: what if data[3] is not scalar?
@@ -1402,6 +1424,7 @@ private:
                 
             case OP_PUSH_ARRAY:
             {
+                // TODO: remove usage of source as size provider
                 // rcx=size rdx=offset rdi=object rsi=value
                 if (isApiScalar(op->data[4]))
                 {
@@ -1429,6 +1452,7 @@ private:
             case OP_PUSH_PIPE:
             case OP_PUSH_PROMISE:
             {
+                // TODO: remove usage of source as size provider
                 // rcx=size rdx=offset rdi=object rsi=value
                 if (isApiScalar(op->data[1]))
                 {
@@ -1448,7 +1472,29 @@ private:
                 }
                 break;
             }
-            case OP_PUSH_CLASS:   printf("not supported: push_class\n"); break;
+            
+            case OP_PUSH_CLASS:
+            {
+                // TODO: remove usage of source as size provider
+                // rcx=size rdx=offset rdi=object rsi=value
+                if (isApiScalar(op->data[3]))
+                {
+                    InsertInteger(op, {1, 8}, -varSize(op->data[3]));
+                    InsertInteger(op, {2, 8}, op->data[1]);
+                    InsertMove(op, {7, 8}, Register(op->data[0]), false);
+                    InsertMove(op, {6, 8}, Register(op->data[3]), false);
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                }
+                else
+                {
+                    InsertInteger(op, {1, 8}, varSize(op->data[3]));
+                    InsertInteger(op, {2, 8}, op->data[1]);
+                    InsertMove(op, {7, 8}, Register(op->data[0]), false);
+                    InsertInteger(op, {6, 8}, memTable[op->data[4]]);
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                }
+                break;
+            }
                 
             case OP_QUERY_VAR: 
             {
@@ -1462,6 +1508,7 @@ private:
                 
             case OP_QUERY_INDEX:
             {
+                // TODO: remove usage of destination as size provider
                 // rcx=size rdx=offset rdi=value rsi=object
                 if (isApiScalar(op->data[0]))
                 {
@@ -1489,6 +1536,7 @@ private:
             case OP_QUERY_ARRAY:
             {
                 // rcx=size rdx=offset rdi=value rsi=object
+                // TODO: remove usage of destination as size provider
                 if (isApiScalar(op->data[0]))
                 {
                     InsertInteger(op, {1, 8}, -varSize(op->data[0]));
@@ -1510,6 +1558,7 @@ private:
             
             case OP_QUERY_PROMISE:
             {
+                // TODO: remove usage of destination as size provider
                 // rcx=size rdx=offset rdi=value rsi=object
                 if (isApiScalar(op->data[0]))
                 {
@@ -1530,8 +1579,30 @@ private:
                 break;
             }
             
+            case OP_QUERY_CLASS:
+            {
+                // TODO: remove usage of destination as size provider
+                // rcx=size rdx=offset rdi=value rsi=object
+                if (isApiScalar(op->data[0]))
+                {
+                    InsertInteger(op, {1, 8}, -varSize(op->data[0]));
+                    InsertInteger(op, {2, 8}, op->data[2]);
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    InsertMove(op, Register(op->data[0]), {7, 8}, false);
+                }
+                else
+                {
+                    InsertInteger(op, {1, 8}, varSize(op->data[0]));
+                    InsertInteger(op, {2, 8}, op->data[2]);
+                    InsertInteger(op, {7, 8}, memTable[op->data[0]]);
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                }
+                break;
+            }
+            
             case OP_QUERY_PIPE:    printf("not supported: query_pipe\n"); break;
-            case OP_QUERY_CLASS:   printf("not supported: query_class\n"); break;
              
             case OP_BOR:   ABEL_BINOP(ASM_OR) break;
             case OP_BAND:  ABEL_BINOP(ASM_AND) break;
