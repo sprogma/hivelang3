@@ -415,8 +415,8 @@ DllCall:
     jle .L1e
 .L1:
     sub r15, 1
-    mov rax, [rdi + 8 * r15]
-    mov [rsp + 8 * r15], rax
+    mov rcx, [rdi + 8 * r15]
+    mov [rsp + 8 * r15], rcx
     cmp r15, 4
     jg .L1
 .L1e:

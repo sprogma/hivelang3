@@ -77,6 +77,28 @@ void connectOp(WorkerDeclarationContext *wk, OperationBlock *code, OperationBloc
     }
 }
 
+
+void connectOpSecond(WorkerDeclarationContext *wk, OperationBlock *code, OperationBlock *next)
+{
+    wk->content->code.push_back(next);
+    if (code == NULL)
+    {
+        wk->content->entry = next;
+        next->next.insert(next->next.begin(), NULL);
+    }
+    else
+    {
+        next->next.insert(next->next.begin(), code->next[1]);
+        next->prev.insert(code);
+        if (code->next[1])
+        {
+            code->next[1]->prev.erase(code);
+            code->next[1]->prev.insert(next);
+        }
+        code->next[1] = next;
+    }
+}
+
 void connectBeforeOp(WorkerDeclarationContext *wk, OperationBlock *code, OperationBlock *next)
 {
     wk->content->code.push_back(next);

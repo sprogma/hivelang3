@@ -122,8 +122,9 @@ rule "bin_op" [
 ]
 rule "PrefixOperation" [
     v [prefix_op; PrefixOperation] [] []
-    v [Sn; "("; var_type; Sn; ")"; PrefixOperation] [] []
     p [QueryOperation] [] []
+    v [Sn; "("; var_type; Sn; ")"; PrefixOperation] [] []
+    v [Sn; "`"; var_type; Sn; "`"; PrefixOperation] [] []
 ]
 rule "prefix_op" [
     v [Sn; "+"] [] []

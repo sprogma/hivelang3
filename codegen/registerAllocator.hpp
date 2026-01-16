@@ -33,6 +33,31 @@ int64_t FindFirst(array<T, A> &arr)
 }
 
 
+template<typename T, auto A>
+int64_t FindRandom(array<T, A> &arr)
+{
+    int64_t cnt = A;
+    for (int64_t i = 0; i < (int64_t)A; ++i)
+    {
+        cnt -= arr[i];
+    }
+    if (cnt == 0)
+    {
+        return -1;
+    }
+    cnt = 1 + rand() % cnt;
+    for (int64_t i = 0; i < (int64_t)A; ++i)
+    {
+        cnt -= 1 - arr[i];
+        if (cnt == 0)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+
 template<int64_t registersCount>
 class SpreadRegisters
 {
@@ -43,6 +68,7 @@ public:
 
 private:
     WorkerDeclarationContext *wk;
+    int64_t prob;
     
     set<int64_t> generatedTemps;
 
@@ -181,97 +207,120 @@ private:
             order.insert({-v.size(), k});
         }
 
+        printf("have %lld nodes\n", order.size());
+
         vector<int64_t> sameOrder(views::keys(res).begin(), views::keys(res).end());
         double bestColored = 0;
-        for (int64_t t = 0; t < 300; ++t)
-        {
-            for (int64_t i = 1; i < (int64_t)sameOrder.size(); ++i)
-            {
-                swap(sameOrder[i], sameOrder[rand() % (i + 1)]);
-            }
-            
-            map<int64_t, int64_t> tmpRes;
-            
-            for (auto &[k, v] : res) tmpRes[k] = -1;
-            
-            trySpeadSameRegisters(sameOrder, tmpRes, analyser);
-            
-            double curColored = 0;
-            for (auto &v : sameOrder)
-            {
-                curColored += 0.2 * (tmpRes[v] != -1);
-                for (auto &rw : analyser.readWriteOverlaps[v])
-                {
-                    // count same colored pairs
-                    curColored += (tmpRes[v] == tmpRes[rw] && tmpRes[v] != -1);
-                }
-                for (auto &rw : analyser.readWriteOverlapsFirstOperand[v])
-                {
-                    // count same colored pairs
-                    curColored += 2.0 * (tmpRes[v] == tmpRes[rw] && tmpRes[v] != -1);
-                }
-            }
-            
-            if (curColored > bestColored)
-            {
-                res = tmpRes;
-                bestColored = curColored;
-            }
-        }
+        // for (int64_t t = 0; t < 10; ++t)
+        // {
+        //     for (int64_t i = 1; i < (int64_t)sameOrder.size(); ++i)
+        //     {
+        //         swap(sameOrder[i], sameOrder[rand() % (i + 1)]);
+        //     }
+        //     
+        //     map<int64_t, int64_t> tmpRes;
+        //     
+        //     for (auto &[k, v] : res) tmpRes[k] = -1;
+        //     
+        //     trySpeadSameRegisters(sameOrder, tmpRes, analyser);
+        //     
+        //     double curColored = 0;
+        //     for (auto &v : sameOrder)
+        //     {
+        //         curColored += 0.2 * (tmpRes[v] != -1);
+        //         for (auto &rw : analyser.readWriteOverlaps[v])
+        //         {
+        //             // count same colored pairs
+        //             curColored += (tmpRes[v] == tmpRes[rw] && tmpRes[v] != -1);
+        //         }
+        //         for (auto &rw : analyser.readWriteOverlapsFirstOperand[v])
+        //         {
+        //             // count same colored pairs
+        //             curColored += 2.0 * (tmpRes[v] == tmpRes[rw] && tmpRes[v] != -1);
+        //         }
+        //     }
+        //     
+        //     if (curColored > bestColored)
+        //     {
+        //         res = tmpRes;
+        //         bestColored = curColored;
+        //     }
+        // }
         printf("Colored same colors: %f\n", bestColored);
-        
+
+        int64_t id = 0;
         for (auto &[cost, v] : order)
         {
             if (res[v] != -1) continue;
             
-            array<vector<int64_t>, registersCount> color;
+            // array<vector<int64_t>, registersCount> color;
+            array<int8_t, registersCount> color = {};
             
             for (auto &i : analyser.overlaps[v])
             {
                 if (res[i] == -1) continue;
-                color[res[i]].push_back(i);
+                color[res[i]] = 1;
             }
             
-            int64_t freeColor = FindFirst(color);
+            int64_t freeColor = FindRandom(color);
             
             if (freeColor == -1)
             {
                 // TODO: is there some ways to fix color?
+
+                printf("Error colored %lld/%lld nodes [bad node: %lld] prob=%lld\n", id, order.size(), v, prob);
                 
                 /* Error - can't resolve conflict */
                 // TODO: may be select another variable to split?
                 /* return it */
-                double bestValue = 0.0;
-                int64_t to_split = -1;
+                set<pair<double, int64_t>> bvars;
                 for (auto &[var, neibours] : analyser.overlaps)
                 {
-                    double thisValue = 0.0;
-                    // simple euristics:
-
-                    
-                    // * if variable have long lifetime - it is good
-                    thisValue += analyser.lifetime[var];
-                    // * if variable have many ajansed variables - it is good too.
-                    thisValue += neibours.size();
-                    // * if variable is used often - it is bad
-                    thisValue -= 4.2 * pow(analyser.usages[var], 1.22);
-
-                    // printf("%lld value=%f\n", var, thisValue);
-                    
-                    if ((to_split == -1 || thisValue > bestValue) && !generatedTemps.contains(var))
+                    if (!generatedTemps.contains(var))
                     {
-                        bestValue = thisValue;
-                        to_split = var;
+                        double thisValue = 0.0;
+                        // simple euristics:
+                                            
+                        // * if variable have long lifetime - it is good
+                        thisValue += analyser.lifetime[var];
+                        // * if variable have many ajansed variables - it is good too.
+                        thisValue += neibours.size();
+                        // * if variable is used often - it is bad
+                        thisValue -= 4.2 * pow(analyser.usages[var], 1.22);
+
+                        // printf("%lld value=%f\n", var, thisValue);
+
+                        bvars.insert({-thisValue, var});
                     }
                 }
-                if (to_split == -1)
+                
+                int64_t split_cnt = max((int64_t)1, (int64_t)bvars.size() / 4 - registersCount);
+                printf("Splitting %lld/%lld variables\n", split_cnt, bvars.size());
+                for (auto &[cost, v] : bvars)
                 {
+                    SplitVariable(v);
+                    if (!--split_cnt) break; 
+                }
+                // split 
+                if (split_cnt != 0)
+                {
+                    dumpIR(wk);
+                    for (auto &[k, v] : analyser.overlaps)
+                    {
+                        printf("%lld overlaps[%lld]: ", k, v.size());
+                        for (auto &z : v)
+                        {
+                            printf(" %lld", z);
+                        }
+                        printf("\n");
+                    }
                     printf("Error: there is no variables, but graph coloring was failed???\n");
                     exit(1);
                 }
-                return to_split;
+                return 0;
             }
             res[v] = freeColor;
+            id++;
         }
         return -1;
     }
@@ -283,12 +332,13 @@ public:
     {
         wk = _wk;
         map<int64_t, int64_t> res;
+        prob = 0;
         
         // map<OperationBlock *, int64_t> pressure; // register pressing euristic
         // calculatePressure(pressure);
 
         generatedTemps.clear();
-        int64_t maxOptimizableIterations = 1000;
+        int64_t maxOptimizableIterations = 50;
 
         /* try to spread registers */
         int64_t iter = 0;
@@ -307,52 +357,66 @@ public:
                 }
                 return res;
             }
-            printf("failed. Spliting %lld...\n", to_split);
+            printf("failed.\n");
             // TODO: implement clever not full split algo
-            if (iter > maxOptimizableIterations || true)
+            if (iter > maxOptimizableIterations)
             {
-                /* simply unload/load variable in all occurences */
-                for (int64_t i = 0; i < (int64_t)wk->content->code.size(); ++i)
+                // split all variables
+                for (auto &[i, v] : analyser.overlaps)
                 {
-                    OperationBlock *op = wk->content->code[i];
-                    
-                    const auto &usedVars = getUsedVariables(op);
-                    bool found = false;
-                    for (auto &var : usedVars) { if (var == to_split) { found = true; break; } }
-                    if (found)
+                    if (!generatedTemps.contains(i))
                     {
-                        bool foundRead = false;
-                        bool foundWrite = false;
-                        const auto &readVars = getReadVariables(op);
-                        for (auto &var : readVars) { if (var == to_split) { foundRead = true; break; } }    
-                        const auto &writtenVars = getWritedVariables(op);
-                        for (auto &var : writtenVars) { if (var == to_split) { foundWrite = true; break; } }    
-                        
-                        int64_t temp = newTemp(wk, wk->content->variables[to_split]);
-                        generatedTemps.insert(temp);
-                        
-                        printf("generated temporary variable: %lld [%d %d]\n", temp, foundRead, foundWrite);
-                        
-                        if (foundRead)
-                        {
-                            connectBeforeOp(wk, op, new OperationBlock(OP_LOAD, {temp, to_split}));
-                        }
-                        connectOp(wk, op, new OperationBlock(OP_FREE_TEMP, {temp}));
-                        /* if write - add store too */
-                        if (foundWrite)
-                        {
-                            connectOp(wk, op, new OperationBlock(OP_STORE, {temp, to_split}));
-                        }
-                        /* translate var id */
-                        applyNamesTranslition(op, map<int64_t, int64_t>{{to_split, temp}});
+                        SplitVariable(i);
                     }
                 }
-            }
-            else
-            {
-                /* clever split of variable: select most pressure using point, and insert load/store */
+                printf("SPLITTED ALL\n");
             }
         }
+    }
+
+    void SplitVariable(int64_t to_split)
+    {
+        int64_t temps = 0;
+        for (int64_t i = 0; i < (int64_t)wk->content->code.size(); ++i)
+        {
+            OperationBlock *op = wk->content->code[i];
+            
+            const auto &usedVars = getUsedVariables(op);
+            bool found = false;
+            for (auto &var : usedVars) { if (var == to_split) { found = true; break; } }
+            if (found)
+            {
+                bool foundRead = false;
+                bool foundWrite = false;
+                const auto &readVars = getReadVariables(op);
+                for (auto &var : readVars) { if (var == to_split) { foundRead = true; break; } }    
+                const auto &writtenVars = getWritedVariables(op);
+                for (auto &var : writtenVars) { if (var == to_split) { foundWrite = true; break; } }    
+                
+                int64_t temp = newTemp(wk, wk->content->variables[to_split]);
+                generatedTemps.insert(temp);
+
+                temps++;
+                
+                if (foundRead)
+                {
+                    connectBeforeOp(wk, op, new OperationBlock(OP_LOAD, {temp, to_split}));
+                }
+                connectOp(wk, op, new OperationBlock(OP_FREE_TEMP, {temp}));
+                if (IS_JUMP(op->type))
+                {
+                    connectOpSecond(wk, op, new OperationBlock(OP_FREE_TEMP, {temp}));
+                }
+                /* if write - add store too */
+                if (foundWrite)
+                {
+                    connectOp(wk, op, new OperationBlock(OP_STORE, {temp, to_split}));
+                }
+                /* translate var id */
+                applyNamesTranslition(op, map<int64_t, int64_t>{{to_split, temp}});
+            }
+        }
+        printf("generated %lld temporary variabls\n", temps);
     }
 };
 

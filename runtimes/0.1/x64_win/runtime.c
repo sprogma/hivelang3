@@ -40,6 +40,7 @@ extern int64_t setjmpUN(struct jmpbuf *);
 #ifndef NDEBUG
     #define log(f, ...) myPrintf(L ## f, __VA_ARGS__)
 #else
+    // #define log(f, ...) myPrintf(L ## f, __VA_ARGS__)
     #define log(...)
 #endif
 
@@ -123,7 +124,7 @@ struct worker_info
 struct worker_info Workers[100] = {};
 
 
-struct object *object_array[1000] = {};
+struct object *object_array[10000] = {};
 int64_t object_array_len = 0;
 
 struct defined_array
@@ -178,9 +179,9 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param)
             myMemcpy(res->data, objStart, objSize);
             for (int i = 0; i < objSize; ++i)
             {
-                myPrintf(L" %02x", res->data[i]);
+                log(" %02x", res->data[i]);
             }
-            myPrintf(L"\n");
+            log("\n");
             int64_t id = (int64_t)res + DATA_OFFSET(struct object_array);
             object_array[object_array_len++] = (struct object *)id;
             log("[id=%llx]\n", id);
@@ -300,7 +301,7 @@ void SheduleWorker()
             void *result_promise = NULL;
             
             // TODO: remove 16 args limit [use alloca?]
-            int64_t call_data[16], *cd;
+            int64_t call_data[32] = {}, *cd;
             void *output = NULL;
             cd = call_data;
 
@@ -346,10 +347,10 @@ void SheduleWorker()
             log("calling worker %lld\n", runningId);
             for (int64_t i = 0; i < data->sizes_len; ++i)
             {
-                log("ARG[%lld] = %lld\n", i, call_data[i]);
+                myPrintf(L"ARG[%lld] = %lld\n", i, call_data[i]);
             }
             log("output is %p [->to promise %p]\n", output, result_promise);
-            
+
             DllCall(
                 queue[queue_len]->ptr,
                 call_data,
@@ -358,7 +359,7 @@ void SheduleWorker()
 
             // MessageBox(0, L"Text", L"Caption", 0x40);
 
-            myPrintf(L"returned\n");
+            log("returned + Error=%lld\n", (int64_t)GetLastError());
 
             if (output != NULL)
             {
@@ -369,8 +370,6 @@ void SheduleWorker()
             {
                 PrintObject(result_promise);
             }
-
-            myFree(output);
             // TODO: free interrupts mutex
         }
         else
@@ -445,7 +444,7 @@ void CallObject(BYTE *param, int64_t workerId)
     log("\n");
 
     // TODO: remove 512 body size constant
-    void *data = myMalloc(tableSize + 512);
+    void *data = myMalloc(tableSize + 1024);
     myMemcpy(data, param, tableSize);
 
     StartNewWorker(workerId, data);
@@ -607,10 +606,10 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                     log("argument %lld have size %lld\n", i, sizes[i]);
                 }                
 
-                // play sound
-
                 // why it fails without this string?
-                myPrintf(L"%llx\n", mciSendStringW);
+                myPrintf(L"0>%llx\n", mciSendStringW);
+                myPrintf(L"1>%llx\n", SelectObject);
+                myPrintf(L"2>%llx\n", CreateFontW);
                 break;
             case 16: // Worker positions
             {
@@ -753,7 +752,6 @@ int entry()
     {
         input[i] = myScanI64();
     }
-    log("\n");
     #endif
 
     int64_t inputId = NewObject(3, 8 * inputLen, 8);
@@ -761,7 +759,7 @@ int entry()
     
     int64_t resCodeId = NewObject(2, 4, 4);
 
-    BYTE *tbl = myMalloc(16 + 512);
+    BYTE *tbl = myMalloc(16 + 2048);
     myMemcpy(tbl + 0, &inputId, 8);
     myMemcpy(tbl + 8, &resCodeId, 8);
     

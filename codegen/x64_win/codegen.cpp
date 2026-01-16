@@ -13,6 +13,7 @@ using namespace std;
 
 
 #include "../../ir.hpp"
+#include "../../logger.hpp"
 #include "../../optimization/optimizer.hpp"
 #include "../../analysis/analizators.hpp"
 #include "../codegen.hpp"
@@ -115,6 +116,7 @@ struct jmpInstruction
     BYTE *codePos;
     int64_t codeOrder;
     OperationBlock *destOp;
+    OperationBlock *node;
 };
 
 class WinX64Assembler : public CodeAssembler
@@ -129,6 +131,9 @@ private:
     BYTE *assemblyCode, *assemblyEnd;
     int64_t assemblyAlloc;
     int64_t nextLabelId;
+
+    #define assertExpr(block, expr) \
+        if (!(expr)) logError(ir->filename, ir->code, (block)->code_start, (block)->code_end, "Assertation failed: [%s:%d] %s", __FUNCTION__, __LINE__,  #expr);
     
     template<typename... Args>
     void pbyte(Args... args) 
@@ -136,8 +141,10 @@ private:
         ((*assemblyEnd++ = args), ...);
     }
     
-    void printZ(asm_operationZ op)
+    void printZ(OperationBlock *node, asm_operationZ op)
     {
+        (void)node;
+        
         switch (op)
         {
             case ASM_CQO:
@@ -149,7 +156,7 @@ private:
         }
     }
     
-    void printR(asm_operation1 op, pair<int64_t, int64_t> r1)
+    void printR(OperationBlock *node, asm_operation1 op, pair<int64_t, int64_t> r1)
     {
 
         // common data
@@ -196,7 +203,7 @@ private:
             }
             case ASM_SETE:
             { 
-                assert(r1.second == 1);
+                assertExpr(node, r1.second == 1);
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
                 pbyte(0x94);
@@ -205,7 +212,7 @@ private:
             }
             case ASM_SETNE:
             { 
-                assert(r1.second == 1);
+                assertExpr(node, r1.second == 1);
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
                 pbyte(0x95);
@@ -214,7 +221,7 @@ private:
             }
             case ASM_SETL:
             { 
-                assert(r1.second == 1);
+                assertExpr(node, r1.second == 1);
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
                 pbyte(0x9C);
@@ -223,7 +230,7 @@ private:
             }
             case ASM_SETLE:
             { 
-                assert(r1.second == 1);
+                assertExpr(node, r1.second == 1);
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
                 pbyte(0x9E);
@@ -232,7 +239,7 @@ private:
             }
             case ASM_SETG:
             { 
-                assert(r1.second == 1);
+                assertExpr(node, r1.second == 1);
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
                 pbyte(0x9F);
@@ -241,7 +248,7 @@ private:
             }
             case ASM_SETGE:
             { 
-                assert(r1.second == 1);
+                assertExpr(node, r1.second == 1);
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
                 pbyte(0x9D);
@@ -250,7 +257,7 @@ private:
             }
             case ASM_SETA:
             { 
-                assert(r1.second == 1);
+                assertExpr(node, r1.second == 1);
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
                 pbyte(0x97);
@@ -259,7 +266,7 @@ private:
             }
             case ASM_SETAE:
             { 
-                assert(r1.second == 1);
+                assertExpr(node, r1.second == 1);
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
                 pbyte(0x93);
@@ -268,7 +275,7 @@ private:
             }
             case ASM_SETB:
             { 
-                assert(r1.second == 1);
+                assertExpr(node, r1.second == 1);
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
                 pbyte(0x92);
@@ -277,7 +284,7 @@ private:
             }
             case ASM_SETBE:
             { 
-                assert(r1.second == 1);
+                assertExpr(node, r1.second == 1);
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
                 pbyte(0x96);
@@ -288,9 +295,8 @@ private:
     }
 
     
-    void printRR(asm_operation2 op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2)
+    void printRR(OperationBlock *node, asm_operation2 op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2)
     {
-
         // common data
         BYTE rex = 0x40;
         bool needrex = false;
@@ -315,7 +321,7 @@ private:
             // [prefixes] [REX] [88/89] [param]
             case ASM_MOV:
             {
-                assert(r1.second == r2.second);
+                assertExpr(node, r1.second == r2.second);
 
                 if (r1.second == 2) { pbyte(0x66); }
                 
@@ -332,7 +338,7 @@ private:
                 // if this fallback isn't need, don't enable it
                 // if (r1.second == r2.second) return printRR(ASM_MOV, r1, r2);
                 
-                assert(r1.second > r2.second);
+                assertExpr(node, r1.second > r2.second);
                 
                 rex = 0x40;
                 needrex = false;
@@ -370,7 +376,7 @@ private:
                         if (op == ASM_MOVZX)
                         {
                             // simple mov
-                            printRR(ASM_MOV, {r1.first, 4}, r2);
+                            printRR(node, ASM_MOV, {r1.first, 4}, r2);
                         }
                         else
                         {
@@ -385,7 +391,7 @@ private:
             // [prefixes] [REX] [88/89] [param]
             case ASM_XOR:
             {
-                assert(r1.second == r2.second);
+                assertExpr(node, r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
                 pbyte((r1.second == 1 ? 0x30 : 0x31));
@@ -394,7 +400,7 @@ private:
             }
             case ASM_AND:
             {
-                assert(r1.second == r2.second);
+                assertExpr(node, r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
                 pbyte((r1.second == 1 ? 0x20 : 0x21));
@@ -403,7 +409,7 @@ private:
             }
             case ASM_OR:
             {
-                assert(r1.second == r2.second);
+                assertExpr(node, r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
                 pbyte((r1.second == 1 ? 0x08 : 0x09));
@@ -412,7 +418,7 @@ private:
             }
             case ASM_ADD:
             {
-                assert(r1.second == r2.second);
+                assertExpr(node, r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
                 pbyte((r1.second == 1 ? 0x00 : 0x01));
@@ -421,7 +427,7 @@ private:
             }
             case ASM_SUB:
             {
-                assert(r1.second == r2.second);
+                assertExpr(node, r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
                 pbyte((r1.second == 1 ? 0x28 : 0x29));
@@ -430,7 +436,7 @@ private:
             }
             case ASM_IMUL:
             {
-                assert(r1.second == r2.second);
+                assertExpr(node, r1.second == r2.second);
                 if (r1.second <= 2) { pbyte(0x66); } // multiplicate 8 byte as 16 byte
                 if (needrex) { pbyte(rex); }
                 pbyte(0x0F);
@@ -441,7 +447,7 @@ private:
             case ASM_TEST:
             {
                 // TODO: check test opcode args order
-                assert(r1.second == r2.second);
+                assertExpr(node, r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
                 pbyte((r1.second == 1 ? 0x84 : 0x85));
@@ -451,7 +457,7 @@ private:
             case ASM_CMP:
             {
                 // printf("%lld %lld\n", r1.second, r2.second);
-                assert(r1.second == r2.second);
+                assertExpr(node, r1.second == r2.second);
                 if (r1.second == 2) { pbyte(0x66); }
                 if (needrex) { pbyte(rex); }
                 pbyte((r1.second == 1 ? 0x38 : 0x39));
@@ -461,7 +467,7 @@ private:
         }
     }
 
-    void printRM(asm_operation3rm op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t offset)
+    void printRM(OperationBlock *node, asm_operation3rm op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t offset)
     {
         
         BYTE rex = 0x40;
@@ -475,7 +481,7 @@ private:
         {
             case ASM_MOV_RM:
             {   
-                assert(r2.second == 8);
+                assertExpr(node, r2.second == 8);
 
                 // add 16 bit prefix
                 if (r1.second == 2)  { pbyte(0x66); }
@@ -524,10 +530,10 @@ private:
         }
     }
 
-    void printRC(asm_operation2rc op, pair<int64_t, int64_t> r1, int64_t value)
+    void printRC(OperationBlock *node, asm_operation2rc op, pair<int64_t, int64_t> r1, int64_t value)
     {
-
-        
+        (void)node;
+                    
         switch (op)
         {
             case ASM_MOV_RC:
@@ -592,7 +598,7 @@ private:
                 }
                 else
                 {
-                    printf("Error: Can't use ADD_RC with 64bit constant\n");
+                    logError(ir->filename, "", 0, 0, "Can't use ADD_RC with 64bit constant");
                     return;
                 }
                 
@@ -601,7 +607,7 @@ private:
         }
     }
 
-    void printMR(asm_operation3mr op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t offset)
+    void printMR(OperationBlock *node, asm_operation3mr op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t offset)
     {
         
         BYTE rex = 0x40;
@@ -616,7 +622,7 @@ private:
         {
             case ASM_MOV_MR:
             {   
-                assert(r1.second == 8);
+                assertExpr(node, r1.second == 8);
 
                 if (r2.second == 2)  { pbyte(0x66); }
 
@@ -665,7 +671,7 @@ private:
         }
     }
 
-    void printRRC(asm_operation3rrc op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t constant)
+    void printRRC(OperationBlock *node, asm_operation3rrc op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t constant)
     {
         bool needrex = false;
         int64_t rex = 0x40;
@@ -680,10 +686,11 @@ private:
         switch (op)
         {
             case ASM_IMUL_RRC:
-                assert(r1.second == r2.second);
+                assertExpr(node, r1.second == r2.second);
                 if (r1.second == 1)
                 {
-                    printf("Error: IMUL can't take byte variables\n");
+                    logError(ir->filename, "", 0, 0, "IMUL can't take byte variables");
+                    return;
                 }
 
                 if (r2.second == 2) pbyte(0x66);
@@ -705,18 +712,18 @@ private:
                 } 
                 else 
                 {
-                    printf("Error: IMUL can't take 64bit constants\n");
+                    logError(ir->filename, "", 0, 0, "IMUL can't take 64bit constants");
                     return;
                 }
                 break;
         }
     }
     
-    void printRRR(asm_operation3 op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, pair<int64_t, int64_t> r3)
+    void printRRR(OperationBlock *node, asm_operation3 op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, pair<int64_t, int64_t> r3)
     {
 
-        assert(r1.second == r2.second && r2.second == r3.second);
-        assert(r1.second == 4 || r1.second == 8);
+        assertExpr(node, r1.second == r2.second && r2.second == r3.second);
+        assertExpr(node, r1.second == 4 || r1.second == 8);
 
         switch (op)
         {
@@ -758,8 +765,10 @@ private:
     }
 
     // return {size, encoding variant}
-    pair<int64_t, int64_t> JMPsize(asm_operation_jmp op, int64_t offset, int64_t encoding_variant)
+    pair<int64_t, int64_t> JMPsize(OperationBlock *node, asm_operation_jmp op, int64_t offset, int64_t encoding_variant)
     {
+        (void)node;
+        
         if (offset >= INT8_MIN + 6 && offset <= INT8_MAX && encoding_variant <= 0)
         {   
             return {1 + 1, 0}; // opcode + data
@@ -785,14 +794,16 @@ private:
         }
         else
         {
-            printf("ERROR: Wrong encoding_variant: %lld\n", encoding_variant);
+            logError(ir->filename, "", 0, 0, "Wrong encoding_variant: %lld", encoding_variant);
             return {0, 0};
         }
     }
 
-    int64_t printJMP(asm_operation_jmp op, int64_t offset, int64_t encoding_variant)
+    int64_t printJMP(OperationBlock *node, asm_operation_jmp op, int64_t offset, int64_t encoding_variant)
     {
-        auto [sz, var] = JMPsize(op, offset, encoding_variant);
+        (void)node;
+        
+        auto [sz, var] = JMPsize(node, op, offset, encoding_variant);
         offset -= sz;
         // 6 is max jmp size
         if (var == 0)
@@ -842,13 +853,15 @@ private:
         }
         else
         {
-            printf("ERROR: Wrong encoding_variant: %lld\n", var);
+            logError(ir->filename, "", 0, 0, "Wrong encoding_variant: %lld", var);
             return -1;
         }
     }
 
-    BYTE *printCALL(int64_t address)
+    BYTE *printCALL(OperationBlock *node, int64_t address)
     {
+        (void)node;
+        
         pbyte(0x48, 0xB8); // mov rax im64
         BYTE *res = assemblyEnd;
         memcpy(assemblyEnd, &address, 8);
@@ -937,7 +950,7 @@ private:
     };
     map<int64_t, dll_import_entry> dllImportHeader;
 
-    vector<OperationBlock *> toBuild;
+    vector<pair<OperationBlock *, OperationBlock *>> toBuild;
 
     bool isSigned(int64_t name)
     {
@@ -997,28 +1010,6 @@ private:
         return res;
     }
 
-    const char *SizeQualifer(TypeContext *var) {
-        switch (var->size) {
-            case 8: return "QWORD PTR";
-            case 4: return "DWORD PTR";
-            case 2: return "WORD PTR";
-            case 1: return "BYTE PTR";
-        } 
-        printf("Wrong variable size - there is no qualifier of size %lld\n", var->size);
-        return "ERROR PTR";
-    }
-
-    const char *SizeQualifer(int64_t var) {
-        switch (varSize(var)) {
-            case 8: return "QWORD PTR";
-            case 4: return "DWORD PTR";
-            case 2: return "WORD PTR";
-            case 1: return "BYTE PTR";
-        } 
-        printf("Wrong variable size - there is no qualifier of size %lld\n", varSize(var));
-        return "ERROR PTR";
-    }
-
     /*
         registers: 
             rbp - pointer on locals
@@ -1058,12 +1049,12 @@ private:
                 string entry = (wk->attributes.contains("dllimport.entry") ? wk->attributes["dllimport.entry"] : wk->name);
                 if (wk->outputs.size() > 1)
                 {
-                    printf("Error: DLLIMPORT function have more than 1 return argument\n");
+                    logError(ir->filename, ir->code, wk->code_start, wk->code_end, "DLLIMPORT function have more than 1 return argument");
                     return;
                 }
                 if (!wk->outputs.empty() && wk->outputs[0].second->type != TYPE_PROMISE)
                 {
-                    printf("Error: DLLIMPORT function's return argument isn't promise\n");
+                    logError(ir->filename, ir->code, wk->code_start, wk->code_end, "DLLIMPORT function's return argument isn't promise");
                     return;
                 }
                 int64_t out_size = (wk->outputs.empty() ? -1 : wk->outputs[0].second->_vector.base->size);
@@ -1131,7 +1122,7 @@ private:
             addressTable.clear();
             orderTable.clear();
 
-            toBuild.push_back(wk->content->entry);
+            toBuild.push_back({wk->content->entry, NULL});
             while (!toBuild.empty())
             {
                 BuildOperation();
@@ -1152,62 +1143,82 @@ private:
             auto op = wk->content->code[i];
             if (op->type == OP_CALL)
             {
+                WorkerDeclarationContext *fn = idToWorker[op->data[0]];
                 // insert before it input table generation
-                int64_t id = 1, offset = 0, inputTableSize = GetWorkerInputTableSize(op->data[0]);
-                for (auto &[name, type] : array{views::all(idToWorker[op->data[0]]->inputs), 
-                                                views::all(idToWorker[op->data[0]]->outputs)} | views::join)
+                int64_t id = 0, offset = 0, inputTableSize = GetWorkerInputTableSize(op->data[0]);
+                for (auto &[name, type] : array{views::all(fn->inputs), 
+                                                views::all(fn->outputs)} | views::join)
                 {
-                    auto *newOp = new OperationBlock(OP_STORE_INPUT, {op->data[id++], offset - inputTableSize});
+                    int64_t tmp = op->data[id + 1];
+                    if (id < (int64_t)fn->inputs.size() && wk->content->variables[op->data[id + 1]] != fn->inputs[id].second)
+                    {
+                        tmp = newTemp(wk, fn->inputs[id].second);
+                        auto *castOp = new OperationBlock(OP_CAST, {tmp, op->data[id + 1]});
+                        connectBeforeOp(wk, op, castOp);
+                    }
+                    
+                    auto *newOp = new OperationBlock(OP_STORE_INPUT, {tmp, offset - inputTableSize});
                     connectBeforeOp(wk, op, newOp);
+                    
+                    if (tmp != op->data[id + 1])
+                    {
+                        auto *freeOp = new OperationBlock(OP_FREE_TEMP, {tmp});
+                        connectOp(wk, op, freeOp);
+                    }
+                    
                     offset += type->size;
+                    id++;
                 }
+                
+                // now it have only 1st data
+                op->data.resize(1);
             }
         }
     }
 
-    void InsertMove(pair<int64_t, int64_t> dest, pair<int64_t, int64_t> from, bool isSigned)
+    void InsertMove(OperationBlock *node, pair<int64_t, int64_t> dest, pair<int64_t, int64_t> from, bool isSigned)
     {
         if (dest.second <= from.second)
         {
             if (dest.first != from.first)
             {
-                printRR(ASM_MOV, dest, {from.first, dest.second});
+                printRR(node, ASM_MOV, dest, {from.first, dest.second});
             }
             return;
         }
-        printRR((isSigned ? ASM_MOVSX : ASM_MOVZX), dest, from);
+        printRR(node, (isSigned ? ASM_MOVSX : ASM_MOVZX), dest, from);
     }
 
-    void InsertMove(int64_t dest, int64_t from)
+    void InsertMove(OperationBlock *node, int64_t dest, int64_t from)
     {
-        InsertMove(Register(dest), Register(from), isSigned(dest));
+        InsertMove(node, Register(dest), Register(from), isSigned(dest));
     }
 
-    void InsertInteger(pair<int64_t, int64_t> dest, int64_t value)
+    void InsertInteger(OperationBlock *node, pair<int64_t, int64_t> dest, int64_t value)
     {
         switch (value)
         {
             case 0:
-                printRR(ASM_XOR, dest, dest);
+                printRR(node, ASM_XOR, dest, dest);
                 break;
             default:
-                printRC(ASM_MOV_RC, dest, value);
+                printRC(node, ASM_MOV_RC, dest, value);
                 break;
         }
     }
 
-    void ExternTo64Bit(pair<int64_t, int64_t> reg, bool is_signed)
+    void ExternTo64Bit(OperationBlock *node, pair<int64_t, int64_t> reg, bool is_signed)
     {
         switch (reg.second)
         {
             case 1:
             case 2:
-                printRR((is_signed ? ASM_MOVSX : ASM_MOVZX), {reg.first, 8}, reg);
+                printRR(node, (is_signed ? ASM_MOVSX : ASM_MOVZX), {reg.first, 8}, reg);
                 break;
             case 4:
                 if (is_signed)
                 {
-                    printRR(ASM_MOVSX, {reg.first, 8}, reg);
+                    printRR(node, ASM_MOVSX, {reg.first, 8}, reg);
                 }
                 else
                 {
@@ -1222,7 +1233,8 @@ private:
 
     void BuildOperation()
     {
-        OperationBlock *op = toBuild.back();
+        OperationBlock *op = toBuild.back().first;
+        OperationBlock *prevOp = toBuild.back().second;
         toBuild.pop_back();
         
         // return from function
@@ -1238,7 +1250,7 @@ private:
         // TODO: here can take some place of "assembly inlining"
         if (!addressTable.insert({op, assemblyEnd}).second) 
         { 
-            JumpInstructions.push_back({ASM_JMP, assemblyEnd, currentOrder, op});
+            JumpInstructions.push_back({ASM_JMP, assemblyEnd, currentOrder, op, prevOp});
             return;
         }
 
@@ -1248,24 +1260,24 @@ private:
         #define ABEL_BINOP(T) \
             if (regTable[op->data[0]] == regTable[op->data[2]]) \
             { \
-                printRR(T, Register(op->data[2]), Register(op->data[1])); \
+                printRR(op, T, Register(op->data[2]), Register(op->data[1])); \
             } \
             else \
             { \
-                InsertMove(op->data[0], op->data[1]); \
-                printRR(T, Register(op->data[0]), Register(op->data[2])); \
+                InsertMove(op, op->data[0], op->data[1]); \
+                printRR(op, T, Register(op->data[0]), Register(op->data[2])); \
             }
         #define CMPOP(A, B) { \
             printf("%lld %lld %lld [%p %p %p]\n", op->data[0], op->data[1], op->data[2], varType(op->data[0]), varType(op->data[1]), varType(op->data[2])); \
-            printRR(ASM_CMP, Register(op->data[1]), Register(op->data[2])); \
-            printRC(ASM_MOV_RC, Register(op->data[0]), 0); \
+            printRR(op, ASM_CMP, Register(op->data[1]), Register(op->data[2])); \
+            printRC(op, ASM_MOV_RC, Register(op->data[0]), 0); \
             auto reg = Register(op->data[0]); \
             reg.second = 1; \
             if (isSigned(op->data[0])) \
-                printR(A, reg); \
+                printR(op, A, reg); \
             else \
-                printR(B, reg); \
-            printR(ASM_NEG, Register(op->data[0])); \
+                printR(op, B, reg); \
+            printR(op, ASM_NEG, Register(op->data[0])); \
         }
         
         switch (op->type)
@@ -1277,37 +1289,37 @@ private:
             
             case OP_JZ:
             {
-                printRR(ASM_TEST, Register(op->data[0]), Register(op->data[0]));
-                JumpInstructions.push_back({ASM_JZ, assemblyEnd, currentOrder, op->next[1]});
+                printRR(op, ASM_TEST, Register(op->data[0]), Register(op->data[0]));
+                JumpInstructions.push_back({ASM_JZ, assemblyEnd, currentOrder, op->next[1], op});
                 break;
             }   
             case OP_JNZ: 
             {
-                printRR(ASM_TEST, Register(op->data[0]), Register(op->data[0]));
-                JumpInstructions.push_back({ASM_JNZ, assemblyEnd, currentOrder, op->next[1]});
+                printRR(op, ASM_TEST, Register(op->data[0]), Register(op->data[0]));
+                JumpInstructions.push_back({ASM_JNZ, assemblyEnd, currentOrder, op->next[1], op});
                 break;
             }
             case OP_LOAD:
                 // mov $0, XX PTR [rbp + $1]
-                printRM(ASM_MOV_RM, Register(op->data[0]), {5, 8}, memTable[op->data[1]]);
+                printRM(op, ASM_MOV_RM, Register(op->data[0]), {5, 8}, memTable[op->data[1]]);
                 break;
             case OP_STORE:
                 // mov XX PTR [rbp + $1], $0
-                printMR(ASM_MOV_MR, {5, 8}, Register(op->data[0]), memTable[op->data[1]]);
+                printMR(op, ASM_MOV_MR, {5, 8}, Register(op->data[0]), memTable[op->data[1]]);
                 break;
         
             case OP_LOAD_INPUT: 
                 // mov $0, XX PTR [rdi + $1]
-                printRM(ASM_MOV_RM, Register(op->data[1]), {7, 8}, GetInputOffset(op->data[0]));
+                printRM(op, ASM_MOV_RM, Register(op->data[1]), {7, 8}, GetInputOffset(op->data[0]));
                 break;
             case OP_LOAD_OUTPUT: 
                 // mov $0, XX PTR [rdi + $1]
-                printRM(ASM_MOV_RM, Register(op->data[1]), {7, 8}, GetOutputOffset(op->data[0]));
+                printRM(op, ASM_MOV_RM, Register(op->data[1]), {7, 8}, GetOutputOffset(op->data[0]));
                 break;
             
             case OP_STORE_INPUT:
             {
-                printMR(ASM_MOV_MR, {5, 8}, Register(op->data[0]), op->data[1]);
+                printMR(op, ASM_MOV_MR, {5, 8}, Register(op->data[0]), op->data[1]);
                 break;
             }
             
@@ -1317,23 +1329,23 @@ private:
                 int64_t callTableSize = GetWorkerInputTableSize(op->data[0]);
                 // rdx=worker id
                 // rsi=call table
-                InsertInteger({2, 8}, op->data[0]);
-                InsertMove({6, 8}, {5, 8}, false);
-                printRC(ASM_ADD_RC, {6, 8}, -callTableSize);
-                runtimeApiHeader[HEADER_ENTRY_CALL_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                InsertInteger(op, {2, 8}, op->data[0]);
+                InsertMove(op, {6, 8}, {5, 8}, false);
+                printRC(op, ASM_ADD_RC, {6, 8}, -callTableSize);
+                runtimeApiHeader[HEADER_ENTRY_CALL_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 break;
             }
                 
             case OP_CAST: 
-                InsertMove(op->data[0], op->data[1]);
+                InsertMove(op, op->data[0], op->data[1]);
                 break;
                 
             case OP_MOV: 
-                InsertMove(op->data[0], op->data[1]);
+                InsertMove(op, op->data[0], op->data[1]);
                 break;
 
             case OP_NEW_INT: 
-                InsertInteger(Register(op->data[0], 8), op->data[1]);
+                InsertInteger(op, Register(op->data[0], 8), op->data[1]);
                 break;
                 
             case OP_NEW_FLOAT:
@@ -1345,11 +1357,11 @@ private:
                 // rcx=OBJECT_DEFINED_ARRAY=5
                 // rdx=defined object ID
                 // rdi=size of element
-                InsertInteger({1, 8}, 0x05);
-                InsertInteger({2, 8}, op->data[1]);
-                InsertInteger({7, 8}, varType(op->data[0])->_vector.base->size);
-                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
-                InsertMove(Register(op->data[0]), {0, 8}, false);
+                InsertInteger(op, {1, 8}, 0x05);
+                InsertInteger(op, {2, 8}, op->data[1]);
+                InsertInteger(op, {7, 8}, varType(op->data[0])->_vector.base->size);
+                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                InsertMove(op, Register(op->data[0]), {0, 8}, false);
                 break;
             }
             case OP_NEW_ARRAY:
@@ -1357,12 +1369,12 @@ private:
                 // rcx=OBJECT_ARRAY=3
                 // rdx=total size
                 // rdi=size of element
-                InsertInteger({1, 8}, 0x03);
-                ExternTo64Bit(Register(op->data[1]), isSigned(op->data[1]));
-                printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
-                InsertInteger({7, 8}, varType(op->data[0])->_vector.base->size);
-                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
-                InsertMove(Register(op->data[0]), {0, 8}, false);
+                InsertInteger(op, {1, 8}, 0x03);
+                ExternTo64Bit(op, Register(op->data[1]), isSigned(op->data[1]));
+                printRRC(op, ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
+                InsertInteger(op, {7, 8}, varType(op->data[0])->_vector.base->size);
+                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                InsertMove(op, Register(op->data[0]), {0, 8}, false);
                 break;
             }
             case OP_NEW_PROMISE:
@@ -1370,11 +1382,11 @@ private:
                 // rcx=OBJECT_PROMISE=2
                 // rdx=total size
                 // rdi=size of element = total size
-                InsertInteger({1, 8}, 0x02);
-                InsertInteger({2, 8}, varType(op->data[0])->_vector.base->size);
-                InsertMove({7, 8}, {2, 8}, false);
-                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
-                InsertMove(Register(op->data[0]), {0, 8}, false);
+                InsertInteger(op, {1, 8}, 0x02);
+                InsertInteger(op, {2, 8}, varType(op->data[0])->_vector.base->size);
+                InsertMove(op, {7, 8}, {2, 8}, false);
+                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                InsertMove(op, Register(op->data[0]), {0, 8}, false);
                 break;
             }
             case OP_NEW_PIPE:     printf("not supported: new_pipe\n"); break;
@@ -1384,7 +1396,7 @@ private:
                 // TODO: what if data[3] is not scalar?
                 assert(op->data[1] != 0 || (TypeContext *)op->data[2] != varType(op->data[0]));
                 // mov XX PTR [rbp + $0 + $1], $3
-                printMR(ASM_MOV_MR, {5, 8}, Register(op->data[3]), memTable[op->data[0]] + op->data[1]);
+                printMR(op, ASM_MOV_MR, {5, 8}, Register(op->data[3]), memTable[op->data[0]] + op->data[1]);
                 // (TypeContext *)op->data[2] - type [unused for now]
                 break;
                 
@@ -1393,23 +1405,23 @@ private:
                 // rcx=size rdx=offset rdi=object rsi=value
                 if (isApiScalar(op->data[4]))
                 {
-                    InsertInteger({1, 8}, -varSize(op->data[4]));
-                    ExternTo64Bit(Register(op->data[1]), isSigned(op->data[1]));
-                    printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
-                    if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
-                    InsertMove({7, 8}, Register(op->data[0]), false);
-                    InsertMove({6, 8}, Register(op->data[4]), false);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    InsertInteger(op, {1, 8}, -varSize(op->data[4]));
+                    ExternTo64Bit(op, Register(op->data[1]), isSigned(op->data[1]));
+                    printRRC(op, ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
+                    if (op->data[2] != 0) { printRC(op, ASM_ADD_RC, {2, 8}, op->data[2]); }
+                    InsertMove(op, {7, 8}, Register(op->data[0]), false);
+                    InsertMove(op, {6, 8}, Register(op->data[4]), false);
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 else
                 {
-                    InsertInteger({1, 8}, varSize(op->data[4]));
-                    ExternTo64Bit(Register(op->data[1]), isSigned(op->data[1]));
-                    printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
-                    if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
-                    InsertMove({7, 8}, Register(op->data[0]), false);
-                    InsertInteger({6, 8}, memTable[op->data[4]]);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    InsertInteger(op, {1, 8}, varSize(op->data[4]));
+                    ExternTo64Bit(op, Register(op->data[1]), isSigned(op->data[1]));
+                    printRRC(op, ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
+                    if (op->data[2] != 0) { printRC(op, ASM_ADD_RC, {2, 8}, op->data[2]); }
+                    InsertMove(op, {7, 8}, Register(op->data[0]), false);
+                    InsertInteger(op, {6, 8}, memTable[op->data[4]]);
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1420,19 +1432,19 @@ private:
                 // rcx=size rdx=offset rdi=object rsi=value
                 if (isApiScalar(op->data[1]))
                 {
-                    InsertInteger({1, 8}, -varSize(op->data[1]));
-                    InsertInteger({2, 8}, 0);
-                    InsertMove({7, 8}, Register(op->data[0]), false);
-                    InsertMove({6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    InsertInteger(op, {1, 8}, -varSize(op->data[1]));
+                    InsertInteger(op, {2, 8}, 0);
+                    InsertMove(op, {7, 8}, Register(op->data[0]), false);
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 else
                 {
-                    InsertInteger({1, 8}, varSize(op->data[1]));
-                    InsertInteger({2, 8}, 0);
-                    InsertMove({7, 8}, Register(op->data[0]), false);
-                    InsertInteger({6, 8}, memTable[op->data[1]]);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    InsertInteger(op, {1, 8}, varSize(op->data[1]));
+                    InsertInteger(op, {2, 8}, 0);
+                    InsertMove(op, {7, 8}, Register(op->data[0]), false);
+                    InsertInteger(op, {6, 8}, memTable[op->data[1]]);
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1443,7 +1455,7 @@ private:
                 // TODO: what if data[3] is not scalar?
                 assert(op->data[2] != 0 || (TypeContext *)op->data[3] != varType(op->data[0]));
                 // mov $0, XX PTR [rbp + $1 + $2]
-                printRM(ASM_MOV_RM, Register(op->data[0]), {5, 8}, memTable[op->data[1]] + op->data[2]);
+                printRM(op, ASM_MOV_RM, Register(op->data[0]), {5, 8}, memTable[op->data[1]] + op->data[2]);
                 // (TypeContext *)op->data[3] - type [unused for now]
                 break;
             }
@@ -1453,23 +1465,23 @@ private:
                 // rcx=size rdx=offset rdi=value rsi=object
                 if (isApiScalar(op->data[0]))
                 {
-                    InsertInteger({1, 8}, -varSize(op->data[0]));
-                    ExternTo64Bit(Register(op->data[4]), isSigned(op->data[4]));
-                    printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[4], 8), varType(op->data[1])->_vector.base->size);
-                    if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
-                    InsertMove({6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
-                    InsertMove(Register(op->data[0]), {7, 8}, false);
+                    InsertInteger(op, {1, 8}, -varSize(op->data[0]));
+                    ExternTo64Bit(op, Register(op->data[4]), isSigned(op->data[4]));
+                    printRRC(op, ASM_IMUL_RRC, {2, 8}, Register(op->data[4], 8), varType(op->data[1])->_vector.base->size);
+                    if (op->data[2] != 0) { printRC(op, ASM_ADD_RC, {2, 8}, op->data[2]); }
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 }
                 else
                 {
-                    InsertInteger({1, 8}, varSize(op->data[0]));
-                    ExternTo64Bit(Register(op->data[4]), isSigned(op->data[4]));
-                    printRRC(ASM_IMUL_RRC, {2, 8}, Register(op->data[4], 8), varType(op->data[1])->_vector.base->size);
-                    if (op->data[2] != 0) { printRC(ASM_ADD_RC, {2, 8}, op->data[2]); }
-                    InsertInteger({7, 8}, memTable[op->data[0]]);
-                    InsertMove({6, 8}, Register(op->data[4]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    InsertInteger(op, {1, 8}, varSize(op->data[0]));
+                    ExternTo64Bit(op, Register(op->data[4]), isSigned(op->data[4]));
+                    printRRC(op, ASM_IMUL_RRC, {2, 8}, Register(op->data[4], 8), varType(op->data[1])->_vector.base->size);
+                    if (op->data[2] != 0) { printRC(op, ASM_ADD_RC, {2, 8}, op->data[2]); }
+                    InsertInteger(op, {7, 8}, memTable[op->data[0]]);
+                    InsertMove(op, {6, 8}, Register(op->data[4]), false);
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1479,19 +1491,19 @@ private:
                 // rcx=size rdx=offset rdi=value rsi=object
                 if (isApiScalar(op->data[0]))
                 {
-                    InsertInteger({1, 8}, -varSize(op->data[0]));
-                    InsertInteger({2, 8}, -16);
-                    InsertMove({6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
-                    InsertMove(Register(op->data[0]), {7, 8}, false);
+                    InsertInteger(op, {1, 8}, -varSize(op->data[0]));
+                    InsertInteger(op, {2, 8}, -16);
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 }
                 else
                 {
-                    InsertInteger({1, 8}, varSize(op->data[0]));
-                    InsertInteger({2, 8}, -16);
-                    InsertInteger({7, 8}, memTable[op->data[0]]);
-                    InsertMove({6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    InsertInteger(op, {1, 8}, varSize(op->data[0]));
+                    InsertInteger(op, {2, 8}, -16);
+                    InsertInteger(op, {7, 8}, memTable[op->data[0]]);
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1501,19 +1513,19 @@ private:
                 // rcx=size rdx=offset rdi=value rsi=object
                 if (isApiScalar(op->data[0]))
                 {
-                    InsertInteger({1, 8}, -varSize(op->data[0]));
-                    InsertInteger({2, 8}, 0);
-                    InsertMove({6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
-                    InsertMove(Register(op->data[0]), {7, 8}, false);
+                    InsertInteger(op, {1, 8}, -varSize(op->data[0]));
+                    InsertInteger(op, {2, 8}, 0);
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 }
                 else
                 {
-                    InsertInteger({1, 8}, varSize(op->data[0]));
-                    InsertInteger({2, 8}, 0);
-                    InsertInteger({7, 8}, memTable[op->data[0]]);
-                    InsertMove({6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(0x0) - assemblyCode, currentOrder});
+                    InsertInteger(op, {1, 8}, varSize(op->data[0]));
+                    InsertInteger(op, {2, 8}, 0);
+                    InsertInteger(op, {7, 8}, memTable[op->data[0]]);
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1528,16 +1540,16 @@ private:
             // TODO: add variant without BMI2
             case OP_SHL:   
                 // shlx $0 $1 $2
-                printRRR(ASM_SHLX, Register(op->data[0]), Register(op->data[1]), Register(op->data[2]));
+                printRRR(op, ASM_SHLX, Register(op->data[0]), Register(op->data[1]), Register(op->data[2]));
                 break;
             case OP_SHR:
                 // shrx $0 $1 $2
-                printRRR(ASM_SHRX, Register(op->data[0]), Register(op->data[1]), Register(op->data[2]));
+                printRRR(op, ASM_SHRX, Register(op->data[0]), Register(op->data[1]), Register(op->data[2]));
                 break;
             
             case OP_BNOT:
-                InsertMove(op->data[0], op->data[2]);
-                printR(ASM_NOT, Register(op->data[0]));
+                InsertMove(op, op->data[0], op->data[2]);
+                printR(op, ASM_NOT, Register(op->data[0]));
                 break;
             
             case OP_ADD:   ABEL_BINOP(ASM_ADD) break;
@@ -1545,13 +1557,13 @@ private:
             case OP_SUB:
                 if (regTable[op->data[0]] == regTable[op->data[2]])
                 {
-                    printRR(ASM_SUB, Register(op->data[0]), Register(op->data[1]));
-                    printR(ASM_NEG, Register(op->data[0]));
+                    printRR(op, ASM_SUB, Register(op->data[0]), Register(op->data[1]));
+                    printR(op, ASM_NEG, Register(op->data[0]));
                 }
                 else
                 {
-                    InsertMove(op->data[0], op->data[1]);
-                    printRR(ASM_SUB, Register(op->data[0]), Register(op->data[2]));
+                    InsertMove(op, op->data[0], op->data[1]);
+                    printRR(op, ASM_SUB, Register(op->data[0]), Register(op->data[2]));
                 }
                 break;
             
@@ -1563,29 +1575,29 @@ private:
             case OP_GE:    CMPOP(ASM_SETGE, ASM_SETAE) break;
 
             case OP_DIV:
-                InsertMove({0, 8}, Register(op->data[1]), isSigned(op->data[0]));            // mov rax, $1
+                InsertMove(op, {0, 8}, Register(op->data[1]), isSigned(op->data[0]));            // mov rax, $1
                 if (isSigned(op->data[0])) 
-                    printZ(ASM_CQO);                                                         // cqo
+                    printZ(op, ASM_CQO);                                                         // cqo
                 else 
-                    printRR(ASM_XOR, {2, 4}, {2, 4});                                        // xor edx, edx
-                printR((isSigned(op->data[0]) ? ASM_IDIV : ASM_DIV), Register(op->data[2])); // div $2
-                InsertMove(Register(op->data[0]), {0, 8}, false);                            // mov $0, rax ; sign doesn't matter
+                    printRR(op, ASM_XOR, {2, 4}, {2, 4});                                        // xor edx, edx
+                printR(op, (isSigned(op->data[0]) ? ASM_IDIV : ASM_DIV), Register(op->data[2])); // div $2
+                InsertMove(op, Register(op->data[0]), {0, 8}, false);                            // mov $0, rax ; sign doesn't matter
                 break;
                 
             case OP_MOD:
-                InsertMove({0, 8}, Register(op->data[1]), isSigned(op->data[0]));            // mov rax, $1
+                InsertMove(op, {0, 8}, Register(op->data[1]), isSigned(op->data[0]));            // mov rax, $1
                 if (isSigned(op->data[0])) 
-                    printZ(ASM_CQO);                                                         // cqo
+                    printZ(op ,ASM_CQO);                                                         // cqo
                 else 
-                    printRR(ASM_XOR, {2, 4}, {2, 4});                                        // xor edx, edx
-                printR((isSigned(op->data[0]) ? ASM_IDIV : ASM_DIV), Register(op->data[2])); // div $2
-                InsertMove(Register(op->data[0]), {2, 8}, false);                            // mov $0, rdx ; sign doesn't matter
+                    printRR(op, ASM_XOR, {2, 4}, {2, 4});                                        // xor edx, edx
+                printR(op, (isSigned(op->data[0]) ? ASM_IDIV : ASM_DIV), Register(op->data[2])); // div $2
+                InsertMove(op, Register(op->data[0]), {2, 8}, false);                            // mov $0, rdx ; sign doesn't matter
                 break;
         }
 
         for (auto &n : views::reverse(op->next))
         {
-            toBuild.push_back(n);
+            toBuild.push_back({n, op});
         }
     }
 
@@ -1618,7 +1630,7 @@ private:
                 for (auto &i : JumpInstructions)
                 {
                     currentPosition[id] = i.codePos + lastOffset;
-                    lastOffset += JMPsize(i.jmpType, 0, shortJmp[id]).first;
+                    lastOffset += JMPsize(i.node, i.jmpType, 0, shortJmp[id]).first;
                     offsets[{i.codePos, i.codeOrder}] = lastOffset;
                     
                     id++;
@@ -1641,7 +1653,7 @@ private:
                 int64_t id = 0;
                 for (auto &i : JumpInstructions)
                 {
-                    int64_t need_variant = JMPsize(i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]).second;
+                    int64_t need_variant = JMPsize(i.node, i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]).second;
                     if (need_variant != shortJmp[id])
                     {
                         shortJmp[id] = need_variant; // try to use next range level
@@ -1672,13 +1684,13 @@ private:
 
                 printf("inserted %lld to %lld ... [jmp to %lld [+%lld]] [to instruction %p]\n", shortJmp[id], currentPosition[id] - assemblyCode, opPosition[i.destOp] - assemblyCode, opPosition[i.destOp] - currentPosition[id], i.destOp);
                 // insert jump instruction
-                codeDest -= JMPsize(i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]).first;
+                codeDest -= JMPsize(i.node, i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]).first;
                 
                 assemblyEnd = codeDest;
                 
                 assert(codeDest - assemblyCode == currentPosition[id] - assemblyCode);
                 
-                assert(printJMP(i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]) == shortJmp[id]);
+                assert(printJMP(i.node, i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]) == shortJmp[id]);
                 
                 id--;
             }
@@ -1802,6 +1814,7 @@ private:
             for (auto &k : ir->strings)
             {
                 total_size += k.size();
+                total_size += (8-(total_size)%8)%8;
             }
             *(int64_t *)buf = total_size;
             buf += 8;
@@ -1814,11 +1827,14 @@ private:
                 *(int64_t *)buf = k.size();
                 buf += 8;
                 of += k.size();
+                of += (8-(of)%8)%8;
             }
+            BYTE *begin = buf;
             for (auto &k : ir->strings)
             {
                 memcpy(buf, k.data(), k.size());
                 buf += k.size();
+                buf += (8-(buf-begin)%8)%8;
             }
             printf("Exported %lld strings used in sum %lld bytes\n", ir->strings.size(), of);
         }

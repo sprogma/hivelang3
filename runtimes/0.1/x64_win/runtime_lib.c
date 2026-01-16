@@ -7,35 +7,6 @@
 
 #include "runtime_lib.h"
 
-
-HANDLE hOutput;
-HANDLE hInput;
-
-BYTE *buffer, *buffer_end;
-int64_t commited;
- // 64MB
-#define MAX_MEMORY (1024*1024*64)
-#define COMMIT_BLOCK_SIZE (4*4096)
-
-
-void *myMalloc(int64_t size)
-{
-    void *res = buffer_end;
-    buffer_end += size;
-    if (buffer_end - buffer > commited)
-    {
-        VirtualAlloc(buffer + commited, COMMIT_BLOCK_SIZE, MEM_COMMIT, PAGE_READWRITE);
-        myPrintf(L"ERROR %lld\n", (int64_t)GetLastError());
-        commited += COMMIT_BLOCK_SIZE;
-    }
-    return res;
-}
-
-void myFree(void *mem)
-{
-    (void)mem;
-}
-
 // for generated
 void *memset(void *_dst, int value, size_t size)
 {
@@ -45,6 +16,35 @@ void *memset(void *_dst, int value, size_t size)
         *dst++ = value;
     }
     return _dst;
+}
+
+
+HANDLE hOutput;
+HANDLE hInput;
+
+BYTE *data_buffer, *data_buffer_end;
+int64_t commited;
+ // 64MB
+#define MAX_MEMORY (1024*1024*1024)
+#define COMMIT_BLOCK_SIZE (4*4096) 
+
+
+void *myMalloc(int64_t size)
+{
+    data_buffer_end += (8 - (data_buffer_end - data_buffer) % 8) % 8;
+    void *res = data_buffer_end;
+    data_buffer_end += size;
+    while (data_buffer_end - data_buffer > commited)
+    {
+        VirtualAlloc(data_buffer + commited, COMMIT_BLOCK_SIZE, MEM_COMMIT, PAGE_READWRITE);
+        commited += COMMIT_BLOCK_SIZE;
+    }
+    return res;
+}
+
+void myFree(void *mem)
+{
+    (void)mem;
 }
 
 
@@ -218,9 +218,9 @@ void myPrintf(const wchar_t *format, ...)
 
 void init_lib()
 {
-    buffer = buffer_end = VirtualAlloc(NULL, MAX_MEMORY, MEM_RESERVE, PAGE_READWRITE);
+    data_buffer = data_buffer_end = VirtualAlloc(NULL, MAX_MEMORY, MEM_RESERVE, PAGE_READWRITE);
     commited = COMMIT_BLOCK_SIZE;
-    VirtualAlloc(buffer, COMMIT_BLOCK_SIZE, MEM_COMMIT, PAGE_READWRITE);
+    VirtualAlloc(data_buffer, COMMIT_BLOCK_SIZE, MEM_COMMIT, PAGE_READWRITE);
     
     hOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     hInput = GetStdHandle(STD_INPUT_HANDLE);

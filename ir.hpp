@@ -145,6 +145,8 @@ struct OperationBlock
     map<string, string> attributes = {};
     vector<OperationBlock *> next;
     set<OperationBlock *> prev;
+    
+    int64_t code_start, code_end;
 };
 
 
@@ -168,6 +170,8 @@ struct WorkerDeclarationContext
     vector<pair<string, TypeContext *>> outputs;
     WorkerContext *content;
 
+    int64_t code_start, code_end, code_block_end;
+
     ~WorkerDeclarationContext()
     {
         delete content;
@@ -177,6 +181,9 @@ struct WorkerDeclarationContext
 
 struct BuildResult
 {
+    const char *filename;
+    char *code;
+    
     double cost;
     map<WorkerDeclarationContext *, int64_t> workers;
     map<string, int64_t> names;

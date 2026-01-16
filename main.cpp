@@ -11,6 +11,8 @@ using namespace std;
 
 int main(int argc, char **argv)
 {
+    fclose(fopen("D:/mipt/lang3/started", "w"));
+    
     map<string, string> configs;
 
     for (int i = 1; i < argc; ++i) 
@@ -37,10 +39,10 @@ int main(int argc, char **argv)
 
 
     
-    const char *filename = "D:/mipt/lang3/example.hive";
-    if (configs.contains("input_file"))
+    const char *filename = "D:\\mipt\\lang3\\example.hive";
+    if (configs.contains("input-file"))
     {
-        // filename = configs["input_file"].c_str();
+        filename = configs["input-file"].c_str();
     }
     FILE *f = fopen(filename, "r");
     if (f == NULL)
@@ -55,18 +57,43 @@ int main(int argc, char **argv)
     // replace all comments with spaces
     {
         char *s = code;
+        int str = 0;
         while (*s)
         {
-            if (s[0] == '#')
+            if (str)
             {
-                while (*s && *s != '\n')
+                if (s[0] == '\\')
                 {
-                    *s++ = ' ';
+                    s += 2;
+                }
+                else if (s[0] == '\"')
+                {
+                    str = 0;
+                    s += 1;
+                }
+                else
+                {
+                    s += 1;
                 }
             }
             else
             {
-                s++;
+                if (s[0] == '#')
+                {
+                    while (*s && *s != '\n')
+                    {
+                        *s++ = ' ';
+                    }
+                }
+                else if (s[0] == '\"')
+                {
+                    str = 1;
+                    s += 1;
+                }
+                else
+                {
+                    s++;
+                }
             }
         }
     }

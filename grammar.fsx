@@ -1,14 +1,14 @@
 // this file was generated using grammar_gen.ps1
 
-let prefix = "<RULE:1600608098>"
+let prefix = "<RULE:1943254622>"
 
-let quotedstring = prefix + "quotedstring"
-let identifer_or_number = prefix + "identifer_or_number"
-let S = prefix + "S"
-let Sn = prefix + "Sn"
 let float = prefix + "float"
-let integer = prefix + "integer"
+let Sn = prefix + "Sn"
 let identifer = prefix + "identifer"
+let quotedstring = prefix + "quotedstring"
+let integer = prefix + "integer"
+let S = prefix + "S"
+let identifer_or_number = prefix + "identifer_or_number"
 let Global = prefix + "Global"
 let _record = prefix + "_record"
 let _union = prefix + "_union"
@@ -187,8 +187,9 @@ let grammar =
         ]
         rule "PrefixOperation" [
             v [prefix_op; PrefixOperation] [] []
-            v [Sn; "("; var_type; Sn; ")"; PrefixOperation] [] []
             p [QueryOperation] [] []
+            v [Sn; "("; var_type; Sn; ")"; PrefixOperation] [] []
+            v [Sn; "`"; var_type; Sn; "`"; PrefixOperation] [] []
         ]
         rule "prefix_op" [
             v [Sn; "+"] [] []
@@ -225,7 +226,7 @@ let keyToIndexMap inputMap =
     |> Seq.mapi (fun i (k, _) -> (k, i + 20))
     |> Map.ofSeq
 
-let indexMap = keyToIndexMap grammar  |> Map.add "quotedstring" 7  |> Map.add "identifer_or_number" 4  |> Map.add "S" 1  |> Map.add "Sn" 2  |> Map.add "float" 6  |> Map.add "integer" 5  |> Map.add "identifer" 3
+let indexMap = keyToIndexMap grammar  |> Map.add "float" 6  |> Map.add "Sn" 2  |> Map.add "identifer" 3  |> Map.add "quotedstring" 7  |> Map.add "integer" 5  |> Map.add "S" 1  |> Map.add "identifer_or_number" 4
 
 let printTerm = function 
     | Terminal s -> sprintf "\"%s\"" s 

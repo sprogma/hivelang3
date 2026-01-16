@@ -1,0 +1,228 @@
+49 [15952] INFO perfrun.launcher <> - Launcher main begin
+53 [15952] INFO perfrun.launcher <> - MessageCatalogInit finished
+53 [15952] INFO perfrun.launcher <> - Launcher instance created
+53 [15952] INFO perfrun.launcher <> - argc = 7; cmdline = C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64\amplxe-runss.exe --ui-output-format xml --ui-output-fd 1136 --option-file D:\mipt\lang3\prof\compiler\r000ps\config\runsa.options 
+72 [15952] INFO perfrun.launcher <> - New signal handler callback was added
+104 [15952] INFO perfrun.perfcollector <> - SEP tool path: C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64\sep.exe
+113 [15952] INFO perfrun.launcher <> - create msngr2::ICliToolContext
+113 [15952] INFO perfrun.launcher <> - create file finder object
+113 [15952] INFO perfrun.launcher <> - create a result directory: pattern = D:\mipt\lang3\prof\compiler\r000ps pid = 4294967295
+115 [15952] INFO perfrun.launcher <> - create data directory = D:\mipt\lang3\prof\compiler\r000ps\data.0
+115 [15952] INFO perfrun.launcher <> - Creating the master collection flag
+119 [15952] INFO perfrun.launcher <> - Done creating the master collection flag
+119 [24640] INFO perfrun.launcher <> - plugin [remoteplug] was disabled because it doesn't support the given collection type.
+120 [24640] INFO perfrun.sdk <> - Allocating TMU :D:\mipt\lang3\prof\compiler\r000ps\data.0\systemcollector-21364-DESKTOP-07MDIV5.sc
+120 [24640] INFO perfrun.launcher <> - plugin [] was disabled because it doesn't support the given collection type.
+120 [24640] INFO perfrun.launcher <> - plugin [itt] was disabled because it doesn't support the given collection type.
+121 [24640] INFO perfrun.launcher <> - plugin [] was disabled because it doesn't support the given collection type.
+146 [24640] INFO perfrun.launcher <> - plugin [etw.kernel] was disabled because it doesn't support the given collection type.
+147 [24640] INFO perfrun.launcher <> - plugin [etw.dx] was disabled because it doesn't support the given collection type.
+147 [24640] INFO perfrun.launcher <> - plugin [etw.wsa] was disabled because it doesn't support the given collection type.
+147 [24640] INFO perfrun.mrte <> - system-wide mode is 0
+147 [24640] INFO perfrun.mrte <> - Getting  mrte profiling environment ...
+176 [24640] INFO perfrun.mrte <> - INTEL_MRTE_DATA_DIR=D:\mipt\lang3\prof\compiler\r000ps\data.0
+176 [24640] INFO perfrun.mrte <> - INTEL_MRTE_HOST_NAME=DESKTOP-07MDIV5
+176 [24640] INFO perfrun.mrte <> - JAVA_TOOL_OPTIONS=-agentlib:amplxe_samplingmrte_javaprof_1.0
+176 [24640] INFO perfrun.mrte <> - PATH=C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin32\runtime;C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64\runtime;C:\Program Files\Common Files\Oracle\Java\javapath;D:\C\vulkanSDK\Bin;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Users\User\AppData\Local\Programs\Python\Python310;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\Git\cmd;C:\Program Files\CodeBlocks\MinGW\bin;C:\WINDOWS\system32;C:\Program Files\NVIDIA Corporation\NVIDIA NvDLISR;C:\Program Files\CMake\bin;C:\Program Files\dotnet\;C:\Users\User\AppData\Local\Programs\Python\Python310\Scripts;C:\WINDOWS\system32;C:\WINDOWS;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Windows\Microsoft.NET\Framework64\v4.0.30319;C:\Program Files\ffmpeg\bin;C:\Program Files\ffmpeg\include;C:\Program Files\Go\bin;C:\Program Files\gnuplot\bin;C:\Program Files\PowerShell\7\;D:\C\SDL2\x86_64-w64-mingw32\include\;C:\Program Files\Microsoft SQL Server\170\Tools\Binn\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\Program Files (x86)\VideoLAN\VLC;C:\Users\User\AppData\Local\Microsoft\WindowsApps;C:\path_dir;C:\Program Files\7-Zip;C:\Users\User\.dotnet\tools;C:\path_dir\php;D:\C\OCL\include;C:\Program Files\Microsoft VS Code\bin;C:\Users\User\go\bin;C:\Program Files\LLVM\bin;C:\Program Files\LLVM\lib\clang\21\lib\windows;C:\fasm
+176 [24640] INFO perfrun.mrte <> - COR_ENABLE_PROFILING=1
+176 [24640] INFO perfrun.mrte <> - COR_PROFILER={AA5E4821-E3B1-479c-B7FF-5AD047D22CED}
+176 [24640] INFO perfrun.mrte <> - COMPLUS_ProfAPI_ProfilerCompatibilitySetting=EnableV2Profiler
+176 [24640] INFO perfrun.mrte <> - CORECLR_ENABLE_PROFILING=1
+176 [24640] INFO perfrun.mrte <> - CORECLR_PROFILER={AA5E4821-E3B1-479c-B7FF-5AD047D22CED}
+176 [24640] INFO perfrun.mrte <> - CORECLR_PROFILER_PATH=C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64/amplxe_samplingmrte_clrprof_1.0.dll
+176 [24640] INFO perfrun.mrte <> - INTEL_MRTE_PROFILER_MODE=mixed
+176 [24640] INFO perfrun.mrte <> - Data directory: D:\mipt\lang3\prof\compiler\r000ps\data.0
+176 [24640] INFO perfrun.mrte <> - Mrte plugin is initialized
+177 [24640] INFO perfrun.sdk <> - runCmd: "C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64\emon.exe" -v
+182 [24640] INFO perfrun.sdk <> - runCmd started PID 20428
+277 [24640] INFO perfrun.emon <> - Extracted TSC Frequency = 3.3024e+09 from emon -v
+277 [24640] INFO perfrun.metrics <> - PMU type is alderlake_goldencove
+277 [24640] INFO perfrun.launcher <> - plugin [cuscol] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [stdsrc] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [sep] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [vtsspp] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [perf] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [aoclprofile] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.tpss <> - initialize tpss controller
+277 [24640] INFO perfrun.launcher <> - plugin [tpss] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [power] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [] was disabled because it doesn't support the given collection type.
+277 [24640] INFO perfrun.launcher <> - plugin [] was disabled because it doesn't support the given collection type.
+278 [24640] INFO perfrun.launcher <> - plugin [l0_metrics] was disabled because it doesn't support the given collection type.
+278 [24640] INFO perfrun.launcher <> - plugin [stall_reasons] was disabled because it doesn't support the given collection type.
+278 [15952] INFO perfrun.launcher <> - set environment variable: INTEL_MRTE_DATA_DIR = D:\mipt\lang3\prof\compiler\r000ps\data.0
+278 [15952] INFO perfrun.launcher <> - set environment variable: INTEL_MRTE_HOST_NAME = DESKTOP-07MDIV5
+278 [15952] INFO perfrun.launcher <> - set environment variable: JAVA_TOOL_OPTIONS = -agentlib:amplxe_samplingmrte_javaprof_1.0
+278 [15952] INFO perfrun.launcher <> - set environment variable: PATH = C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin32\runtime;C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64\runtime;C:\Program Files\Common Files\Oracle\Java\javapath;D:\C\vulkanSDK\Bin;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Users\User\AppData\Local\Programs\Python\Python310;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\Git\cmd;C:\Program Files\CodeBlocks\MinGW\bin;C:\WINDOWS\system32;C:\Program Files\NVIDIA Corporation\NVIDIA NvDLISR;C:\Program Files\CMake\bin;C:\Program Files\dotnet\;C:\Users\User\AppData\Local\Programs\Python\Python310\Scripts;C:\WINDOWS\system32;C:\WINDOWS;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Windows\Microsoft.NET\Framework64\v4.0.30319;C:\Program Files\ffmpeg\bin;C:\Program Files\ffmpeg\include;C:\Program Files\Go\bin;C:\Program Files\gnuplot\bin;C:\Program Files\PowerShell\7\;D:\C\SDL2\x86_64-w64-mingw32\include\;C:\Program Files\Microsoft SQL Server\170\Tools\Binn\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\Program Files (x86)\VideoLAN\VLC;C:\Users\User\AppData\Local\Microsoft\WindowsApps;C:\path_dir;C:\Program Files\7-Zip;C:\Users\User\.dotnet\tools;C:\path_dir\php;D:\C\OCL\include;C:\Program Files\Microsoft VS Code\bin;C:\Users\User\go\bin;C:\Program Files\LLVM\bin;C:\Program Files\LLVM\lib\clang\21\lib\windows;C:\fasm
+278 [15952] INFO perfrun.launcher <> - set environment variable: COR_ENABLE_PROFILING = 1
+278 [15952] INFO perfrun.launcher <> - set environment variable: COR_PROFILER = {AA5E4821-E3B1-479c-B7FF-5AD047D22CED}
+278 [15952] INFO perfrun.launcher <> - set environment variable: COMPLUS_ProfAPI_ProfilerCompatibilitySetting = EnableV2Profiler
+278 [15952] INFO perfrun.launcher <> - set environment variable: CORECLR_ENABLE_PROFILING = 1
+278 [15952] INFO perfrun.launcher <> - set environment variable: CORECLR_PROFILER = {AA5E4821-E3B1-479c-B7FF-5AD047D22CED}
+278 [15952] INFO perfrun.launcher <> - set environment variable: CORECLR_PROFILER_PATH = C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64/amplxe_samplingmrte_clrprof_1.0.dll
+278 [15952] INFO perfrun.launcher <> - set environment variable: INTEL_MRTE_PROFILER_MODE = mixed
+279 [15952] INFO perfrun.launcher <> - RpcServer: run RPC server to handle requests
+282 [15952] INFO perfrun.sdk <> - IProcessUtil: the given executable 'D:\mipt\lang3\a.exe' is valid.
+282 [15952] INFO perfrun.launcher <> - Launcher: command line to start before modification = D:\mipt\lang3\a.exe -optimize_query_var=true
+282 [15952] INFO perfrun.launcher <> - Launcher: command line to start after modification = D:\mipt\lang3\a.exe -optimize_query_var=true
+282 [15952] INFO perfrun.launcher <> - ProcessCreator object was created
+284 [15952] INFO perfrun.launcher <> - Launcher: the process was started in suspend mode
+303 [24640] INFO perfrun.launcher <> - Messenger::say: Peak bandwidth measurement started.
+4502 [24640] INFO perfrun.launcher <> - Messenger::say: Peak bandwidth measurement finished.
+4506 [24640] INFO perfrun.sdk <> - Allocating TMU :D:\mipt\lang3\prof\compiler\r000ps\data.0\gen_metrics0.0.2.0.0.oa.0.cfg
+4506 [24640] INFO perfrun.sdk <> - De-allocating TMU: D:\mipt\lang3\prof\compiler\r000ps\data.0\gen_metrics0.0.2.0.0.oa.0.cfg
+4538 [24640] INFO perfrun.gpu <> - GPU counting mode: initialization successful
+4557 [4360] INFO perfrun.sdk <> - Allocating TMU :D:\mipt\lang3\prof\compiler\r000ps\data.0\gen_metrics0.0.2.0.0.oa.0.vtss
+4557 [4360] INFO perfrun.gpu <> - Open stream for subdevice 0
+4558 [24640] INFO perfrun.sdk <> - runCmd: "C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64\emon.exe" -M
+4561 [24640] INFO perfrun.sdk <> - runCmd started PID 2900
+4626 [24640] INFO perfrun.sdk <> - runCmd: "C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64\emon.exe" -v
+4627 [24640] INFO perfrun.sdk <> - runCmd started PID 9976
+4700 [24640] INFO perfrun.sdk <> - runCmd: "C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64\sep.exe" -dry-run -ec CPU_CLK_UNHALTED.THREAD:sa=3302000,CPU_CLK_UNHALTED.REF_TSC:sample:sa=3302000,INST_RETIRED.ANY:sample:sa=3302000,CPU_CLK_UNHALTED.DISTRIBUTED:sa=3302000,TOPDOWN.SLOTS:perf_metrics:sample:sa=2000003,FP_ARITH_INST_RETIRED.SCALAR_SINGLE:sa=2000003,FP_ARITH_INST_RETIRED.128B_PACKED_SINGLE:sa=2000003,FP_ARITH_INST_RETIRED.256B_PACKED_SINGLE:sa=2000003,FP_ARITH_INST_RETIRED.SCALAR_DOUBLE:sa=2000003,FP_ARITH_INST_RETIRED.128B_PACKED_DOUBLE:sa=2000003,FP_ARITH_INST_RETIRED.256B_PACKED_DOUBLE:sa=2000003,UOPS_EXECUTED.X87:sa=2000003,UOPS_RETIRED.SLOTS:sa=2000003,UOPS_EXECUTED.THREAD:sa=2000003,CPU_CLK_UNHALTED.THREAD_P,FRONTEND_RETIRED.LATENCY_GE_4,IDQ_BUBBLES.CORE,INT_MISC.UOP_DROPPING,TOPDOWN.BACKEND_BOUND_SLOTS,TOPDOWN.MEMORY_BOUND_SLOTS,TOPDOWN.SLOTS,TOPDOWN.SLOTS_P,EXE_ACTIVITY.BOUND_ON_LOADS,MEMORY_ACTIVITY.STALLS_L1D_MISS,MEMORY_ACTIVITY.STALLS_L2_MISS,MEMORY_ACTIVITY.STALLS_L3_MISS,MEM_LOAD_RETIRED.L1_HIT,MEM_LOAD_RETIRED.L2_HIT,MEM_LOAD_RETIRED.L3_HIT,MEM_LOAD_RETIRED.L3_MISS,MEM_INST_RETIRED.ALL_STORES:sa=100003,MEM_INST_RETIRED.ALL_LOADS:sa=100003,CYCLE_ACTIVITY.CYCLES_MEM_ANY,DTLB_LOAD_MISSES.STLB_HIT:cmask=1,DTLB_LOAD_MISSES.WALK_ACTIVE,DTLB_LOAD_MISSES.WALK_COMPLETED_1G,DTLB_LOAD_MISSES.WALK_COMPLETED_2M_4M,DTLB_LOAD_MISSES.WALK_COMPLETED_4K,DTLB_STORE_MISSES.STLB_HIT:cmask=1,DTLB_STORE_MISSES.WALK_ACTIVE,DTLB_STORE_MISSES.WALK_COMPLETED_1G,DTLB_STORE_MISSES.WALK_COMPLETED_2M_4M,DTLB_STORE_MISSES.WALK_COMPLETED_4K,EXE_ACTIVITY.BOUND_ON_STORES,L1D_PEND_MISS.FB_FULL,L1D_PEND_MISS.L2_STALLS,L1D_PEND_MISS.PENDING,L2_RQSTS.ALL_RFO,L2_RQSTS.RFO_HIT,LD_BLOCKS.NO_SR,LD_BLOCKS.STORE_FORWARD,MEMORY_ACTIVITY.CYCLES_L1D_MISS,MEM_INST_RETIRED.LOCK_LOADS,MEM_INST_RETIRED.SPLIT_LOADS,MEM_INST_RETIRED.SPLIT_STORES,MEM_INST_RETIRED.STLB_MISS_LOADS,MEM_INST_RETIRED.STLB_MISS_STORES,MEM_LOAD_COMPLETED.L1_MISS_ANY,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS,MEM_LOAD_L3_HIT_RETIRED.XSNP_NO_FWD,MEM_LOAD_RETIRED.FB_HIT,MEM_LOAD_RETIRED.L1_MISS,MEM_STORE_RETIRED.L2_HIT,OFFCORE_REQUESTS_OUTSTANDING.ALL_DATA_RD:cmask=4,OFFCORE_REQUESTS_OUTSTANDING.CYCLES_WITH_DATA_RD,OFFCORE_REQUESTS_OUTSTANDING.CYCLES_WITH_DEMAND_RFO,XQ.FULL_CYCLES,UNC_M_CAS_COUNT_RD,UNC_M_CAS_COUNT_WR -experimental
+4702 [24640] INFO perfrun.sdk <> - runCmd started PID 12844
+4819 [24640] INFO perfrun.emon <> - Spawned collector thread
+4819 [16124] INFO perfrun.sdk <> - runCmd: "C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64\emon.exe" -u -t 0.010 -l0 -C CPU_CLK_UNHALTED.DISTRIBUTED,CPU_CLK_UNHALTED.REF_TSC,CPU_CLK_UNHALTED.THREAD,CPU_CLK_UNHALTED.THREAD_P,CYCLE_ACTIVITY.CYCLES_MEM_ANY,DTLB_LOAD_MISSES.STLB_HIT:c1,DTLB_LOAD_MISSES.WALK_ACTIVE,DTLB_LOAD_MISSES.WALK_COMPLETED_1G,DTLB_LOAD_MISSES.WALK_COMPLETED_2M_4M,DTLB_LOAD_MISSES.WALK_COMPLETED_4K,DTLB_STORE_MISSES.STLB_HIT:c1,DTLB_STORE_MISSES.WALK_ACTIVE,DTLB_STORE_MISSES.WALK_COMPLETED_1G,DTLB_STORE_MISSES.WALK_COMPLETED_2M_4M,DTLB_STORE_MISSES.WALK_COMPLETED_4K,EXE_ACTIVITY.BOUND_ON_LOADS,EXE_ACTIVITY.BOUND_ON_STORES,FP_ARITH_INST_RETIRED.128B_PACKED_DOUBLE,FP_ARITH_INST_RETIRED.128B_PACKED_SINGLE,FP_ARITH_INST_RETIRED.256B_PACKED_DOUBLE,FP_ARITH_INST_RETIRED.256B_PACKED_SINGLE,FP_ARITH_INST_RETIRED.SCALAR_DOUBLE,FP_ARITH_INST_RETIRED.SCALAR_SINGLE,FRONTEND_RETIRED.LATENCY_GE_4,IDQ_BUBBLES.CORE,INST_RETIRED.ANY,INT_MISC.UOP_DROPPING,L1D_PEND_MISS.FB_FULL,L1D_PEND_MISS.L2_STALLS,L1D_PEND_MISS.PENDING,L2_RQSTS.ALL_RFO,L2_RQSTS.RFO_HIT,LD_BLOCKS.NO_SR,LD_BLOCKS.STORE_FORWARD,MEMORY_ACTIVITY.CYCLES_L1D_MISS,MEMORY_ACTIVITY.STALLS_L1D_MISS,MEMORY_ACTIVITY.STALLS_L2_MISS,MEMORY_ACTIVITY.STALLS_L3_MISS,MEM_INST_RETIRED.ALL_LOADS,MEM_INST_RETIRED.ALL_STORES,MEM_INST_RETIRED.LOCK_LOADS,MEM_INST_RETIRED.SPLIT_LOADS,MEM_INST_RETIRED.SPLIT_STORES,MEM_INST_RETIRED.STLB_MISS_LOADS,MEM_INST_RETIRED.STLB_MISS_STORES,MEM_LOAD_COMPLETED.L1_MISS_ANY,MEM_LOAD_L3_HIT_RETIRED.XSNP_FWD,MEM_LOAD_L3_HIT_RETIRED.XSNP_MISS,MEM_LOAD_L3_HIT_RETIRED.XSNP_NO_FWD,MEM_LOAD_RETIRED.FB_HIT,MEM_LOAD_RETIRED.L1_HIT,MEM_LOAD_RETIRED.L1_MISS,MEM_LOAD_RETIRED.L2_HIT,MEM_LOAD_RETIRED.L3_HIT,MEM_LOAD_RETIRED.L3_MISS,MEM_STORE_RETIRED.L2_HIT,OFFCORE_REQUESTS_OUTSTANDING.ALL_DATA_RD:c4,OFFCORE_REQUESTS_OUTSTANDING.CYCLES_WITH_DATA_RD,OFFCORE_REQUESTS_OUTSTANDING.CYCLES_WITH_DEMAND_RFO,TOPDOWN.BACKEND_BOUND_SLOTS,TOPDOWN.MEMORY_BOUND_SLOTS,TOPDOWN.SLOTS,TOPDOWN.SLOTS:perf_metrics,TOPDOWN.SLOTS_P,UNC_M_CAS_COUNT_RD,UNC_M_CAS_COUNT_WR,UOPS_EXECUTED.THREAD,UOPS_EXECUTED.X87,UOPS_RETIRED.SLOTS,XQ.FULL_CYCLES -experimental
+4821 [16124] INFO perfrun.sdk <> - runCmd started PID 14136
+4892 [16124] WARN perfrun.launcher <> - Messenger::say: EMON Collector Message: Event TOPDOWN.SLOTS discarded since the event is invalid or the device does not exist.
+4892 [16124] WARN perfrun.launcher <> - Messenger::say: EMON Collector Message: Event TOPDOWN.SLOTS:perf_metrics discarded since the event is invalid or the device does not exist.
+5072 [15952] INFO perfrun.launcher <> - Launcher: all plugins were started
+5073 [15952] INFO perfrun.launcher <> - DirectoryMonitor object was created
+5073 [15952] INFO perfrun.launcher <> - DirectoryMonitor: a callback was added
+5073 [15952] INFO perfrun.launcher <> - DirectoryMonitor was started with pingTime = 1000
+5073 [15952] INFO perfrun.launcher <> - DeadlineTimer is going to be constructed
+5074 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+5074 [15952] INFO perfrun.launcher <> - DeadlineTimer: a callback was added
+5075 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+5080 [15952] INFO perfrun.launcher <> - Launcher: resume the profiled application and  wait its termination or stop command
+5087 [4360] INFO perfrun.gpu <> - Next report we'll be handling the low-power state
+5087 [4360] INFO perfrun.gpu <> - Entered handling of low-power state
+5205 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+5502 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+6597 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+7233 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+7409 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+7956 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+8503 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+9471 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+10457 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+11171 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+11584 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+11854 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+12019 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+12285 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+13116 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+14082 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+14642 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+15564 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+15564 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+15736 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+16190 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+16190 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+17205 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+17205 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+18054 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+18054 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+18471 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+19536 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+20361 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+21202 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+21378 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+22203 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+22363 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+23201 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+23488 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+23924 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+24361 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+25223 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+26001 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+26441 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+26441 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+27144 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+27425 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+28393 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+29503 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+30330 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+31011 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+31581 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+32232 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+32392 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+33331 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+34144 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+34581 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+35299 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+35299 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+36248 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+36549 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+36675 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+37550 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+38502 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+39216 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+39487 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+40471 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+41297 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+41441 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+42409 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+43234 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+43392 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+44236 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+44393 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+45314 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+45471 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+46186 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+46315 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+47155 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+47455 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+47456 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+48409 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+49249 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+49409 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+50377 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+51220 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+51346 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+52170 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+52471 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+53439 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+54149 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+54567 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+55425 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+56235 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+56394 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+57217 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+57643 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+58424 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+59219 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+59361 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+60347 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+61187 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+61331 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+62139 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+62271 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+62353 [16196] INFO perfrun.launcher <> - Stopping collection by RPC request
+62357 [24640] INFO perfrun.gpu <> - Waiting for data collection thread to finish
+62583 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+62696 [4360] INFO perfrun.gpu <> - Writing dual vector buffer
+62698 [4360] INFO perfrun.sdk <> - De-allocating TMU: D:\mipt\lang3\prof\compiler\r000ps\data.0\gen_metrics0.0.2.0.0.oa.0.vtss
+62709 [24640] INFO perfrun.gpu <> - Data collection thread finished, shutting down the session
+62709 [24640] INFO perfrun.sdk <> - runCmd: "C:\Program Files (x86)\Intel\oneAPI\vtune\2025.7\bin64\emon.exe" -stop
+62711 [24640] INFO perfrun.sdk <> - runCmd started PID 11340
+62941 [24640] INFO perfrun.emon <> - EMON collector successfully stopped.
+
+62962 [16124] WARN perfrun.emon_output <> - TimeKeeper: the time is being asked while the time keeper object is armed. This may mean that the time for the last group is getting reused as the time for this group
+62962 [16124] INFO perfrun.emon_output <> - Collector process exited successfully
+62982 [24640] INFO perfrun.sdk <> - De-allocating TMU: D:\mipt\lang3\prof\compiler\r000ps\data.0\systemcollector-21364-DESKTOP-07MDIV5.sc
+62998 [24640] INFO perfrun.system <> - closed the system trace file: D:\mipt\lang3\prof\compiler\r000ps\data.0\systemcollector-21364-DESKTOP-07MDIV5.sc
+63271 [15952] WARN perfrun.sdk <> - Unexpected exit status - -1073741510, at file: vcs\perfrun1\sdk\src\utils_win.cpp:541
+63371 [16196] WARN perfrun.launcher <> - Cannot send KILL signal to the process with pid #13764 : Отказано в доступе., at file: vcs\perfrun1\launcher\src\signal_handler_win.cpp:73
+63372 [15952] INFO perfrun.launcher <> - Launcher: the profiled application was terminated  with exit code = -1073741510
+63373 [15952] INFO perfrun.launcher <> - Launcher: all plugins were stopped.
+63373 [15952] INFO perfrun.launcher <> - DeadlineTimer is going to be destroyed
+63374 [15952] INFO perfrun.launcher <> - DeadlineTimer was destroyed
+63374 [15952] INFO perfrun.launcher <> - DirectoryMonitor object was destroyed
+63374 [15952] WARN perfrun.launcher <> - Stop command is ignored because it is received when collection is already stopped, at file: vcs\perfrun1\launcher\src\command_handler.cpp:226
+63375 [15952] INFO perfrun.launcher <> - Application exit code: -1073741510
+63375 [15952] INFO perfrun.launcher <> - Exit code: 4

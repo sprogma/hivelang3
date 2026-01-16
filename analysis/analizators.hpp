@@ -1,26 +1,39 @@
 #ifndef ANALIZATORS_HPP
 #define ANALIZATORS_HPP
 
+#include <unordered_set>
+#include <unordered_map>
 #include "inttypes.h"
 #include "../ir.hpp"
 
 class RegisterAnalizator
 {
     WorkerDeclarationContext *wk;
+
+
+    struct pairhash 
+    {
+    public:
+        template <typename T, typename U>
+        std::size_t operator()(const std::pair<T, U> &x) const
+        {
+        return std::hash<T>()(x.first) ^ std::hash<U>()(x.second);
+        }
+    };
     
 public:
-    map<OperationBlock *, double> executions;
-    map<int64_t, double> lifetime;
-    map<int64_t, double> usages;
-    map<OperationBlock *, set<int64_t>> op_vars;
-    map<int64_t, set<int64_t>> overlaps;
+    unordered_map<OperationBlock *, double> executions;
+    unordered_map<int64_t, double> lifetime;
+    unordered_map<int64_t, double> usages;
+    unordered_map<OperationBlock *, set<int64_t>> op_vars;
+    unordered_map<int64_t, set<int64_t>> overlaps;
     set<int64_t> physicVars;
     // write to key, read from value
-    map<int64_t, set<int64_t>> readWriteOverlaps;
-    map<int64_t, set<int64_t>> readWriteOverlapsFirstOperand;
+    unordered_map<int64_t, set<int64_t>> readWriteOverlaps;
+    unordered_map<int64_t, set<int64_t>> readWriteOverlapsFirstOperand;
     
     // op -> var -> [can TO var, can FROM var]
-    map<OperationBlock *, map<int64_t, pair<bool, bool>>> access;
+    unordered_map<OperationBlock *, map<int64_t, pair<bool, bool>>> access;
     
     RegisterAnalizator(WorkerDeclarationContext *wk) : wk(wk) 
     {
@@ -30,7 +43,7 @@ public:
     }
     
 private:
-    set<OperationBlock *> used;
+    unordered_set<pair<OperationBlock *, int64_t>, pairhash> used;
 
     void findPhysicVariables()
     {
@@ -76,7 +89,7 @@ private:
 
     void updateCanFrom(OperationBlock *node, int64_t var)
     {
-        if (!node || !used.insert(node).second) return;
+        if (!node || !used.insert({node, var}).second) return;
         /* can't free from this */
         if (node->type == OP_FREE_TEMP && node->data[0] == var)
         {
@@ -92,7 +105,7 @@ private:
 
     void updateCanTo(OperationBlock *node, int64_t var)
     {
-        if (!node || !used.insert(node).second) return;
+        if (!node || !used.insert({node, ~var}).second) return;
         /* can't free from this */
         if (node->type == OP_FREE_TEMP && node->data[0] == var)
         {
@@ -110,14 +123,15 @@ private:
     {
         access.clear();
         usages.clear();
+        used.clear();
         for (auto op : wk->content->code)
         {
             // getWritedVariables(op) was included into UsedVariables
             for (auto &i : getUsedVariables(op)) 
             { 
                 if (op->type != OP_FREE_TEMP) { usages[i] += executions[op]; }
-                used.clear(); updateCanTo(op, i);
-                used.clear(); updateCanFrom(op, i);
+                updateCanTo(op, i);
+                updateCanFrom(op, i);
             }
         }
         lifetime.clear();

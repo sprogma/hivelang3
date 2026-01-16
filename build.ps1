@@ -1,5 +1,6 @@
 pushd $PSScriptRoot
 mkdir obj 2>$null
+$FLAGS = ,"-O3"
 $f = (ls -r *.cpp)
 $need = $false
 $id=0
@@ -18,7 +19,7 @@ $os = $f | %{
             $first = $false
         }
         Write-Host "Builing $_" -Fore yellow
-        clang++ -c -std=gnu++2c $_ -o $o -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -fsanitize=address
+        clang++ -c -std=gnu++2c $_ -o $o -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $FLAGS -fsanitize=address
         $need = $true
     }
     $id++
@@ -35,7 +36,7 @@ if (!$first)
 if ($need)
 {
     Write-Host "Linking" -Fore yellow
-    clang++ -std=gnu++2c $os -o a.exe -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -fsanitize=address
+    clang++ -std=gnu++2c $os -o a.exe -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $FLAGS -fsanitize=address
 }
 else
 {

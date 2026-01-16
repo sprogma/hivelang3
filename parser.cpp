@@ -142,7 +142,7 @@ pair<vector<Node *>, bool>parse(const char *filename, Rule *baseRule, char *cont
         {
             if (!prev_was_error)
             {
-                logError(filename, content, pos);
+                logError(filename, content, pos, "Can't parse this construction");
             }
             position = pos + 1;
             prev_was_error = true;
@@ -152,8 +152,7 @@ pair<vector<Node *>, bool>parse(const char *filename, Rule *baseRule, char *cont
         {
             if (pos == position)
             {
-                printf("Error: parsing global rule don't moved position - this is infinite loop [empty pattern matched] - skipping next simbol\n");
-                logError(filename, content, position);
+                logError(filename, content, position, "parsing global rule don't moved position - this is infinite loop [empty pattern matched] - skipping next simbol");
                 position++;
             }
             else
