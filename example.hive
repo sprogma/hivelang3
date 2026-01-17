@@ -16,11 +16,12 @@ class player
     i32 dx, dy;
     i32 lives;
     i32 power;
+    i32 onFoot;
 
-    i8 pressUp; # to handle jumps
-    i8 pressA;
-    i8 pressB;
-    i8 pressC;
+    i32 pressUp; # to handle jumps
+    i32 pressA;
+    i32 pressB;
+    i32 pressC;
 }
 
 
@@ -130,8 +131,7 @@ class player
     particles <- new rect[](512);
     particles_len <- 0;
 
-    i32 isOnFoot;
-    isOnFoot <- 0;
+    me?onFoot <- 0;
 
     ?(new i16[]"open \"C:\\Windows\\Media\\onestop.mid\" type sequencer alias music", 0, 0, 0)mciSendString(*);
     ?(new i16[]"play music", 0, 0, 0)mciSendString(*);
@@ -183,12 +183,21 @@ class player
             }
         }
 
-        match ?(0x26)GetAsyncKeyState(*) < `i16`0 && isOnFoot > 0
+        match ?(0x26)GetAsyncKeyState(*) < `i16`0
         {
             -1 {
-                # me?y <- me?y - 15;
-                me?dy <- -15;
-                isOnFoot <- isOnFoot - 1;
+                match me?onFoot > 0 && me?pressUp = 0
+                {
+                    -1 {
+                        # me?y <- me?y - 15;
+                        me?dy <- -15;
+                        me?onFoot <- me?onFoot - 1;
+                        me?pressUp <- -1;
+                    }
+                }
+            }
+            0 {
+                me?pressUp <- 0;
             }
         }
 
@@ -198,26 +207,8 @@ class player
                 me?y <- me?y + 15;
             }
         }
-        
-        me?y <- me?y + me?dy;
-        me?dy <- me?dy + 1;
 
-        match me?x < 0 {-1{
-            me?x <- 0;
-        }}
-        match me?x > width - rect_size {-1{
-            me?x <- width - rect_size;
-        }}
-        match me?y < 0 {-1{
-            me?y <- 0;
-            me?dy <- 1;
-        }}
-        match me?y > height - rect_size {-1{
-            me?y <- height - rect_size;
-            me?dy <- 1;
-            isOnFoot <- 2;
-        }}
-        
+        (map, me, width, height, rect_size)ApplyPhysics(physicsTask);
         ?(allocator, clientRect, backgroundBrush)FillRect(*);
 
         id <- 0;
@@ -229,13 +220,9 @@ class player
             rect[3] <- map[id].b;
             ?(allocator, rect, rectBrush)FillRect(*);
             id <- id + 1;
-
-            match me?y + rect_size > map[id].y && me?x < map[id].a && me?x + rect_size > map[id].x && me?y < map[id].b {-1{
-                me?y <- map[id].y - rect_size;
-                me?dy <- 1;
-                isOnFoot <- 2;
-            }}
         }
+
+        ?physicsTask;
 
         rect[0] <- me?x;
         rect[1] <- me?y;
@@ -298,7 +285,69 @@ class player
     resultCode <- 0;
 }
 
-[noinline:true]
+(rect[] map, player me, i32 width, i32 height, i32 rect_size)ApplyPhysics(i32? task)
+{
+    me?y <- me?y + me?dy;
+    me?dy <- me?dy + 1;
+
+    match me?x < 0 {-1{
+        me?x <- 0;
+    }}
+    match me?x > width - rect_size {-1{
+        me?x <- width - rect_size;
+    }}
+    match me?y < 0 {-1{
+        me?y <- 0;
+        me?dy <- 1;
+    }}
+    match me?y > height - rect_size {-1{
+        me?y <- height - rect_size;
+        me?dy <- 1;
+        me?onFoot <- 2;
+    }}
+
+    i32 id, px, py, dx, dy;
+    id <- 0;
+    px <- me?x;
+    py <- me?y;
+    dx <- me?dx;
+    dy <- me?dy;
+    while id < `i32`?map
+    {
+        # 1. did we collide at all?
+        i32 x, y, a, b;
+        x <- map[id].x - rect_size;
+        y <- map[id].y - rect_size;
+        a <- map[id].a + rect_size;
+        b <- map[id].b + rect_size;
+        match x < px && px < a && y < py && py < b
+        {-1{
+            # check collision side:
+            match (px-x,py-b,-dx,-dy)crs(*) < 0
+            {-1{
+                me?y <- map[id].y - rect_size;
+                me?dy <- 1;
+                me?onFoot <- 2;
+            }}
+        }}
+        id <- id + 1;
+    }
+
+    task <- 1;
+}
+
+
+(i32 x, i32 y, i32 a, i32 b)dot(i32? re2s)
+{
+    re2s <- x * a + y * b;
+}
+
+(i32 x, i32 y, i32 a, i32 b)crs(i32? re3s)
+{
+    re3s <- x * b - y * a;
+}
+
+        
 ()CreateMap(rect[]? resMap)
 {
     rect[] map;
