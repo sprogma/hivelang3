@@ -87,7 +87,7 @@ private:
                             op2->type = OP_MOV;
                             op2->attributes.clear();
                         }
-                        if (op2->type == OP_NEW_PROMISE && op->data[0] == id)
+                        if (op2->type == OP_NEW_PROMISE && op2->data[0] == id)
                         {
                             // remove instruction
                             removeOp(fn, op2);

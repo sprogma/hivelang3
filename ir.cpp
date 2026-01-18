@@ -610,6 +610,11 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             {
                 if (is(ch, "result_list_identifer"))
                 {
+                    if (outId >= (int64_t)fn->outputs.size())
+                    {
+                        logError(ctx->filename, ctx->code, ch->start, ch->end, "Too many output arguments for worker");
+                        return {{}, -1};
+                    }
                     switch_var(ch)
                     {
                         case 0: /* "star" output - this is return type */
@@ -632,10 +637,11 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                             ctx->names[varName] = varId;
                             args.push_back(varId);
                             outputs.push_back(varId);
+                            break;
                         }
                     }
+                    outId++;
                 }
-                outId++;
             }
 
             if (outputs.size() > fn->outputs.size())
@@ -867,9 +873,9 @@ pair<vector<Operation>, int64_t> buildPrefixOperation(BuildContext *ctx, Node *n
                 {
                     int64_t tmp = newTemp(ctx, ctx->variables[pos]);
                     append(ops, {OP_NEW_INT, {tmp, 0}, {}, node->start, node->end});
-                    append(ops, {OP_SUB, {pos, tmp, pos}, {}, node->start, node->end});
-                    freeTemp(ops, tmp);
-                    break;
+                    append(ops, {OP_SUB, {tmp, tmp, pos}, {}, node->start, node->end});
+                    freeTemp(ops, pos);
+                    return {ops, tmp};
                 }
                 case 2: // !
                 {
@@ -879,13 +885,16 @@ pair<vector<Operation>, int64_t> buildPrefixOperation(BuildContext *ctx, Node *n
                     append(ops, {OP_JMP, {2, pos}, {}, node->start, node->end});
                     append(ops, {OP_NEW_INT, {tmp, 0}, {}, node->start, node->end});
                     freeTemp(ops, pos);
-                    resultPosition = tmp;
-                    break;
+                    return {ops, tmp};
                 }
                 case 3: // ~
-                {  append(ops, {OP_BNOT, {pos, pos}, {}, node->start, node->end}); break; }
+                {  
+                    int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
+                    append(ops, {OP_BNOT, {tmp, pos}, {}, node->start, node->end}); 
+                    freeTemp(ops, pos);
+                    return {ops, tmp};
+                }
             }
-            return {ops, resultPosition};
         }
         case 2: // cast
         case 3: // cast
@@ -1602,7 +1611,7 @@ vector<Operation> buildCodeBlock(BuildContext *ctx, Node *node)
     return ops;
 }
 
-void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *node)
+void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *node, Node *wknode)
 {
     assert_type(node, "code_block");
     printf("Building worker %s ...\n", wk->name.c_str());
@@ -1622,7 +1631,7 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     {
         int64_t varId = ctx->names[name] = ctx->nextVarId++;
         ctx->variables[varId] = type;
-        append(ops, {OP_LOAD_INPUT, {inputId++, varId}, {}, node->nonTerm(0)->start, node->nonTerm(0)->end});
+        append(ops, {OP_LOAD_INPUT, {inputId++, varId}, {}, wknode->nonTerm(0)->start, wknode->nonTerm(0)->end});
     }
     /* create variables for outputs? */
     int64_t outputId = 0;
@@ -1630,7 +1639,7 @@ void buildWorkerContent(BuildContext *ctx, WorkerDeclarationContext *wk, Node *n
     {
         int64_t varId = ctx->names[name] = ctx->nextVarId++;
         ctx->variables[varId] = type;
-        append(ops, {OP_LOAD_OUTPUT, {outputId++, varId}, {}, node->nonTerm(2)->start, node->nonTerm(2)->end});
+        append(ops, {OP_LOAD_OUTPUT, {outputId++, varId}, {}, wknode->nonTerm(2)->start, wknode->nonTerm(2)->end});
     }
     /* build body */
     auto res = buildCodeBlock(ctx, node);
@@ -1819,7 +1828,7 @@ pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<No
         {
             Node *code = node->childs[0]->nonTerm(4);
             WorkerDeclarationContext *wk = getWorkerByName(ctx, Substr(ctx, node->childs[0]->nonTerm(2)));
-            buildWorkerContent(ctx, wk, code);
+            buildWorkerContent(ctx, wk, code, node->childs[0]);
         }
     }
 

@@ -16,17 +16,22 @@ class player
     i32 dx, dy;
     i32 lives;
     i32 power;
+    i32 jumps;
     i32 onFoot;
 
+    i32 pressAnyMove;
     i32 pressUp; # to handle jumps
     i32 pressA;
     i32 pressB;
     i32 pressC;
+    
+    i32 color;
+    i32 bgcolor;
 }
 
 
 [export:yes]
-(i64[] args)main(i32? resultCode) 
+(i64[] args)main(i32? resultCode)
 {
     (0)GetModuleHandle(hInstance);
 
@@ -34,19 +39,19 @@ class player
     rect_size <- 50;
 
     i64 hwnd;
-    
+
     hwnd <- ?(
         0x200,
         new i16[]"#32770",
         new i16[]"Polling Only - Use Arrow Keys, ESC to exit",
         (0x00000000 | 0x00C00000 | 0x00080000 | 0x00040000 | 0x00020000 | 0x00010000) | 0x10000000,
-        0x80000000, 
-        0x80000000, 
-        800, 
+        0x80000000,
+        0x80000000,
+        800,
         600,
-        0, 
-        0, 
-        ?hInstance, 
+        0,
+        0,
+        ?hInstance,
         0
     )CreateWindowEx(*);
     resultCode <- ?()GetLastError(*);
@@ -58,13 +63,22 @@ class player
         }
     }
 
+    player[] players;
+    players <- new player[](3);
+
     player me;
     me <- new player();
 
-    me?x <- 100;
-    me?y <- 100;
-    me?dy <- 0;
-    me?dy <- 0;
+    me?color <- 0x550000;
+    me?bgcolor <- 0xFF0000;
+
+    players[0] <- me;
+    players[1] <- new player();
+    players[1]?color <- 0x005500;
+    players[1]?bgcolor <- 0x00FF00;
+    players[2] <- new player();
+    players[2]?color <- 0x000055;
+    players[2]?bgcolor <- 0x0000FF;
 
     i64 screen, allocator;
     screen <- ?(hwnd)GetDC(*);
@@ -101,41 +115,68 @@ class player
     )CreateFont(*);
 
     oldFont <- ?(allocator, font)SelectObject(*);
-
-    i64 backgroundBrush, rectBrush, rectPen;
     
+    i32 id;
+
+    i64 backgroundBrush, blockBrush;
+    i64[] rectPen;
+    i64[] rectBrush;
+
+    rectPen <- new i64[](?players);
+    rectBrush <- new i64[](?players);
+    id <- 0;
+    while id < `i32`?players
+    {
+        rectPen[id] <- ?(0, 2, players[id]?color)CreatePen(*);
+        rectBrush[id] <- ?(players[id]?bgcolor)CreateSolidBrush(*);
+        id <- id + 1;
+    }
     
     backgroundBrush <- ?(0xFFFFFF)CreateSolidBrush(*);
-    rectBrush <- ?(0xFF8800)CreateSolidBrush(*);
-    rectPen <- ?(0, 2, 0x000000)CreatePen(*);
+    blockBrush <- ?(0xFF8800)CreateSolidBrush(*);
 
     i8[] msg;
-    i32 id;
     i32 running, lastTime, frameCount, fps;
-    
+
     msg <- new i8[](48);
     running <- 1;
     lastTime <- ?()GetTickCount(*);
     frameCount <- fps <- 0;
-    
+
     i32[] rect;
     rect <- new i32[](4);
 
     i16[] text;
     text <- new i16[]"Text!";
 
+    i32 mapW, mapH;
     rect[] map;
     rect[] particles;
     i32 particles_len;
-    map <- ?()CreateMap(*);
+
+    map <- ?()CreateMap(*, PmapW, PmapH);
+    mapW <- ?PmapW;
+    mapH <- ?PmapH;
+    
     particles <- new rect[](512);
     particles_len <- 0;
 
+    me?jumps <- 0;
     me?onFoot <- 0;
+    me?pressA <- 0;
 
-    ?(new i16[]"open \"C:\\Windows\\Media\\onestop.mid\" type sequencer alias music", 0, 0, 0)mciSendString(*);
-    ?(new i16[]"play music", 0, 0, 0)mciSendString(*);
-        
+    id <- 0;
+    while id < `i32`?players
+    {
+        players[id]?x <- width % (id + 1);
+        players[id]?y <- id;
+        ?(players[id], map, rect_size)SpawnPlayer(*);
+        id <- id + 1;
+    }
+
+    # ?(new i16[]"open \"C:\\Windows\\Media\\onestop.mid\" type sequencer alias music", 0, 0, 0)mciSendString(*);
+    # ?(new i16[]"play music", 0, 0, 0)mciSendString(*);
+
     while running = 1
     {
         while ?(msg, 0, 0, 0, 1)PeekMessage(*) <> 0
@@ -169,29 +210,59 @@ class player
             }
         }
 
+        me?pressAnyMove <- 0;
         match ?(0x25)GetAsyncKeyState(*) < `i16`0
         {
             -1 {
-                me?x <- me?x - 15;
+                me?pressAnyMove <- 1;
+                match me?onFoot = 1
+                {
+                    -1 {
+                        me?dx <- -15;
+                    } 0 {
+                        match me?dx > 0 {-1{
+                            me?dx <- me?dx - 4;
+                        }0{
+                            me?dx <- me?dx - 1;
+                        }}
+                        match me?dx < -15 {-1{
+                            me?dx <- -15;
+                        }}
+                    }
+                }
             }
         }
 
         match ?(0x27)GetAsyncKeyState(*) < `i16`0
         {
             -1 {
-                me?x <- me?x + 15;
+                me?pressAnyMove <- 1;
+                match me?onFoot = 1
+                {
+                    -1 {
+                        me?dx <- +15;
+                    } 0 {
+                        match me?dx < 0 {-1{
+                            me?dx <- me?dx + 4;
+                        }0{
+                            me?dx <- me?dx + 1;
+                        }}
+                        match me?dx > 15 {-1{
+                            me?dx <- 15;
+                        }}
+                    }
+                }
             }
         }
 
         match ?(0x26)GetAsyncKeyState(*) < `i16`0
         {
             -1 {
-                match me?onFoot > 0 && me?pressUp = 0
+                match me?jumps > 0 && me?pressUp = 0
                 {
                     -1 {
-                        # me?y <- me?y - 15;
-                        me?dy <- -15;
-                        me?onFoot <- me?onFoot - 1;
+                        me?dy <- -20;
+                        me?jumps <- me?jumps - 1;
                         me?pressUp <- -1;
                     }
                 }
@@ -204,50 +275,92 @@ class player
         match ?(0x28)GetAsyncKeyState(*) < `i16`0
         {
             -1 {
-                me?y <- me?y + 15;
+                me?dy <- +15;
             }
         }
 
-        (map, me, width, height, rect_size)ApplyPhysics(physicsTask);
+    
+        match ?(0x20)GetAsyncKeyState(*) < `i16`0
+        {
+            -1 {
+                match me?pressA = 1
+                {
+                    0 {
+                        me?pressA <- 1;
+                        # push all players
+                        ?(me, players)pushPlayers(*);
+                    }
+                }
+            } 0 {
+                me?pressA <- 0;
+            }
+        }
+
+
+        id <- 0;
+        while id < `i32`?players
+        {
+            ?(map, players[id], mapW, mapH, rect_size)ApplyPhysicsToPlayer(*);
+            id <- id + 1;
+        }
+
+        # draw scene
+
         ?(allocator, clientRect, backgroundBrush)FillRect(*);
+
+        i32 cx, cy;
+        cx <- me?x - width / 2;
+        cy <- me?y - height / 2;
 
         id <- 0;
         while id < `i32`?map
         {
-            rect[0] <- map[id].x;
-            rect[1] <- map[id].y;
-            rect[2] <- map[id].a;
-            rect[3] <- map[id].b;
-            ?(allocator, rect, rectBrush)FillRect(*);
+            rect[0] <- map[id].x - cx;
+            rect[1] <- map[id].y - cy;
+            rect[2] <- map[id].a - cx;
+            rect[3] <- map[id].b - cy;
+            ?(allocator, rect, blockBrush)FillRect(*);
+            id <- id + 1;
+        }
+        
+        i64 oldPen, oldBrush;
+        oldPen <- ?(allocator, rectPen[0])SelectObject(*);
+        oldBrush <- ?(allocator, ?(5)GetStockObject(*))SelectObject(*);
+        
+        id <- 0;
+        while id < `i32`?players
+        {
+            
+            rect[0] <- players[id]?x - rect_size/2 - cx;
+            rect[1] <- players[id]?y + rect_size/2 - cy - (rect_size * players[id]?power / 1000);
+            rect[2] <- players[id]?x + rect_size/2 - cx;
+            rect[3] <- players[id]?y + rect_size/2 - cy;
+            
+            ?(allocator, rect, rectBrush[id])FillRect(*);
+            
+            rect[1] <- players[id]?y - rect_size/2 - cy;
+            
+            ?(allocator, rectPen[id])SelectObject(*);
+
+            ?(allocator, rect[0], rect[1], rect[2], rect[3])Rectangle(*);
+            
             id <- id + 1;
         }
 
-        ?physicsTask;
-
-        rect[0] <- me?x;
-        rect[1] <- me?y;
-        rect[2] <- me?x + rect_size;
-        rect[3] <- me?y + rect_size;
-        ?(allocator, rect, rectBrush)FillRect(*);
-
-        i64 oldPen, oldBrush;
-        oldPen <- ?(allocator, rectPen)SelectObject(*);
-        oldBrush <- ?(allocator, ?(5)GetStockObject(*))SelectObject(*);
-        
-        ?(allocator, me?x, me?y, me?x + rect_size, me?y + rect_size)Rectangle(*);
-        
         ?(allocator, oldBrush)SelectObject(*);
         ?(allocator, oldPen)SelectObject(*);
 
 
 
+
+
         ?(allocator, 1)SetBkMode(*);
         ?(allocator, 0x000000)SetTextColor(*);
-        
+
         ?(allocator, 10, 10, text, ?text)TextOut(*);
 
         i32 currentTime;
-        
+
         frameCount <- frameCount + 1;
         currentTime <- ?()GetTickCount(*);
 
@@ -262,13 +375,13 @@ class player
 
 
         ?(screen, 0, 0, width, height, allocator, 0, 0, 0xCC0020)BitBlt(*);
-        
+
         ?(16, 1)SleepEx(*);
     }
 
-    ?(new i16[]"stop music", 0, 0, 0)mciSendString(*);
-    ?(new i16[]"close music", 0, 0, 0)mciSendString(*);
-    
+    # ?(new i16[]"stop music", 0, 0, 0)mciSendString(*);
+    # ?(new i16[]"close music", 0, 0, 0)mciSendString(*);
+
     # TODO: update this part
     # SelectObject(allocator, oldFont);
     # SelectObject(allocator, oldBuffer);
@@ -279,31 +392,75 @@ class player
     # DeleteObject(rectPen);
     # DeleteDC(allocator);
     # ReleaseDC(hwnd, screen);
-    
+
     # DestroyWindow(hwnd);
 
     resultCode <- 0;
 }
 
-(rect[] map, player me, i32 width, i32 height, i32 rect_size)ApplyPhysics(i32? task)
+(i32 n)isqrt(i32? res)
 {
-    me?y <- me?y + me?dy;
-    me?dy <- me?dy + 1;
+    i32 x, y;
+    x <- n;
+    y <- (x + 1) / 2;
+    while y < x
+    {
+        x <- y;
+        y <- (x + n / x) / 2;
+    }
+    res <- x;
+}
 
-    match me?x < 0 {-1{
-        me?x <- 0;
+(player me, player[] players)pushPlayers(i32? task)
+{
+    match me?power >= 100 {-1{
+        me?power <- me?power - 100;
+        i32 id;
+        id <- 0;
+        while id < `i32`?players
+        {
+            match players[id] = me
+            {
+                0 {
+                    i32 ddx, ddy;
+                    i32 length;
+                    ddx <- players[id]?x - me?x;
+                    ddy <- players[id]?y - me?y - 60; # constant little push UP
+                    length <- ?(ddx * ddx + ddy * ddy)isqrt(*);
+                    match length = 0 {0{
+                        ddx <- ddx * 20 / length * (700 - length) / 700;
+                        ddy <- ddy * 20 / length * (700 - length) / 700;
+                        players[id]?dx <- players[id]?dx + ddx;
+                        players[id]?dy <- players[id]?dy + ddy;
+                    }}
+                }
+            }
+            id <- id + 1;
+        }
     }}
-    match me?x > width - rect_size {-1{
-        me?x <- width - rect_size;
+    task <- 1;
+}
+
+(rect[] map, player me, i32 width, i32 height, i32 rect_size)ApplyPhysicsToPlayer(i32? task)
+{
+    me?x <- me?x + me?dx;
+    me?y <- me?y + me?dy;
+    me?power <- me?power + 3;
+    match me?power > 1000 {-1{
+        me?power <- 1000;
     }}
-    match me?y < 0 {-1{
-        me?y <- 0;
-        me?dy <- 1;
+
+    match me?x < rect_size/2 {-1{
+        ?(me, map, rect_size)SpawnPlayer(*);
     }}
-    match me?y > height - rect_size {-1{
-        me?y <- height - rect_size;
-        me?dy <- 1;
-        me?onFoot <- 2;
+    match me?x > width - rect_size/2 {-1{
+        ?(me, map, rect_size)SpawnPlayer(*);
+    }}
+    match me?y < rect_size/2 {-1{
+        ?(me, map, rect_size)SpawnPlayer(*);
+    }}
+    match me?y > height - rect_size/2 {-1{
+        ?(me, map, rect_size)SpawnPlayer(*);
     }}
 
     i32 id, px, py, dx, dy;
@@ -312,73 +469,136 @@ class player
     py <- me?y;
     dx <- me?dx;
     dy <- me?dy;
+    me?onFoot <- 0;
     while id < `i32`?map
     {
         # 1. did we collide at all?
         i32 x, y, a, b;
-        x <- map[id].x - rect_size;
-        y <- map[id].y - rect_size;
-        a <- map[id].a + rect_size;
-        b <- map[id].b + rect_size;
+        x <- map[id].x - rect_size / 2;
+        y <- map[id].y - rect_size / 2;
+        a <- map[id].a + rect_size / 2;
+        b <- map[id].b + rect_size / 2;
         match x < px && px < a && y < py && py < b
         {-1{
             # check collision side:
-            match (px-x,py-b,-dx,-dy)crs(*) < 0
+            # top
+            match ?(a-px,y-py,-dx,-dy)crs(*) < 0 && ?(x-px,y-py,-dx,-dy)crs(*) >= 0
             {-1{
-                me?y <- map[id].y - rect_size;
-                me?dy <- 1;
-                me?onFoot <- 2;
+                me?y <- y;
+                me?dy <- 0;
+                me?jumps <- 2;
+                me?onFoot <- 1;
+            }0{
+            # left
+            match ?(x-px,y-py,-dx,-dy)crs(*) < 0 && ?(x-px,b-py,-dx,-dy)crs(*) >= 0
+            {-1{
+                me?x <- x;
+                me?dx <- 0;
+            }0{
+            # right
+            match ?(a-px,b-py,-dx,-dy)crs(*) < 0 && ?(a-px,y-py,-dx,-dy)crs(*) >= 0
+            {-1{
+                me?x <- a;
+                me?dx <- 0;
+            }0{
+            # bottom
+            match ?(x-px,b-py,-dx,-dy)crs(*) < 0 && ?(a-px,b-py,-dx,-dy)crs(*) >= 0
+            {-1{
+                me?y <- b;
+                me?dy <- 0;
+            }}
+            }}
+            }}
             }}
         }}
         id <- id + 1;
     }
 
+    # update speed
+    me?dy <- me?dy + 1;
+
+    match me?pressAnyMove = 0 && me?onFoot = 1 {-1{
+        me?dx <- me?dx * 3 / 4;
+    }}
+
     task <- 1;
 }
 
 
-(i32 x, i32 y, i32 a, i32 b)dot(i32? re2s)
+(i32 x, i32 y, i32 a, i32 b)dot(i32? res)
 {
-    re2s <- x * a + y * b;
+    res <- x * a + y * b;
 }
 
-(i32 x, i32 y, i32 a, i32 b)crs(i32? re3s)
+(i32 x, i32 y, i32 a, i32 b)crs(i32? res)
 {
-    re3s <- x * b - y * a;
+    res <- x * b - y * a;
 }
 
-        
-()CreateMap(rect[]? resMap)
+
+()CreateMap(rect[]? resMap, i32? w, i32? h)
 {
     rect[] map;
-    map <- new rect[](5);
-    
-    map[0].x <- 0;
-    map[0].y <- 0;
-    map[0].a <- 50;
-    map[0].b <- 50;
-    
+    map <- new rect[](7);
+
+    map[0].x <- 300;
+    map[0].y <- 500;
+    map[0].a <- 350;
+    map[0].b <- 550;
+
     map[1].x <- 100;
     map[1].y <- 200;
     map[1].a <- 150;
     map[1].b <- 250;
-    
+
     map[2].x <- 200;
     map[2].y <- 200;
     map[2].a <- 250;
     map[2].b <- 250;
-    
+
     map[3].x <- 400;
     map[3].y <- 500;
     map[3].a <- 450;
     map[3].b <- 650;
-    
+
     map[4].x <- 300;
     map[4].y <- 100;
     map[4].a <- 550;
     map[4].b <- 150;
 
+    map[5].x <- 0;
+    map[5].y <- 300;
+    map[5].a <- 200;
+    map[5].b <- 350;
+
+    map[6].x <- 500;
+    map[6].y <- 500;
+    map[6].a <- 600;
+    map[6].b <- 650;
+
     resMap <- map;
+    w <- 2000;
+    h <- 1000;
+}
+
+(player p, rect[] map, i32 rect_size)SpawnPlayer(i32? task)
+{
+    i32 id;
+    id <- (p?x + 3 * p?y) % `i32`?map; # random seed
+    p?x <- (map[id].x + map[id].a) / 2;
+    p?y <- map[id].y - rect_size;
+    p?dx <- 0;
+    p?dy <- 0;
+
+    p?lives <- 100;
+    p?power <- 500;
+    
+    p?pressAnyMove <- 0;
+    p?jumps <- 2;
+    p?pressUp <- 0;
+    p?pressA <- 0;
+    
+    task <- 0;
 }
 
 [dllimport:Kernel32.dll]

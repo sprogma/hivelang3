@@ -38,7 +38,7 @@ struct Node
 
     Node *nonTerm(int64_t index)
     {
-        for (auto i : childs)
+        for (auto &i : childs)
         {
             // TODO: move 3 to const
             if (i->rule && i->rule->id >= 3)

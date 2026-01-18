@@ -46,6 +46,10 @@ public:
         for (auto lay : layers)
         {
             variants = lay->Apply(variants);
+            // for (auto &wk : variants[0]->workers)
+            // {
+            //     dumpIR(wk.first);
+            // }
         }
         
         return variants[0];
