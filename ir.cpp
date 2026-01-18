@@ -201,6 +201,11 @@ TypeContext *getType(BuildContext *ctx, Node *node)
     assert_type(node, "var_type");
     /* find base type */
     string baseName = Substr(ctx, node->nonTerm(0));
+    if (!ctx->typeTable.contains(baseName))
+    {
+        logError(ctx->filename, ctx->code, node->start, node->end, "Unknown base type: %s\n", baseName.c_str());
+        return NULL;
+    }
     TypeContext *cur = ctx->typeTable[baseName];
     for (auto &child : node->childs)
     {
@@ -297,13 +302,16 @@ void processStructure(BuildContext *ctx, TypeContextType type, Node *node)
         if (is(child, "var_declaration"))
         {
             TypeContext *type = getType(ctx, child->nonTerm(0));
-            for (auto name : child->childs)
+            if (type != NULL)
             {
-                if (is(name, "identifer"))
+                for (auto name : child->childs)
                 {
-                    total_size += type->size;
-                    names[Substr(ctx, name)] = fields.size();
-                    fields.push_back(type);
+                    if (is(name, "identifer"))
+                    {
+                        total_size += type->size;
+                        names[Substr(ctx, name)] = fields.size();
+                        fields.push_back(type);
+                    }
                 }
             }
         }
@@ -330,9 +338,12 @@ vector<pair<string, TypeContext *>> readWorkerArgList(BuildContext *ctx, Node *n
     while (node->nonTerm(id))
     {
         TypeContext *type = getType(ctx, node->nonTerm(id + 0));
-        string name = Substr(ctx, node->nonTerm(id + 1));
-        printf("Input %s of type %p\n", name.data(), type);
-        res.push_back({name, type});
+        if (type != NULL)
+        {
+            string name = Substr(ctx, node->nonTerm(id + 1));
+            printf("Input %s of type %p\n", name.data(), type);
+            res.push_back({name, type});
+        }
         id += 2;
     }
 
@@ -374,6 +385,10 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             if (newOp->variant == 0)
             {
                 TypeContext *type = getType(ctx, newOp->nonTerm(0));
+                if (type == NULL)
+                {
+                    return {{}, -1};
+                }
                 map<string, string> attributes = getAttributeList(ctx, newOp->nonTerm(1));
 
                 vector<int> args;
@@ -448,6 +463,10 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                 map<string, string> attributes = getAttributeList(ctx, newOp->nonTerm(1));
                 // get type
                 TypeContext *type = getType(ctx, newOp->nonTerm(0));
+                if (type == NULL)
+                {
+                    return {{}, -1};
+                }
                 if (type->type != TYPE_ARRAY)
                 {
                     logError(ctx->filename, ctx->code, newOp->start, newOp->end, "NEW expression string variant must be used only with arrays");
@@ -903,6 +922,10 @@ pair<vector<Operation>, int64_t> buildPrefixOperation(BuildContext *ctx, Node *n
             HANDLE_NOT_NULL(pos, node->nonTerm(1));
 
             TypeContext *type = getType(ctx, node->nonTerm(0));
+            if (type == NULL)
+            {
+                return {{}, -1};
+            }
 
             if (!is_castable(type, ctx->variables[pos]))
             {
@@ -1519,14 +1542,17 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
             if (is(child, "var_declaration"))
             {
                 TypeContext *type = getType(ctx, child->nonTerm(0));
-                for (auto name : child->childs)
+                if (type != NULL)
                 {
-                    if (is(name, "identifer"))
+                    for (auto name : child->childs)
                     {
-                        int64_t varId = ctx->nextVarId++;
-                        ctx->variables[varId] = type;
-                        ctx->names[Substr(ctx, name)] = varId;
-                        printf("statement declaration [id=%lld, type=%p]\n", varId, type);
+                        if (is(name, "identifer"))
+                        {
+                            int64_t varId = ctx->nextVarId++;
+                            ctx->variables[varId] = type;
+                            ctx->names[Substr(ctx, name)] = varId;
+                            printf("statement declaration [id=%lld, type=%p]\n", varId, type);
+                        }
                     }
                 }
             }

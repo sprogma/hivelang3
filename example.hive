@@ -1,25 +1,28 @@
-#
-#           state:
-# x, y - position of player
-# dx, dy - speed of player
-#
-
 struct rect
 {
     i32 x, y, a, b;
 }
 
+struct particle
+{
+    i32 x, y;
+    i32 size;
+    i32 dx, dy;
+    i32 mass;
+}
 
 class player
 {
     i32 x, y;
     i32 dx, dy;
-    i32 lives;
+    i32 deaths;
     i32 power;
     i32 jumps;
     i32 onFoot;
 
-    i32 pressAnyMove;
+    i32 pressDown;
+    i32 pressLeft;
+    i32 pressRight;
     i32 pressUp; # to handle jumps
     i32 pressA;
     i32 pressB;
@@ -33,7 +36,7 @@ class player
 [export:yes]
 (i64[] args)main(i32? resultCode)
 {
-    (0)GetModuleHandle(hInstance);
+    (0)GetModuleHandle(var hInstance);
 
     i32 rect_size;
     rect_size <- 50;
@@ -69,14 +72,17 @@ class player
     player me;
     me <- new player();
 
+    me?deaths <- 0;
     me?color <- 0x550000;
     me?bgcolor <- 0xFF0000;
 
     players[0] <- me;
     players[1] <- new player();
+    players[1]?deaths <- 0;
     players[1]?color <- 0x005500;
     players[1]?bgcolor <- 0x00FF00;
     players[2] <- new player();
+    players[2]?deaths <- 0;
     players[2]?color <- 0x000055;
     players[2]?bgcolor <- 0x0000FF;
 
@@ -118,7 +124,7 @@ class player
     
     i32 id;
 
-    i64 backgroundBrush, blockBrush;
+    i64 backgroundBrush, blockBrush, SkillBgBrush, SkillFgBrush, SkillReadyPen;
     i64[] rectPen;
     i64[] rectBrush;
 
@@ -134,6 +140,9 @@ class player
     
     backgroundBrush <- ?(0xFFFFFF)CreateSolidBrush(*);
     blockBrush <- ?(0xFF8800)CreateSolidBrush(*);
+    SkillBgBrush <- ?(0x0000FF)CreateSolidBrush(*);
+    SkillFgBrush <- ?(0x00FF00)CreateSolidBrush(*);
+    SkillReadyPen <- ?(0, 2, 0xFF0000)CreatePen(*);
 
     i8[] msg;
     i32 running, lastTime, frameCount, fps;
@@ -151,14 +160,14 @@ class player
 
     i32 mapW, mapH;
     rect[] map;
-    rect[] particles;
+    particle[] particles;
     i32 particles_len;
 
-    map <- ?()CreateMap(*, PmapW, PmapH);
+    map <- ?()CreateMap(*, var PmapW, var PmapH);
     mapW <- ?PmapW;
     mapH <- ?PmapH;
     
-    particles <- new rect[](512);
+    particles <- new particle[](512);
     particles_len <- 0;
 
     me?jumps <- 0;
@@ -203,99 +212,12 @@ class player
             ?(msg)DispatchMessage(*);
         }
 
-        match ?(0x1B)GetAsyncKeyState(*) < `i16`0
+        match (running)
         {
-            -1 {
-                running <- 0;
+            1 {
+                running <- ?(me, players)HandleKeyPresses(*);
             }
         }
-
-        me?pressAnyMove <- 0;
-        match ?(0x25)GetAsyncKeyState(*) < `i16`0
-        {
-            -1 {
-                me?pressAnyMove <- 1;
-                match me?onFoot = 1
-                {
-                    -1 {
-                        me?dx <- -15;
-                    } 0 {
-                        match me?dx > 0 {-1{
-                            me?dx <- me?dx - 4;
-                        }0{
-                            me?dx <- me?dx - 1;
-                        }}
-                        match me?dx < -15 {-1{
-                            me?dx <- -15;
-                        }}
-                    }
-                }
-            }
-        }
-
-        match ?(0x27)GetAsyncKeyState(*) < `i16`0
-        {
-            -1 {
-                me?pressAnyMove <- 1;
-                match me?onFoot = 1
-                {
-                    -1 {
-                        me?dx <- +15;
-                    } 0 {
-                        match me?dx < 0 {-1{
-                            me?dx <- me?dx + 4;
-                        }0{
-                            me?dx <- me?dx + 1;
-                        }}
-                        match me?dx > 15 {-1{
-                            me?dx <- 15;
-                        }}
-                    }
-                }
-            }
-        }
-
-        match ?(0x26)GetAsyncKeyState(*) < `i16`0
-        {
-            -1 {
-                match me?jumps > 0 && me?pressUp = 0
-                {
-                    -1 {
-                        me?dy <- -20;
-                        me?jumps <- me?jumps - 1;
-                        me?pressUp <- -1;
-                    }
-                }
-            }
-            0 {
-                me?pressUp <- 0;
-            }
-        }
-
-        match ?(0x28)GetAsyncKeyState(*) < `i16`0
-        {
-            -1 {
-                me?dy <- +15;
-            }
-        }
-
-    
-        match ?(0x20)GetAsyncKeyState(*) < `i16`0
-        {
-            -1 {
-                match me?pressA = 1
-                {
-                    0 {
-                        me?pressA <- 1;
-                        # push all players
-                        ?(me, players)pushPlayers(*);
-                    }
-                }
-            } 0 {
-                me?pressA <- 0;
-            }
-        }
-
 
         id <- 0;
         while id < `i32`?players
@@ -347,11 +269,55 @@ class player
             id <- id + 1;
         }
 
+        # draw UI rectangles
+        # Push
+        rect[0] <- 0;
+        rect[1] <- 0;
+        rect[2] <- 60;
+        rect[3] <- 60;
+        ?(allocator, rect, SkillBgBrush)FillRect(*);
+        rect[1] <- 60 - 60 * me?power / 100;
+        ?(allocator, rect, SkillFgBrush)FillRect(*);
+        match me?power >= 100
+        {
+            -1 {
+                ?(allocator, SkillReadyPen)SelectObject(*);
+                ?(allocator, 0, 0, 60, 60)Rectangle(*);
+            }
+        }
+        # Jump
+        rect[0] <- 60;
+        rect[1] <- 0;
+        rect[2] <- 120;
+        rect[3] <- 60;
+        ?(allocator, rect, SkillBgBrush)FillRect(*);
+        rect[1] <- 60 - 60 * me?power / 175;
+        ?(allocator, rect, SkillFgBrush)FillRect(*);
+        match me?power >= 175
+        {
+            -1 {
+                ?(allocator, SkillReadyPen)SelectObject(*);
+                ?(allocator, 60, 0, 120, 60)Rectangle(*);
+            }
+        }
+        # Swap
+        rect[0] <- 120;
+        rect[1] <- 0;
+        rect[2] <- 180;
+        rect[3] <- 60;
+        ?(allocator, rect, SkillBgBrush)FillRect(*);
+        rect[1] <- 60 - 60 * me?power / 300;
+        ?(allocator, rect, SkillFgBrush)FillRect(*);
+        match me?power >= 300
+        {
+            -1 {
+                ?(allocator, SkillReadyPen)SelectObject(*);
+                ?(allocator, 120, 0, 180, 60)Rectangle(*);
+            }
+        }
+
         ?(allocator, oldBrush)SelectObject(*);
         ?(allocator, oldPen)SelectObject(*);
-
-
-
 
 
         ?(allocator, 1)SetBkMode(*);
@@ -398,6 +364,136 @@ class player
     resultCode <- 0;
 }
 
+(player me, player[] players)HandleKeyPresses(i32? running)
+{   
+    i32 runningTemp;
+    runningTemp <- 1;
+    match ?(0x1B)GetAsyncKeyState(*) < `i16`0
+    {
+        -1 {
+            runningTemp <- 0;
+        }
+    }
+
+    me?pressDown <- 0;
+    me?pressRight <- 0;
+    me?pressLeft <- 0;
+    match ?(0x25)GetAsyncKeyState(*) < `i16`0
+    {
+        -1 {
+            me?pressLeft <- 1;
+            match me?onFoot = 1
+            {
+                -1 {
+                    me?dx <- -15;
+                } 0 {
+                    match me?dx > 0 {-1{
+                        me?dx <- me?dx - 3;
+                    }}
+                    match me?dx > -15 {-1{
+                        me?dx <- me?dx - 1;
+                    }}
+                }
+            }
+        }
+    }
+
+    match ?(0x27)GetAsyncKeyState(*) < `i16`0
+    {
+        -1 {
+            me?pressRight <- 1;
+            match me?onFoot = 1
+            {
+                -1 {
+                    me?dx <- +15;
+                } 0 {
+                    match me?dx < 0 {-1{
+                        me?dx <- me?dx + 3;
+                    }}
+                    match me?dx < 15 {-1{
+                        me?dx <- me?dx + 1;
+                    }}
+                }
+            }
+        }
+    }
+
+    match ?(0x26)GetAsyncKeyState(*) < `i16`0
+    {
+        -1 {
+            match me?jumps > 0 && me?pressUp = 0
+            {
+                -1 {
+                    me?dy <- -20;
+                    me?jumps <- me?jumps - 1;
+                }
+            }
+            me?pressUp <- 1;
+        }
+        0 {
+            me?pressUp <- 0;
+        }
+    }
+
+    match ?(0x28)GetAsyncKeyState(*) < `i16`0
+    {
+        -1 {
+            me?pressDown <- 1;
+            me?dy <- +15;
+        }
+    }
+
+
+    match ?(0x41)GetAsyncKeyState(*) < `i16`0
+    {
+        -1 {
+            match me?pressA = 1
+            {
+                0 {
+                    me?pressA <- 1;
+                    ?(me, players)pushPlayers(*);
+                }
+            }
+        } 0 {
+            me?pressA <- 0;
+        }
+    }
+
+
+    match ?(0x53)GetAsyncKeyState(*) < `i16`0
+    {
+        -1 {
+            match me?pressB = 1
+            {
+                0 {
+                    me?pressB <- 1;
+                    ?(me)RocketJump(*);
+                }
+            }
+        } 0 {
+            me?pressB <- 0;
+        }
+    }
+
+
+    match ?(0x44)GetAsyncKeyState(*) < `i16`0
+    {
+        -1 {
+            match me?pressC = 1
+            {
+                0 {
+                    me?pressC <- 1;
+                    ?(me, players)swapPlayer(*);
+                }
+            }
+        } 0 {
+            me?pressC <- 0;
+        }
+    }
+
+    running <- runningTemp;
+}
+
 (i32 n)isqrt(i32? res)
 {
     i32 x, y;
@@ -409,6 +505,16 @@ class player
         y <- (x + n / x) / 2;
     }
     res <- x;
+}
+
+(player me)RocketJump(i32? task)
+{
+    match me?power >= 175 {-1{
+        me?power <- me?power - 175;
+        me?dx <- (30 * me?pressRight) - (30 * me?pressLeft);
+        me?dy <- (30 * me?pressDown)  - (30 * me?pressUp);
+    }}
+    task <- 1;
 }
 
 (player me, player[] players)pushPlayers(i32? task)
@@ -428,8 +534,8 @@ class player
                     ddy <- players[id]?y - me?y - 60; # constant little push UP
                     length <- ?(ddx * ddx + ddy * ddy)isqrt(*);
                     match length = 0 {0{
-                        ddx <- ddx * 20 / length * (700 - length) / 700;
-                        ddy <- ddy * 20 / length * (700 - length) / 700;
+                        ddx <- ddx * 30 / length * (700 - length) / 700;
+                        ddy <- ddy * 30 / length * (700 - length) / 700;
                         players[id]?dx <- players[id]?dx + ddx;
                         players[id]?dy <- players[id]?dy + ddy;
                     }}
@@ -441,25 +547,71 @@ class player
     task <- 1;
 }
 
+(player me, player[] players)swapPlayer(i32? task)
+{
+    match me?power >= 300 {-1{
+        # find nearest enemy
+        player tg; # target
+        i32 best;
+        i32 id;
+        id <- 0;
+        best <- -1;
+        while id < `i32`?players
+        {
+            i32 ddx, ddy;
+            ddx <- players[id]?x - me?x;
+            ddy <- players[id]?y - me?y;
+            i32 length;
+            length <- ddx * ddx + ddy * ddy;
+            match players[id] <> me && (length < best || best = -1)
+            {
+                -1 {
+                    best <- length;
+                    tg <- players[id];
+                }
+            }
+            id <- id + 1;
+        }
+        match best <> -1 && length < 1300*1300
+        {
+            -1 {
+                me?power <- me?power - 300;
+                i32 tx, ty;
+                tx <- me?x;
+                ty <- me?y;
+                me?x <- tg?x;
+                me?y <- tg?y;
+                tg?x <- tx;
+                tg?y <- ty;
+                me?dx <- 0;
+                me?dy <- 0;
+                tg?dx <- 0;
+                tg?dy <- 0;
+            }
+        }
+    }}
+    task <- 1;
+}
+
 (rect[] map, player me, i32 width, i32 height, i32 rect_size)ApplyPhysicsToPlayer(i32? task)
 {
     me?x <- me?x + me?dx;
     me?y <- me?y + me?dy;
-    me?power <- me?power + 3;
+    me?power <- me?power + 2;
     match me?power > 1000 {-1{
         me?power <- 1000;
     }}
 
-    match me?x < rect_size/2 {-1{
+    match me?x < -width {-1{
         ?(me, map, rect_size)SpawnPlayer(*);
     }}
-    match me?x > width - rect_size/2 {-1{
+    match me?x > width {-1{
         ?(me, map, rect_size)SpawnPlayer(*);
     }}
-    match me?y < rect_size/2 {-1{
+    match me?y < -height {-1{
         ?(me, map, rect_size)SpawnPlayer(*);
     }}
-    match me?y > height - rect_size/2 {-1{
+    match me?y > height {-1{
         ?(me, map, rect_size)SpawnPlayer(*);
     }}
 
@@ -517,7 +669,7 @@ class player
     # update speed
     me?dy <- me?dy + 1;
 
-    match me?pressAnyMove = 0 && me?onFoot = 1 {-1{
+    match me?pressLeft = 0 && me?pressRight = 0 && me?onFoot = 1 {-1{
         me?dx <- me?dx * 3 / 4;
     }}
 
@@ -577,8 +729,8 @@ class player
     map[6].b <- 650;
 
     resMap <- map;
-    w <- 2000;
-    h <- 1000;
+    w <- 3000;
+    h <- 3000;
 }
 
 (player p, rect[] map, i32 rect_size)SpawnPlayer(i32? task)
@@ -590,13 +742,11 @@ class player
     p?dx <- 0;
     p?dy <- 0;
 
-    p?lives <- 100;
     p?power <- 500;
+    p?deaths <- p?deaths + 1;
     
-    p?pressAnyMove <- 0;
+    p?pressUp <- p?pressDown <- p?pressLeft <- p?pressRight <- p?pressA <- p?pressB <- p?pressC <- 0;
     p?jumps <- 2;
-    p?pressUp <- 0;
-    p?pressA <- 0;
     
     task <- 0;
 }
