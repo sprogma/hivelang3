@@ -129,6 +129,11 @@ bool is_castable(TypeContext *t1, TypeContext *t2)
     {
         return true; // all known scalars has casing rules
     }
+    if (t1->type == TYPE_CLASS && t2->type == TYPE_CLASS)
+    {
+        // TODO: make something more clever
+        return true; // all classes can be castable too
+    }
     return false;
 }
 
@@ -1777,6 +1782,8 @@ BuildContext *initializateContext(const char *filename, char *source, map<string
 
     ctx->typeTable["f32"] = new TypeContext(4, TYPE_SCALAR, {._scalar={SCALAR_F32}});
     ctx->typeTable["f64"] = new TypeContext(8, TYPE_SCALAR, {._scalar={SCALAR_F64}});
+    
+    ctx->typeTable["object"] = new TypeContext(8, TYPE_CLASS, {._struct={}});
 
     for (auto &[k, v] : ctx->typeTable)
     {
