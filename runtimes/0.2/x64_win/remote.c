@@ -4,13 +4,12 @@
 #include <ws2tcpip.h>
 #include "windows.h"
 
-// #include "runtime_lib.h"
+#include "runtime_lib.h"
+#include "remote.h"
 
-#include "stdio.h"
-#include "inttypes.h"
 
-#define print printf
-#define log printf
+int64_t next_local_id = 0;
+HANDLE hIOCP;
 
 
 struct connection_context
@@ -18,44 +17,50 @@ struct connection_context
     OVERLAPPED overlapped;
     SOCKET socket;
     WSABUF wsaBuf;
-    char buffer[1024];
+    struct hive_connection *context;
+    
+    // to store current data - callback is called when buffer_len is received
+    int64_t res_buffer_len;
+    BYTE *res_buffer;
+    BYTE buffer[4096];
+};
+
+struct hive_connection
+{
+    struct connection_context *ctx;
+    int64_t local_id;
 };
 
 
-HANDLE hIOCP;
+// TODO: remove 1024 as constant
+struct hive_connection *connections[1024];
 
 
-static DWORD Worker(void *param)
+void HandleNewConnection(SOCKET client)
 {
-    (void)param;
+    struct hive_connection *new_connection = myMalloc(sizeof(*new_connection));
+    struct connection_context *new_context = myMalloc(sizeof(*new_context));
+
+    // initializate new connection
+
+    new_connection->local_id = next_local_id++;
+    connections[new_connection->local_id] = new_connection;
     
-    DWORD bytesTransferred;
-    ULONG_PTR completionKey;
-    LPOVERLAPPED lpOverlapped;
+    new_connection->ctx = new_context;
+    new_context->context = new_connection;
 
-    while (GetQueuedCompletionStatus(hIOCP, &bytesTransferred, &completionKey, &lpOverlapped, INFINITE)) 
-    {
-        struct connection_context *ctx = (struct connection_context *)lpOverlapped;
+    CreateIoCompletionPort((HANDLE)client, hIOCP, (ULONG_PTR)client, 0);
 
-        if (bytesTransferred == 0) 
-        {
-            log("[NETWORK]: Peer disconnected\n");
-            closesocket(ctx->socket);
-            free(ctx);
-            continue;
-        }
+    new_context->socket = client;
+    new_context->wsaBuf.buf = (char *)new_context->buffer;
+    new_context->wsaBuf.len = sizeof(new_context->buffer);
 
-        print("Got message: %s\n", ctx->buffer);
-
-        memset(ctx->buffer, 0, sizeof(ctx->buffer));
-        
-        DWORD flags = 0;
-        WSARecv(ctx->socket, &ctx->wsaBuf, 1, NULL, &flags, &ctx->overlapped, NULL);
-    }
-    return 0;
+    DWORD flags = 0;
+    WSARecv(client, &new_context->wsaBuf, 1, NULL, &flags, (OVERLAPPED *)new_context, NULL);
 }
 
-static DWORD ConnectionListener(void *param) 
+
+static DWORD ConnectionListnerWorker(void *param) 
 {
     (void)param;
     
@@ -84,23 +89,102 @@ static DWORD ConnectionListener(void *param)
     while (1) 
     {
         SOCKET client = accept(listenSock, NULL, NULL);
-        CreateIoCompletionPort((HANDLE)client, hIOCP, (ULONG_PTR)client, 0);
-
-        struct connection_context* ctx = malloc(sizeof(*ctx));
-        ctx->socket = client;
-        ctx->wsaBuf.buf = ctx->buffer;
-        ctx->wsaBuf.len = 1024;
-
-        DWORD flags = 0;
-        WSARecv(client, &ctx->wsaBuf, 1, NULL, &flags, (OVERLAPPED *)ctx, NULL);
+        HandleNewConnection(client);
     }
     
     return 0;
 }
 
-// void start_remote_subsystem()
-// {
-// }
+#define API_REQUEST_MEM_PAGE 0x00
+#define API_QUERY_OBJECT 0x02
+#define API_RUN_WORKER 0x04
+
+#define API_ANSWER_REQUEST_MEM_PAGE (API_REQUEST_MEM_PAGE | 0x1)
+#define API_ANSWER_QUERY_OBJECT (API_QUERY_OBJECT | 0x1)
+
+/* known calls */
+/*
+
+    object concept:
+        address = 
+            [40 bit page][24 bit value]
+
+    message structure:
+        1 byte: call type
+        7 byte: body size [little endian]
+        ----
+        request data
+    
+
+    api CALLS:
+        
+        API_REQUEST_MEM_PAGE [broadcast]
+            5 byte: memory page
+        
+        API_QUERY_OBJECT
+            8 byte: object id
+            8 byte: offset
+            8 byte: size
+
+        API_RUN_WORKER
+            8 byte: worker id
+            ---
+            input table [without body table]
+
+    api ANSWERS:
+            
+        API_ANSWER_REQUEST_MEM_PAGE
+            // neibours
+            8 byte: length of neibours
+            [array
+                16 byte: address
+            ]
+            // answer
+            1 byte: Does this computer use requested page [0xFF / 0x00]
+
+        API_ANSWER_QUERY_OBJECT
+            8 byte: object id
+            8 byte: offset
+            8 byte: size
+            ---- 
+            raw bytes
+*/
+
+
+/*---------------------------------------------- receive api logic ---------------------------------------------*/
+
+static DWORD Worker(void *param)
+{
+    (void)param;
+    
+    DWORD bytesTransferred;
+    ULONG_PTR completionKey;
+    LPOVERLAPPED lpOverlapped;
+
+    while (GetQueuedCompletionStatus(hIOCP, &bytesTransferred, &completionKey, &lpOverlapped, INFINITE)) 
+    {
+        struct connection_context *ctx = (struct connection_context *)lpOverlapped;
+
+        if (bytesTransferred == 0) 
+        {
+            log("[NETWORK]: Peer disconnected\n");
+            closesocket(ctx->socket);
+            myFree(ctx);
+            continue;
+        }
+
+        print("Got message: %s\n", ctx->buffer);
+
+        memset(ctx->buffer, 0, sizeof(ctx->buffer));
+        
+        DWORD flags = 0;
+        WSARecv(ctx->socket, &ctx->wsaBuf, 1, NULL, &flags, &ctx->overlapped, NULL);
+    }
+    return 0;
+}
+
+/*---------------------------------------------- send api logic ---------------------------------------------*/
+
 
 void sendMessage(const char *host, const char *port, const char *msg) 
 {
@@ -109,7 +193,7 @@ void sendMessage(const char *host, const char *port, const char *msg)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    print("Message to %s %s %s\n", host, port, msg);
+    print("Message to [%s] [%s] > [%s]\n", host, port, msg);
 
     int status = getaddrinfo(host, port, &hints, &result);
     if (status != 0) 
@@ -137,7 +221,9 @@ void sendMessage(const char *host, const char *port, const char *msg)
 
     if (s != INVALID_SOCKET) 
     {
-        send(s, msg, strlen(msg) + 1, 0);
+        int64_t len = 0;
+        while (msg[len]) len++;
+        send(s, msg, len + 1, 0);
         closesocket(s);
     } 
     else 
@@ -146,7 +232,8 @@ void sendMessage(const char *host, const char *port, const char *msg)
     }
 }
 
-int main() {
+void start_remote_subsystem() 
+{
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
 
@@ -159,7 +246,7 @@ int main() {
     
     int16_t port = 0;
     DWORD clId;
-    HANDLE hcl = CreateThread(NULL, 0, ConnectionListener, &port, 0, &clId);
+    HANDLE hcl = CreateThread(NULL, 0, ConnectionListnerWorker, &port, 0, &clId);
     (void)hcl;
 
     print("Messenger ready\n");
@@ -169,11 +256,14 @@ int main() {
         print("Enter IP:Message\n");
 
         char ip[128], port[128], msg[128];
-        scanf("%s%s%s", ip, port, msg);
+
+        myScanS(ip);
+        myScanS(port);
+        myScanS(msg);
 
         sendMessage(ip, port, msg);
     }
     
     WSACleanup();
-    return 0;
 }
+

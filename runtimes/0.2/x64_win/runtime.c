@@ -5,6 +5,7 @@
 #include "windows.h"
 
 #include "runtime_lib.h"
+#include "remote.h"
 
 
 extern int fastPushObject(void);
@@ -95,7 +96,7 @@ struct object
 
 struct object_array
 {
-    int64_t lei ngth;
+    int64_t length;
     int8_t _[7];
     int8_t type;
     BYTE data[];
@@ -697,6 +698,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
 int entry()
 {
     init_lib();
+    
+    start_remote_subsystem();
     
     HANDLE hFile = CreateFile(
         L"../../../res.bin",

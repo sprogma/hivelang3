@@ -8,6 +8,7 @@
 
 void myPrintf(const wchar_t *format_string, ...);
 int64_t myScanI64();
+void myScanS(char *);
 void myMemcpy(void *dst, void *src, int64_t size);
 int64_t myAtoll(wchar_t *number);
 void *myMalloc(int64_t size);

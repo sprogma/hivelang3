@@ -102,6 +102,25 @@ int64_t myScanI64()
     return res;
 }
 
+void myScanS(char *str)
+{
+    char *end = str;
+    do
+    {
+        wchar_t buf;
+        DWORD read;
+        ReadConsole(hInput, &buf, 1, &read, NULL);
+        *end++ = buf;
+        if (end[-1] == ' ' && end == str + 1)
+        {
+            end--;
+            continue;
+        }
+    }
+    while (end[-1] != ' ' && end[-1] != '\n' && end[-1] != '\r' && end[-1] != '\t');
+    end[-1] = 0;
+}
+
 wchar_t *PrintI64(wchar_t *dest, uint64_t value)
 {
     wchar_t *start = dest;
