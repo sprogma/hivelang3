@@ -5,11 +5,13 @@
 #include "inttypes.h"
 
 
+typedef uint8_t BYTE;
+
 
 void myPrintf(const wchar_t *format_string, ...);
 int64_t myScanI64();
 void myScanS(char *);
-void myMemcpy(void *dst, void *src, int64_t size);
+void *memcpy(void *dst, const void *src, size_t size);
 int64_t myAtoll(wchar_t *number);
 void *myMalloc(int64_t size);
 void myFree(void *mem);

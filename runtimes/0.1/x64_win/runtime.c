@@ -611,7 +611,6 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
 
                 HINSTANCE lib = LoadLibraryA(lib_name);
                 data->loaded_function = GetProcAddress(lib, entry);
-                FreeLibrary(lib);
                 
                 data->output_size = output_size;
                 data->sizes_len = sizes_len;
@@ -627,11 +626,6 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 {
                     log("argument %lld have size %lld\n", i, sizes[i]);
                 }                
-
-                // why it fails without this string?
-                myPrintf(L"0>%llx\n", mciSendStringW);
-                myPrintf(L"1>%llx\n", SelectObject);
-                myPrintf(L"2>%llx\n", CreateFontW);
                 break;
             case 16: // Worker positions
             {

@@ -1,6 +1,6 @@
  a
 
- Timestamp is 696d4e0a (Mon Jan 19 00:18:02 2026)
+ Timestamp is 69701ca5 (Wed Jan 21 03:24:05 2026)
 
  Preferred load address is 0000000140000000
 
@@ -45,30 +45,23 @@
  0001:00001aa3       DllCall                    0000000140002aa3     asm.o
  0002:00000088       __real@00000008            0000000140003088     runtime.o
  0002:0000008c       ??_C@_1CC@DEIAIPBB@?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AAr?$AAe?$AAs?$AA?4?$AAb?$AAi?$AAn?$AA?$AA@ 000000014000308c     runtime.o
- 0002:000000ae       ??_C@_1BA@EBHAFHDE@?$AA2?$AA?$DO?$AA?$CF?$AAl?$AAl?$AAx?$AA?6?$AA?$AA@ 00000001400030ae     runtime.o
- 0002:000000be       ??_C@_1BA@GILIODMG@?$AA1?$AA?$DO?$AA?$CF?$AAl?$AAl?$AAx?$AA?6?$AA?$AA@ 00000001400030be     runtime.o
- 0002:000000ce       ??_C@_1BA@MGNAHCFH@?$AA0?$AA?$DO?$AA?$CF?$AAl?$AAl?$AAx?$AA?6?$AA?$AA@ 00000001400030ce     runtime.o
- 0002:000000de       ??_C@_1FC@OGJDIOEJ@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAc?$AAa?$AAn?$AA?8?$AAt?$AA?5?$AAo?$AAp?$AAe?$AAn?$AA?5?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AAr?$AAe?$AAs?$AA?4?$AAb@ 00000001400030de     runtime.o
- 0002:00000130       ??_C@_1BI@DOGCPILG@?$AAE?$AAR?$AAR?$AAO?$AAR?$AA?5?$AA?$CF?$AAl?$AAl?$AAd?$AA?6?$AA?$AA@ 0000000140003130     runtime_lib.o
- 0002:00000148       ??_C@_1HI@GNCDLKLI@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAr?$AAu?$AAn?$AAt?$AAi?$AAm?$AAe?$AA?5?$AAd?$AAo?$AAe?$AAs?$AAn?$AA?8?$AAt?$AA?5?$AAs?$AAu?$AAp?$AAp?$AAo?$AAr?$AAt?$AA?5?$AAs@ 0000000140003148     runtime.o
- 0002:000001c0       ??_C@_1FG@DPFHIKFA@?$AA?$CB?$AA?$CB?$AA?$CB?$AAA?$AAL?$AAL?$AA?5?$AAE?$AAX?$AAI?$AAS?$AAT?$AAI?$AAN?$AAG?$AA?5?$AAW?$AAO?$AAR?$AAK?$AAE?$AAR?$AAS?$AA?5?$AAA?$AAR?$AAE?$AA?5?$AAD?$AAE?$AAA?$AAD@ 00000001400031c0     runtime.o
- 0002:00000308       __imp_CloseHandle          0000000140003308     kernel32:KERNEL32.dll
- 0002:00000310       __imp_CreateFileW          0000000140003310     kernel32:KERNEL32.dll
- 0002:00000318       __imp_ExitProcess          0000000140003318     kernel32:KERNEL32.dll
- 0002:00000320       __imp_FreeLibrary          0000000140003320     kernel32:KERNEL32.dll
- 0002:00000328       __imp_GetFileSizeEx        0000000140003328     kernel32:KERNEL32.dll
- 0002:00000330       __imp_GetLastError         0000000140003330     kernel32:KERNEL32.dll
- 0002:00000338       __imp_GetProcAddress       0000000140003338     kernel32:KERNEL32.dll
- 0002:00000340       __imp_GetStdHandle         0000000140003340     kernel32:KERNEL32.dll
- 0002:00000348       __imp_LoadLibraryA         0000000140003348     kernel32:KERNEL32.dll
- 0002:00000350       __imp_MultiByteToWideChar  0000000140003350     kernel32:KERNEL32.dll
- 0002:00000358       __imp_ReadConsoleW         0000000140003358     kernel32:KERNEL32.dll
- 0002:00000360       __imp_ReadFile             0000000140003360     kernel32:KERNEL32.dll
- 0002:00000368       __imp_VirtualAlloc         0000000140003368     kernel32:KERNEL32.dll
- 0002:00000370       __imp_WriteConsoleW        0000000140003370     kernel32:KERNEL32.dll
- 0002:00000380       __imp_mciSendStringW       0000000140003380     winmm:WINMM.dll
- 0002:00000390       __imp_CreateFontW          0000000140003390     gdi32:GDI32.dll
- 0002:00000398       __imp_SelectObject         0000000140003398     gdi32:GDI32.dll
+ 0002:000000ae       ??_C@_1FC@OGJDIOEJ@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAc?$AAa?$AAn?$AA?8?$AAt?$AA?5?$AAo?$AAp?$AAe?$AAn?$AA?5?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AAr?$AAe?$AAs?$AA?4?$AAb@ 00000001400030ae     runtime.o
+ 0002:00000100       ??_C@_1BI@DOGCPILG@?$AAE?$AAR?$AAR?$AAO?$AAR?$AA?5?$AA?$CF?$AAl?$AAl?$AAd?$AA?6?$AA?$AA@ 0000000140003100     runtime_lib.o
+ 0002:00000118       ??_C@_1HI@GNCDLKLI@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAr?$AAu?$AAn?$AAt?$AAi?$AAm?$AAe?$AA?5?$AAd?$AAo?$AAe?$AAs?$AAn?$AA?8?$AAt?$AA?5?$AAs?$AAu?$AAp?$AAp?$AAo?$AAr?$AAt?$AA?5?$AAs@ 0000000140003118     runtime.o
+ 0002:00000190       ??_C@_1FG@DPFHIKFA@?$AA?$CB?$AA?$CB?$AA?$CB?$AAA?$AAL?$AAL?$AA?5?$AAE?$AAX?$AAI?$AAS?$AAT?$AAI?$AAN?$AAG?$AA?5?$AAW?$AAO?$AAR?$AAK?$AAE?$AAR?$AAS?$AA?5?$AAA?$AAR?$AAE?$AA?5?$AAD?$AAE?$AAA?$AAD@ 0000000140003190     runtime.o
+ 0002:00000280       __imp_CloseHandle          0000000140003280     kernel32:KERNEL32.dll
+ 0002:00000288       __imp_CreateFileW          0000000140003288     kernel32:KERNEL32.dll
+ 0002:00000290       __imp_ExitProcess          0000000140003290     kernel32:KERNEL32.dll
+ 0002:00000298       __imp_GetFileSizeEx        0000000140003298     kernel32:KERNEL32.dll
+ 0002:000002a0       __imp_GetLastError         00000001400032a0     kernel32:KERNEL32.dll
+ 0002:000002a8       __imp_GetProcAddress       00000001400032a8     kernel32:KERNEL32.dll
+ 0002:000002b0       __imp_GetStdHandle         00000001400032b0     kernel32:KERNEL32.dll
+ 0002:000002b8       __imp_LoadLibraryA         00000001400032b8     kernel32:KERNEL32.dll
+ 0002:000002c0       __imp_MultiByteToWideChar  00000001400032c0     kernel32:KERNEL32.dll
+ 0002:000002c8       __imp_ReadConsoleW         00000001400032c8     kernel32:KERNEL32.dll
+ 0002:000002d0       __imp_ReadFile             00000001400032d0     kernel32:KERNEL32.dll
+ 0002:000002d8       __imp_VirtualAlloc         00000001400032d8     kernel32:KERNEL32.dll
+ 0002:000002e0       __imp_WriteConsoleW        00000001400032e0     kernel32:KERNEL32.dll
  0003:00000000       runningId                  0000000140004000     runtime.o
  0003:00000010       Workers                    0000000140004010     runtime.o
  0003:00000970       object_array               0000000140004970     runtime.o

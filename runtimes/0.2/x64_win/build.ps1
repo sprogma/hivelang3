@@ -1,8 +1,6 @@
 param([string]$CC="clang")
 $FLAGS = ,"-fno-stack-protector", "-DUNICODE", "-D_UNICODE", "-municode", "-ffreestanding", "-nostdlib", "-mno-stack-arg-probe"
-$LF = ,"-lws2_32", "-Wl,-entry:entry", "-Wl,-dynamicbase:no" # used flags
-# flags without them LoadLibrary doent works?
-$LF = $LF, "-luser32", "-lkernel32", "-lwinmm", "-lgdi32" | %{$_}
+$LF = ,"-lkernel32", "-lbcrypt", "-lws2_32", "-Wl,-entry:entry", "-Wl,-dynamicbase:no"
 $dbgLF = ,"-lshell32", "-Wl,/debug"
 $rlsLF = ,"-flto", "-fuse-ld=lld"
 $rlsFF = ,"-fno-unwind-tables", "-fno-asynchronous-unwind-tables"

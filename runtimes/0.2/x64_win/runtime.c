@@ -1,239 +1,34 @@
 #define UNICODE 1
 #define _UNICODE 1
+#define _WIN32_WINNT _WIN32_WINNT_VISTA
 
 #include "inttypes.h"
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include "windows.h"
 
 #include "runtime_lib.h"
 #include "remote.h"
+#include "runtime.h"
 
+struct defined_array *defined_arrays;
 
-extern int fastPushObject(void);
-extern int fastQueryObject(void);
-extern int fastNewObject(void);
-extern int fastCallObject(void);
-
-extern int ExecuteWorker(void *, int64_t, void *, BYTE *);
-
-// ! DON'T MOVE FIELDS [only in both this file and runtime.asm]
-struct dll_call_data
-{
-    void *loaded_function;
-    // marshal info
-    int64_t output_size;
-    int64_t sizes_len;
-    int64_t *sizes;
-    int64_t call_stack_usage;
-};
-
-extern int DllCall(struct dll_call_data *, int64_t *, void *);
-
-extern void callExample(void *);
-
-extern BYTE context[];
-
-
-struct jmpbuf {BYTE _[80];};
-extern void longjmpUN(struct jmpbuf *, int64_t val);
-extern int64_t setjmpUN(struct jmpbuf *);
-
-
-struct waiting_worker
-{
-    int64_t id;
-    // return address
-    void *ptr;
-    // object awaiting data
-    void *object; 
-    void *destination;
-    int64_t offset;
-    int64_t size;
-    // registers
-    void *rbpValue;
-    int64_t context[9];
-};
-
-
-struct queued_worker
-{
-    int64_t id;
-    // return address
-    void *ptr;
-    // object awaiting data
-    int64_t rdiValue;
-    // registers
-    void *rbpValue;
-    int64_t context[9];
-};
-
-
-
-
-void EnqueueWorker(struct queued_worker *t);
-void WaitListWorker(struct waiting_worker *t);
-
-
-
-
-typedef uint8_t BYTE;
-
-
-#define OBJECT_PIPE           0x01
-#define OBJECT_PROMISE        0x02
-#define OBJECT_ARRAY          0x03
-#define OBJECT_OBJECT         0x04
-#define OBJECT_DEFINED_ARRAY  0x05
-
-
-#define DATA_OFFSET(T) ((int64_t)&(((T *)NULL)->data))
-
-
-struct object
-{
-    int8_t lock;
-    int8_t type;
-};
-
-struct object_array
-{
-    int64_t length;
-    int8_t _[7];
-    int8_t type;
-    BYTE data[];
-}; __attribute__((packed));
-
-struct object_promise
-{
-    int8_t ready;
-    int8_t type;
-    BYTE data[];
-}; __attribute__((packed));
-
-struct object_object
-{
-    int8_t type;
-    BYTE data[];
-}; __attribute__((packed));
-
-struct worker_info
-{
-    int64_t isDllCall;
-    void *ptr;
-    int64_t inputSize;
-};
 struct worker_info Workers[100] = {};
-
-
-struct object *object_array[100000] = {};
+struct object *object_array[1000000] = {};
 int64_t object_array_len = 0;
-
-struct defined_array
-{
-    BYTE *start;
-    int64_t size;
-} *defined_arrays;
-
-
-// if allocating ARRAY, param must be element size.
-// [it can be used to split big arrays on diffrent hives]
-// if allocating OBJECT, param = 1
-// if allocating PROMISE/PIPE, param is unused
-int64_t NewObject(int64_t type, int64_t size, int64_t param)
-{
-    switch (type)
-    {
-        case OBJECT_ARRAY:
-        {
-            log("Array of %lld bytes, element of size %lld allocated\n", size, param);
-            struct object_array *res = myMalloc(sizeof(*res) + size);
-            myMemcpy(res->_, &param, 8);
-            res->type = OBJECT_ARRAY;
-            res->length = size / param;
-            int64_t id = (int64_t)res + DATA_OFFSET(struct object_array);
-            object_array[object_array_len++] = (struct object *)id;
-            log("[id=%llx]\n", id);
-            return id;
-        }
-        case OBJECT_PROMISE:
-        {
-            log("Promise for size %lld allocated\n", size);
-            struct object_promise *res = myMalloc(sizeof(*res) + size);
-            res->type = OBJECT_PROMISE;
-            res->ready = 0;
-            int64_t id = (int64_t)res + DATA_OFFSET(struct object_promise);
-            object_array[object_array_len++] = (struct object *)id;
-            log("[id=%llx]\n", id);
-            return id;
-        }
-        case OBJECT_OBJECT:
-        {
-            log("Class for size %lld allocated\n", size);
-            struct object_object *res = myMalloc(sizeof(*res) + size);
-            res->type = OBJECT_OBJECT;
-            int64_t id = (int64_t)res + DATA_OFFSET(struct object_object);
-            object_array[object_array_len++] = (struct object *)id;
-            log("[id=%llx]\n", id);
-            return id;
-        }
-        case OBJECT_DEFINED_ARRAY:
-        {
-            // size is ID
-            BYTE *objStart = defined_arrays[size].start;
-            int64_t objSize = defined_arrays[size].size;
-            log("Defined array for size %lld allocated\n", objSize);
-            struct object_array *res = myMalloc(sizeof(*res) + objSize);
-            myMemcpy(res->_, &param, 8);
-            res->type = OBJECT_ARRAY;
-            res->length = objSize / param;
-            // fill data
-            myMemcpy(res->data, objStart, objSize);
-            for (int i = 0; i < objSize; ++i)
-            {
-                log(" %02x", res->data[i]);
-            }
-            log("\n");
-            int64_t id = (int64_t)res + DATA_OFFSET(struct object_array);
-            object_array[object_array_len++] = (struct object *)id;
-            log("[id=%llx]\n", id);
-            return id;
-        }
-        default:
-            log("Wrong type in NewObject\n");
-    }
-    return -1;
-}
-
-
-void PushObject(){}
-
 
 struct jmpbuf ShedulerBuffer;
 int64_t runningId = -1;
 
-// called only if query of not ready promise [for now]
-__attribute__((sysv_abi))
-int64_t QueryObject(void *destination, void *object, int64_t offset, int64_t size, void *returnAddress, void *rbpValue)
-{
-    /* save context and select next worker */
-    struct waiting_worker *t = myMalloc(sizeof(*t));
+struct waiting_worker *wait_list[100];
+int64_t wait_list_len = 0;
 
-    myMemcpy(t->context, context, sizeof(t->context));
-    t->id = runningId;
-    t->ptr = returnAddress;
-    t->rbpValue = rbpValue;
-    t->size = size;
-    t->offset = offset;
-    t->destination = destination;
-    t->object = object;
-    
-    log("Awaiting promise at %p\n", object);
+struct queued_worker *queue[100];
+int64_t queue_len = 0;
 
-    WaitListWorker(t);
-    
-    longjmpUN(&ShedulerBuffer, 1);
-    
-    return 0;
-}
+
+void PushObject(){}
 
 
 void PrintObject(struct object *object_ptr)
@@ -274,11 +69,6 @@ void PrintObject(struct object *object_ptr)
     }
 }
 
-struct waiting_worker *wait_list[100];
-int64_t wait_list_len = 0;
-
-struct queued_worker *queue[100];
-int64_t queue_len = 0;
 
 void WaitListWorker(struct waiting_worker *t)
 {
@@ -341,7 +131,7 @@ void SheduleWorker()
                     case 8:
                     {
                         *cd = 0;
-                        myMemcpy(cd, args, data->sizes[i]);
+                        memcpy(cd, args, data->sizes[i]);
                         cd++;
                         break;
                     }
@@ -379,7 +169,7 @@ void SheduleWorker()
 
             if (output != NULL)
             {
-                myMemcpy(result_promise, output, data->output_size);
+                memcpy(result_promise, output, data->output_size);
                 myFree(output);
             }
             else
@@ -410,15 +200,15 @@ void SheduleWorker()
                 struct queued_worker *new_item = myMalloc(sizeof(*new_item));
                 new_item->id = w->id;
                 new_item->ptr = w->ptr;
-                myMemcpy(new_item->context, w->context, sizeof(new_item->context));
+                memcpy(new_item->context, w->context, sizeof(new_item->context));
                 if (w->size < 0)
                 {
                     new_item->rdiValue = 0;
-                    myMemcpy(&new_item->rdiValue, p->data, -w->size);
+                    memcpy(&new_item->rdiValue, p->data, -w->size);
                 }
                 else
                 {
-                    myMemcpy(w->destination, p->data, w->size);
+                    memcpy(w->destination, p->data, w->size);
                     // not set rdi
                     new_item->rdiValue = 0;
                 }
@@ -461,7 +251,7 @@ void CallObject(BYTE *param, int64_t workerId)
 
     // TODO: remove 512 body size constant
     void *data = myMalloc(tableSize + 1024);
-    myMemcpy(data, param, tableSize);
+    memcpy(data, param, tableSize);
 
     StartNewWorker(workerId, data);
 }
@@ -525,7 +315,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
         log("Error: winapi error %ld\n", GetLastError());
         return NULL;
     }
-    myMemcpy(mem, file + codePosition, fileLength - codePosition);
+    memcpy(mem, file + codePosition, fileLength - codePosition);
     if (res_len) { *res_len = fileLength - codePosition; }
     /* read header */
     BYTE *pos = file + 20;
@@ -567,7 +357,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 {
                     int64_t sz = *(int64_t *)pos;
                     pos += 8;
-                    myMemcpy(lib_name, pos, sz);
+                    memcpy(lib_name, pos, sz);
                     lib_name[sz] = 0;
                     pos += sz;
                 }
@@ -576,7 +366,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 {
                     int64_t sz = *(int64_t *)pos;
                     pos += 8;
-                    myMemcpy(entry, pos, sz);
+                    memcpy(entry, pos, sz);
                     entry[sz] = 0;
                     pos += sz;
                 }
@@ -605,7 +395,6 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
 
                 HINSTANCE lib = LoadLibraryA(lib_name);
                 data->loaded_function = GetProcAddress(lib, entry);
-                FreeLibrary(lib);
                 
                 data->output_size = output_size;
                 data->sizes_len = sizes_len;
@@ -620,12 +409,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 for (int64_t i = 0; i < sizes_len; ++i)
                 {
                     log("argument %lld have size %lld\n", i, sizes[i]);
-                }                
-
-                // why it fails without this string?
-                myPrintf(L"0>%llx\n", mciSendStringW);
-                myPrintf(L"1>%llx\n", SelectObject);
-                myPrintf(L"2>%llx\n", CreateFontW);
+                }
                 break;
             case 16: // Worker positions
             {
@@ -666,7 +450,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                         // raw bytes
                         BYTE *data = pos + (size * 16); // pos + header size
                         BYTE *data_copy = myMalloc(rawsize);
-                        myMemcpy(data_copy, data, rawsize);
+                        memcpy(data_copy, data, rawsize);
                         // read table header [offset+size]
                         for (int64_t i = 0; i < size; ++i)
                         {
@@ -699,7 +483,10 @@ int entry()
 {
     init_lib();
     
+    InitInternalStructures();
+    
     start_remote_subsystem();
+
     
     HANDLE hFile = CreateFile(
         L"../../../res.bin",
@@ -773,13 +560,13 @@ int entry()
     #endif
 
     int64_t inputId = NewObject(3, 8 * inputLen, 8);
-    myMemcpy((void *)inputId, input, 8 * inputLen);
+    memcpy((void *)inputId, input, 8 * inputLen);
     
     int64_t resCodeId = NewObject(2, 4, 4);
 
     BYTE *tbl = myMalloc(16 + 2048);
-    myMemcpy(tbl + 0, &inputId, 8);
-    myMemcpy(tbl + 8, &resCodeId, 8);
+    memcpy(tbl + 0, &inputId, 8);
+    memcpy(tbl + 8, &resCodeId, 8);
     
     StartNewWorker(0, tbl);
         

@@ -48,13 +48,14 @@ void myFree(void *mem)
 }
 
 
-void myMemcpy(void *_dst, void *_src, int64_t size)
+void *memcpy(void *_dst, const void *_src, size_t size)
 {
-    BYTE *dst = _dst, *src = _src;
+    BYTE *dst = _dst, *src = (void *)_src;
     while (size--)
     {
         *dst++ = *src++;
     }
+    return dst;
 }
 
 int64_t myAtoll(wchar_t *number)
@@ -243,6 +244,4 @@ void init_lib()
     
     hOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     hInput = GetStdHandle(STD_INPUT_HANDLE);
-    
-    myPrintf(L"ERROR %lld\n", (int64_t)GetLastError());
 }
