@@ -126,6 +126,30 @@ fastPushObject:
 
     end if
 
+    ; TODO: add fast arrays and their workaround here
+
+    
+.await_object:
+    ; extract return address
+    mov rax, [rsp]
+    EnterCCode
+
+    sub rsp, 32 ; more shadow bytes for 2 registers
+
+    ; save context
+    StoreContext context
+
+    ; run C code
+
+    mov r8, rax
+    mov r9, rbp
+    call PushObject
+
+    add rsp, 32
+
+    LeaveCCode
+    ret
+
     cmp BYTE [rdi - 1], 2 ; if it is promise - set it as set
     jne .not_promise
     mov BYTE [rdi - 2], 1
@@ -208,12 +232,15 @@ fastQueryObject:
 
     end if
 
+    ; TODO: fast arrays, and add their workaround here
+    ; jmp .await_object
+    
     ; if it is promise, and doesn't set - start await
     cmp BYTE [rsi - 1], 2
     jne .not_promise
     
     cmp BYTE [rsi - 2], 0
-    je .await_promise
+    je .await_object
     
 .not_promise:
     ; for now, simply move to object
@@ -258,7 +285,7 @@ align 16
     rep movsb
     ret
 
-.await_promise:
+.await_object:
     ; extract return address
     mov rax, [rsp]
     EnterCCode

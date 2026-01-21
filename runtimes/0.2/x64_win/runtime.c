@@ -28,9 +28,6 @@ struct queued_worker *queue[100];
 int64_t queue_len = 0;
 
 
-void PushObject(){}
-
-
 void PrintObject(struct object *object_ptr)
 {
     BYTE *ptr = (BYTE *)object_ptr;
@@ -220,6 +217,32 @@ void SheduleWorker()
                 wait_list[i] = wait_list[--wait_list_len];
                 i--;
             }
+        }
+        else
+        {
+            struct object *p = (struct object *)(w->object - DATA_OFFSET(struct object));
+            struct queued_worker *new_item = myMalloc(sizeof(*new_item));
+            new_item->id = w->id;
+            new_item->ptr = w->ptr;
+            memcpy(new_item->context, w->context, sizeof(new_item->context));
+            if (w->size < 0)
+            {
+                new_item->rdiValue = 0;
+                memcpy(&new_item->rdiValue, p->data, -w->size);
+            }
+            else
+            {
+                memcpy(w->destination, p->data, w->size);
+                // not set rdi
+                new_item->rdiValue = 0;
+            }
+            new_item->rbpValue = w->rbpValue;
+            EnqueueWorker(new_item);
+            
+            myFree(w);
+            
+            wait_list[i] = wait_list[--wait_list_len];
+            i--;
         }
     }
 }

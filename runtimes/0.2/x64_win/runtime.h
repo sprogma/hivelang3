@@ -95,8 +95,8 @@ typedef uint8_t BYTE;
 
 struct object
 {
-    int8_t lock;
     int8_t type;
+    BYTE data[];
 };
 
 struct object_array
@@ -166,6 +166,9 @@ extern struct defined_array *defined_arrays;
 
 __attribute__((sysv_abi))
 int64_t QueryObject(void *destination, int64_t object, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
+
+__attribute__((sysv_abi))
+void PushObject(int64_t object, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
 
 int64_t NewObject(int64_t type, int64_t size, int64_t param);
 
