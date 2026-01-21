@@ -201,11 +201,11 @@ void SheduleWorker()
                 if (w->size < 0)
                 {
                     new_item->rdiValue = 0;
-                    memcpy(&new_item->rdiValue, p->data, -w->size);
+                    memcpy(&new_item->rdiValue, p->data + w->offset, -w->size);
                 }
                 else
                 {
-                    memcpy(w->destination, p->data, w->size);
+                    memcpy(w->destination, p->data + w->offset, w->size);
                     // not set rdi
                     new_item->rdiValue = 0;
                 }
@@ -228,11 +228,11 @@ void SheduleWorker()
             if (w->size < 0)
             {
                 new_item->rdiValue = 0;
-                memcpy(&new_item->rdiValue, p->data, -w->size);
+                memcpy(&new_item->rdiValue, p->data + w->offset, -w->size);
             }
             else
             {
-                memcpy(w->destination, p->data, w->size);
+                memcpy(w->destination, p->data + w->offset, w->size);
                 // not set rdi
                 new_item->rdiValue = 0;
             }

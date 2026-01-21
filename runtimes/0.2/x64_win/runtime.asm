@@ -233,7 +233,7 @@ fastQueryObject:
     end if
 
     ; TODO: fast arrays, and add their workaround here
-    ; jmp .await_object
+    jmp .await_object
     
     ; if it is promise, and doesn't set - start await
     cmp BYTE [rsi - 1], 2

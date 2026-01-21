@@ -19,7 +19,6 @@ __attribute__((sysv_abi))
 int64_t QueryObject(void *destination, int64_t object_id, int64_t offset, int64_t size, void *returnAddress, void *rbpValue)
 {
     /* check if object is local */
-    
 
     /* save context and select next worker */
     struct waiting_worker *t = myMalloc(sizeof(*t));

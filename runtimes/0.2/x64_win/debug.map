@@ -1,12 +1,12 @@
  d
 
- Timestamp is 69702e77 (Wed Jan 21 04:40:07 2026)
+ Timestamp is 69702fa7 (Wed Jan 21 04:45:11 2026)
 
  Preferred load address is 0000000140000000
 
  Start         Length     Name                   Class
- 0001:00000000 000078caH .text                   CODE
- 0001:000078ca 0000113bH .text$mn                CODE
+ 0001:00000000 000078fbH .text                   CODE
+ 0001:000078fb 0000113bH .text$mn                CODE
  0002:00000000 0000201cH .rdata                  DATA
  0002:0000201a 00000000H .edata                  DATA
  0002:0000201c 00000169H .rdata$zzzdbg           DATA
@@ -86,60 +86,60 @@
  0001:00004390       WaitListWorker             0000000140005390 f   runtime_dbg.o
  0001:000043e0       EnqueueWorker              00000001400053e0 f   runtime_dbg.o
  0001:00004430       SheduleWorker              0000000140005430 f   runtime_dbg.o
- 0001:00004c00       StartNewWorker             0000000140005c00 f   runtime_dbg.o
- 0001:00004ca0       CallObject                 0000000140005ca0 f   runtime_dbg.o
- 0001:00004d80       LoadWorker                 0000000140005d80 f   runtime_dbg.o
- 0001:00005860       entry                      0000000140006860 f   runtime_dbg.o
- 0001:0000634c       fastPushObject             000000014000734c     asm_dbg.o
- 0001:000064c6       fastQueryObject            00000001400074c6     asm_dbg.o
- 0001:0000662a       fastNewObject              000000014000762a     asm_dbg.o
- 0001:0000665d       fastCallObject             000000014000765d     asm_dbg.o
- 0001:00006690       ExecuteWorker              0000000140007690     asm_dbg.o
- 0001:000066d7       setjmpUN                   00000001400076d7     asm_dbg.o
- 0001:0000670a       longjmpUN                  000000014000770a     asm_dbg.o
- 0001:00006733       DllCall                    0000000140007733     asm_dbg.o
- 0001:000078ca       AcquireSRWLockShared       00000001400088ca f   kernel32:KERNEL32.dll
- 0001:000078d0       ReleaseSRWLockShared       00000001400088d0 f   kernel32:KERNEL32.dll
- 0001:000078d6       AcquireSRWLockExclusive    00000001400088d6 f   kernel32:KERNEL32.dll
- 0001:000078dc       ReleaseSRWLockExclusive    00000001400088dc f   kernel32:KERNEL32.dll
- 0001:000078e2       CreateIoCompletionPort     00000001400088e2 f   kernel32:KERNEL32.dll
- 0001:000078e8       GetLastError               00000001400088e8 f   kernel32:KERNEL32.dll
- 0001:000078ee       FormatMessageW             00000001400088ee f   kernel32:KERNEL32.dll
- 0001:000078f4       CreateThread               00000001400088f4 f   kernel32:KERNEL32.dll
- 0001:000078fa       GetQueuedCompletionStatus  00000001400088fa f   kernel32:KERNEL32.dll
- 0001:00007900       VirtualAlloc               0000000140008900 f   kernel32:KERNEL32.dll
- 0001:00007906       ReadConsoleW               0000000140008906 f   kernel32:KERNEL32.dll
- 0001:0000790c       MultiByteToWideChar        000000014000890c f   kernel32:KERNEL32.dll
- 0001:00007912       WriteConsoleW              0000000140008912 f   kernel32:KERNEL32.dll
- 0001:00007918       GetStdHandle               0000000140008918 f   kernel32:KERNEL32.dll
- 0001:0000791e       LoadLibraryA               000000014000891e f   kernel32:KERNEL32.dll
- 0001:00007924       GetProcAddress             0000000140008924 f   kernel32:KERNEL32.dll
- 0001:0000792a       CreateFileW                000000014000892a f   kernel32:KERNEL32.dll
- 0001:00007930       GetFileSizeEx              0000000140008930 f   kernel32:KERNEL32.dll
- 0001:00007936       ReadFile                   0000000140008936 f   kernel32:KERNEL32.dll
- 0001:0000793c       CloseHandle                000000014000893c f   kernel32:KERNEL32.dll
- 0001:00007942       GetCommandLineW            0000000140008942 f   kernel32:KERNEL32.dll
- 0001:00007948       ExitProcess                0000000140008948 f   kernel32:KERNEL32.dll
- 0001:0000794e       BCryptGenRandom            000000014000894e f   bcrypt:bcrypt.dll
- 0001:00007954       getpeername                0000000140008954 f   ws2_32:WS2_32.dll
- 0001:0000795a       inet_ntop                  000000014000895a f   ws2_32:WS2_32.dll
- 0001:00007960       ntohs                      0000000140008960 f   ws2_32:WS2_32.dll
- 0001:00007966       WSARecv                    0000000140008966 f   ws2_32:WS2_32.dll
- 0001:0000796c       send                       000000014000896c f   ws2_32:WS2_32.dll
- 0001:00007972       socket                     0000000140008972 f   ws2_32:WS2_32.dll
- 0001:00007978       connect                    0000000140008978 f   ws2_32:WS2_32.dll
- 0001:0000797e       closesocket                000000014000897e f   ws2_32:WS2_32.dll
- 0001:00007984       getaddrinfo                0000000140008984 f   ws2_32:WS2_32.dll
- 0001:0000798a       freeaddrinfo               000000014000898a f   ws2_32:WS2_32.dll
- 0001:00007990       WSAStartup                 0000000140008990 f   ws2_32:WS2_32.dll
- 0001:00007996       WSACleanup                 0000000140008996 f   ws2_32:WS2_32.dll
- 0001:0000799c       setsockopt                 000000014000899c f   ws2_32:WS2_32.dll
- 0001:000079a2       htons                      00000001400089a2 f   ws2_32:WS2_32.dll
- 0001:000079a8       bind                       00000001400089a8 f   ws2_32:WS2_32.dll
- 0001:000079ae       getsockname                00000001400089ae f   ws2_32:WS2_32.dll
- 0001:000079b4       listen                     00000001400089b4 f   ws2_32:WS2_32.dll
- 0001:000079ba       accept                     00000001400089ba f   ws2_32:WS2_32.dll
- 0001:000079c0       CommandLineToArgvW         00000001400089c0 f   shell32:SHELL32.dll
+ 0001:00004c20       StartNewWorker             0000000140005c20 f   runtime_dbg.o
+ 0001:00004cc0       CallObject                 0000000140005cc0 f   runtime_dbg.o
+ 0001:00004da0       LoadWorker                 0000000140005da0 f   runtime_dbg.o
+ 0001:00005880       entry                      0000000140006880 f   runtime_dbg.o
+ 0001:00006374       fastPushObject             0000000140007374     asm_dbg.o
+ 0001:000064e6       fastQueryObject            00000001400074e6     asm_dbg.o
+ 0001:0000665a       fastNewObject              000000014000765a     asm_dbg.o
+ 0001:0000668d       fastCallObject             000000014000768d     asm_dbg.o
+ 0001:000066c0       ExecuteWorker              00000001400076c0     asm_dbg.o
+ 0001:00006707       setjmpUN                   0000000140007707     asm_dbg.o
+ 0001:0000673a       longjmpUN                  000000014000773a     asm_dbg.o
+ 0001:00006763       DllCall                    0000000140007763     asm_dbg.o
+ 0001:000078fb       AcquireSRWLockShared       00000001400088fb f   kernel32:KERNEL32.dll
+ 0001:00007901       ReleaseSRWLockShared       0000000140008901 f   kernel32:KERNEL32.dll
+ 0001:00007907       AcquireSRWLockExclusive    0000000140008907 f   kernel32:KERNEL32.dll
+ 0001:0000790d       ReleaseSRWLockExclusive    000000014000890d f   kernel32:KERNEL32.dll
+ 0001:00007913       CreateIoCompletionPort     0000000140008913 f   kernel32:KERNEL32.dll
+ 0001:00007919       GetLastError               0000000140008919 f   kernel32:KERNEL32.dll
+ 0001:0000791f       FormatMessageW             000000014000891f f   kernel32:KERNEL32.dll
+ 0001:00007925       CreateThread               0000000140008925 f   kernel32:KERNEL32.dll
+ 0001:0000792b       GetQueuedCompletionStatus  000000014000892b f   kernel32:KERNEL32.dll
+ 0001:00007931       VirtualAlloc               0000000140008931 f   kernel32:KERNEL32.dll
+ 0001:00007937       ReadConsoleW               0000000140008937 f   kernel32:KERNEL32.dll
+ 0001:0000793d       MultiByteToWideChar        000000014000893d f   kernel32:KERNEL32.dll
+ 0001:00007943       WriteConsoleW              0000000140008943 f   kernel32:KERNEL32.dll
+ 0001:00007949       GetStdHandle               0000000140008949 f   kernel32:KERNEL32.dll
+ 0001:0000794f       LoadLibraryA               000000014000894f f   kernel32:KERNEL32.dll
+ 0001:00007955       GetProcAddress             0000000140008955 f   kernel32:KERNEL32.dll
+ 0001:0000795b       CreateFileW                000000014000895b f   kernel32:KERNEL32.dll
+ 0001:00007961       GetFileSizeEx              0000000140008961 f   kernel32:KERNEL32.dll
+ 0001:00007967       ReadFile                   0000000140008967 f   kernel32:KERNEL32.dll
+ 0001:0000796d       CloseHandle                000000014000896d f   kernel32:KERNEL32.dll
+ 0001:00007973       GetCommandLineW            0000000140008973 f   kernel32:KERNEL32.dll
+ 0001:00007979       ExitProcess                0000000140008979 f   kernel32:KERNEL32.dll
+ 0001:0000797f       BCryptGenRandom            000000014000897f f   bcrypt:bcrypt.dll
+ 0001:00007985       getpeername                0000000140008985 f   ws2_32:WS2_32.dll
+ 0001:0000798b       inet_ntop                  000000014000898b f   ws2_32:WS2_32.dll
+ 0001:00007991       ntohs                      0000000140008991 f   ws2_32:WS2_32.dll
+ 0001:00007997       WSARecv                    0000000140008997 f   ws2_32:WS2_32.dll
+ 0001:0000799d       send                       000000014000899d f   ws2_32:WS2_32.dll
+ 0001:000079a3       socket                     00000001400089a3 f   ws2_32:WS2_32.dll
+ 0001:000079a9       connect                    00000001400089a9 f   ws2_32:WS2_32.dll
+ 0001:000079af       closesocket                00000001400089af f   ws2_32:WS2_32.dll
+ 0001:000079b5       getaddrinfo                00000001400089b5 f   ws2_32:WS2_32.dll
+ 0001:000079bb       freeaddrinfo               00000001400089bb f   ws2_32:WS2_32.dll
+ 0001:000079c1       WSAStartup                 00000001400089c1 f   ws2_32:WS2_32.dll
+ 0001:000079c7       WSACleanup                 00000001400089c7 f   ws2_32:WS2_32.dll
+ 0001:000079cd       setsockopt                 00000001400089cd f   ws2_32:WS2_32.dll
+ 0001:000079d3       htons                      00000001400089d3 f   ws2_32:WS2_32.dll
+ 0001:000079d9       bind                       00000001400089d9 f   ws2_32:WS2_32.dll
+ 0001:000079df       getsockname                00000001400089df f   ws2_32:WS2_32.dll
+ 0001:000079e5       listen                     00000001400089e5 f   ws2_32:WS2_32.dll
+ 0001:000079eb       accept                     00000001400089eb f   ws2_32:WS2_32.dll
+ 0001:000079f1       CommandLineToArgvW         00000001400089f1 f   shell32:SHELL32.dll
  0002:00000014       ??_C@_1GK@LJBKHIKD@?$AAA?$AAr?$AAr?$AAa?$AAy?$AA?5?$AAo?$AAf?$AA?5?$AA?$CF?$AAl?$AAl?$AAd?$AA?5?$AAb?$AAy?$AAt?$AAe?$AAs?$AA?0?$AA?5?$AAe?$AAl?$AAe?$AAm?$AAe?$AAn?$AAt?$AA?5?$AAo?$AAf?$AA?5@ 000000014000a014     new_object_dbg.o
  0002:00000094       ??_C@_1BG@HIIBALHG@?$AA?$FL?$AAi?$AAd?$AA?$DN?$AA?$CF?$AAl?$AAl?$AAx?$AA?$FN?$AA?6?$AA?$AA@ 000000014000a094     new_object_dbg.o
  0002:000000ae       ??_C@_1EC@IBADEGPM@?$AAP?$AAr?$AAo?$AAm?$AAi?$AAs?$AAe?$AA?5?$AAf?$AAo?$AAr?$AA?5?$AAs?$AAi?$AAz?$AAe?$AA?5?$AA?$CF?$AAl?$AAl?$AAd?$AA?5?$AAa?$AAl?$AAl?$AAo?$AAc?$AAa?$AAt?$AAe?$AAd?$AA?6@ 000000014000a0ae     new_object_dbg.o
@@ -400,9 +400,9 @@
  0001:00001f20       Worker                     0000000140002f20 f   remote_dbg.o
  0001:000024c0       ConnectionListnerWorker    00000001400034c0 f   remote_dbg.o
  0001:00002690       HandleApiCall              0000000140003690 f   remote_dbg.o
- 0001:0000634c       .text                      000000014000734c     asm_dbg.o
- 0001:000064a0       .text                      00000001400074a0     asm_dbg.o
- 0001:00006580       .text                      0000000140007580     asm_dbg.o
+ 0001:00006374       .text                      0000000140007374     asm_dbg.o
+ 0001:000064c0       .text                      00000001400074c0     asm_dbg.o
+ 0001:000065b0       .text                      00000001400075b0     asm_dbg.o
  0002:00001be0       BFE_GENERIC_MAPPING        000000014000bbe0     ws2_32:indef.obj
  0002:00001d90       IPSEC_AUTH_TRANSFORM_ID_HMAC_MD5_96 000000014000bd90     ws2_32:indef.obj
  0002:00001da0       IPSEC_AUTH_TRANSFORM_ID_HMAC_SHA_1_96 000000014000bda0     ws2_32:indef.obj
