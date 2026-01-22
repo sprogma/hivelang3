@@ -31,10 +31,11 @@ int64_t queue_len = 0;
 void PrintObject(struct object *object_ptr)
 {
     BYTE *ptr = (BYTE *)object_ptr;
-    switch (ptr[-1])
+    log("remoteId=%llx", *(int64_t *)(&ptr[-8]));
+    switch (ptr[-9])
     {
         case OBJECT_PROMISE:
-            log("Promise(set=%02x, first4bytes=", ptr[-2]);
+            log("Promise(set=%02x, first4bytes=", ptr[-10]);
             for (int i = 0; i < 4; ++i)
                 log("%02x ", ptr[i]);
             log(")\n");
@@ -73,10 +74,66 @@ void WaitListWorker(struct waiting_worker *t)
     log("Worker add to wait list [next=%p]\n", t->ptr);
 }
 
+void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
+{
+    struct queued_worker *t = myMalloc(sizeof(*t));
+    t->id = w->id;
+    t->ptr = w->ptr;
+    t->rbpValue = w->rbpValue;
+    t->rdiValue = rdi_value;
+    EnqueueWorker(t);
+
+    queue[queue_len++] = t;
+    log("Worker enqueued [next=%p]\n", t->ptr);
+}
+
 void EnqueueWorker(struct queued_worker *t)
 {
     queue[queue_len++] = t;
     log("Worker enqueued [next=%p]\n", t->ptr);
+}
+
+void UpdateWaitingWorkers()
+{
+    for (int i = 0; i < wait_list_len; ++i)
+    {
+        struct waiting_worker *w = wait_list[i];
+        switch (w->waiting_data->type)
+        {
+            case WAITING_PUSH:
+                // is processing in other place
+                break;
+            case WAITING_QUERY:
+            {
+                struct waiting_query *cause = (struct waiting_query *)w->waiting_data;
+                if (((BYTE *)cause->object)[-9] != 0) // is_remote
+                {
+                    // is processing in other place
+                    // TODO: send one more request [if previous got lost]
+                    break;
+                }
+                else
+                {
+                    int64_t rdiValue;
+                    if (QueryLocalObject(cause->destination, cause->object, cause->offset, cause->size, &rdiValue))
+                    {
+                        EnqueueWorkerFromWaitList(w, rdiValue);
+                        
+                        myFree(w);
+                        wait_list[i] = wait_list[--wait_list_len];
+                        i--;
+                        break;
+                    }
+                    break;
+                }
+            }
+            case WAITING_TIMER:
+                print("NOT IMPLEMENTED\n"); break;
+            
+            case WAITING_PAGES:
+                print("NOT IMPLEMENTED\n"); break;
+        }
+    }
 }
 
 void SheduleWorker()
@@ -185,66 +242,9 @@ void SheduleWorker()
             );
         }
     }
-    // check for new available
-    for (int i = 0; i < wait_list_len; ++i)
-    {
-        struct waiting_worker *w = wait_list[i];
-        if (((BYTE*)w->object)[-1] == OBJECT_PROMISE)
-        {
-            struct object_promise *p = (struct object_promise *)(w->object - DATA_OFFSET(struct object_promise));
-            if (p->ready)
-            {
-                struct queued_worker *new_item = myMalloc(sizeof(*new_item));
-                new_item->id = w->id;
-                new_item->ptr = w->ptr;
-                memcpy(new_item->context, w->context, sizeof(new_item->context));
-                if (w->size < 0)
-                {
-                    new_item->rdiValue = 0;
-                    memcpy(&new_item->rdiValue, p->data + w->offset, -w->size);
-                }
-                else
-                {
-                    memcpy(w->destination, p->data + w->offset, w->size);
-                    // not set rdi
-                    new_item->rdiValue = 0;
-                }
-                new_item->rbpValue = w->rbpValue;
-                EnqueueWorker(new_item);
-                
-                myFree(w);
-                
-                wait_list[i] = wait_list[--wait_list_len];
-                i--;
-            }
-        }
-        else
-        {
-            struct object *p = (struct object *)(w->object - DATA_OFFSET(struct object));
-            struct queued_worker *new_item = myMalloc(sizeof(*new_item));
-            new_item->id = w->id;
-            new_item->ptr = w->ptr;
-            memcpy(new_item->context, w->context, sizeof(new_item->context));
-            if (w->size < 0)
-            {
-                new_item->rdiValue = 0;
-                memcpy(&new_item->rdiValue, p->data + w->offset, -w->size);
-            }
-            else
-            {
-                memcpy(w->destination, p->data + w->offset, w->size);
-                // not set rdi
-                new_item->rdiValue = 0;
-            }
-            new_item->rbpValue = w->rbpValue;
-            EnqueueWorker(new_item);
-            
-            myFree(w);
-            
-            wait_list[i] = wait_list[--wait_list_len];
-            i--;
-        }
-    }
+    
+    // pass: check for available to run
+    UpdateWaitingWorkers();
 }
 
 void StartNewWorker(int64_t workerId, BYTE *inputTable)
@@ -504,11 +504,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
 
 int entry()
 {
+    ////////////////////////// loading stage
     init_lib();
-    
-    InitInternalStructures();
-    
-    start_remote_subsystem();
 
     
     HANDLE hFile = CreateFile(
@@ -558,7 +555,21 @@ int entry()
     }
     log("\n");
 
-    // run first worker with comand line arguments as i32 array
+
+
+
+
+
+
+
+
+
+    ////////////////////////// running stage
+    
+    InitInternalStructures();
+    start_remote_subsystem();
+    
+    // run first worker with comand line arguments as i64 array
 
     int64_t inputLen = 0;
     #ifdef _DEBUG
@@ -582,10 +593,22 @@ int entry()
     }
     #endif
 
-    int64_t inputId = NewObject(3, 8 * inputLen, 8);
+    int64_t inputId = 0;
+
+    while (inputId == 0)
+    {
+        inputId = NewObject(3, 8 * inputLen, 8, NULL, NULL);
+        Sleep(10);
+    }
     memcpy((void *)inputId, input, 8 * inputLen);
     
-    int64_t resCodeId = NewObject(2, 4, 4);
+    int64_t resCodeId = 0;
+    
+    while (resCodeId == 0)
+    {
+        resCodeId = NewObject(2, 4, 4, NULL, NULL);
+        Sleep(10);
+    }
 
     BYTE *tbl = myMalloc(16 + 2048);
     memcpy(tbl + 0, &inputId, 8);

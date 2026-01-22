@@ -23,7 +23,7 @@ extern int ExecuteWorker(void *, int64_t, void *, BYTE *);
 // ! DON'T MOVE FIELDS [only in both this file and runtime.asm]
 struct dll_call_data
 {
-        void *loaded_function;
+    void *loaded_function;
     // marshal info
     int64_t output_size;
     int64_t sizes_len;
@@ -39,20 +39,55 @@ extern BYTE context[];
 
 
 struct jmpbuf {BYTE _[80];};
-extern void longjmpUN(struct jmpbuf *, int64_t val);
+[[noreturn]] extern void longjmpUN(struct jmpbuf *, int64_t val);
 extern int64_t setjmpUN(struct jmpbuf *);
 
-
-struct waiting_worker
+enum waiting_cause_type : int8_t
 {
-        int64_t id;
-    // return address
-    void *ptr;
-    // object awaiting data
+    WAITING_PUSH,
+    WAITING_QUERY,
+    WAITING_PAGES,
+    WAITING_TIMER,
+};
+
+struct waiting_cause
+{
+    enum waiting_cause_type type;
+};
+
+struct waiting_push
+{
+    struct waiting_cause;
     int64_t object; 
     void *destination;
     int64_t offset;
     int64_t size;
+};
+
+struct waiting_query
+{
+    struct waiting_cause;
+    int64_t object; 
+    void *destination;
+    int64_t offset;
+    int64_t size;
+};
+
+struct waiting_pages {};
+
+struct waiting_timer 
+{
+    int64_t endTicks; // use with QueryPerformanceCounter
+};
+
+struct waiting_worker
+{
+    // worker id
+    int64_t id;
+    // return address
+    void *ptr;
+    // object awaiting data
+    struct waiting_cause *waiting_data;
     // registers
     void *rbpValue;
     int64_t context[9];
@@ -61,7 +96,7 @@ struct waiting_worker
 
 struct queued_worker
 {
-        int64_t id;
+    int64_t id;
     // return address
     void *ptr;
     // object awaiting data
@@ -90,35 +125,34 @@ typedef uint8_t BYTE;
 #define OBJECT_DEFINED_ARRAY  0x05
 
 
-#define DATA_OFFSET(T) ((int64_t)&(((T *)NULL)->data))
+#define DATA_OFFSET(T) ((int64_t)&(((typeof(T) *)NULL)->data))
 
 
-struct object
+struct __attribute__((packed)) object
 {
-    int8_t type;
+    int8_t type;       // [-10]
+    int8_t is_remote;  // [-9]
+    int64_t remote_id; // [-8]
     BYTE data[];
 };
 
-struct object_array
+struct __attribute__((packed)) object_array
 {
     int64_t length;
-    int8_t _[7];
-    int8_t type;
-    BYTE data[];
-}; __attribute__((packed));
+    int8_t _[6];
+    struct object;
+};
 
-struct object_promise
+struct __attribute__((packed)) object_promise
 {
     int8_t ready;
-    int8_t type;
-    BYTE data[];
-}; __attribute__((packed));
+    struct object;
+};
 
-struct object_object
+struct __attribute__((packed)) object_object
 {
-    int8_t type;
-    BYTE data[];
-}; __attribute__((packed));
+    struct object;
+};
 
 struct worker_info
 {
@@ -164,12 +198,21 @@ extern struct defined_array *defined_arrays;
 
 
 
-__attribute__((sysv_abi))
+
+__attribute__((sysv_abi)) 
 int64_t QueryObject(void *destination, int64_t object, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
+
+int64_t QueryLocalObject(void *destination, int64_t object, int64_t offset, int64_t size, int64_t *rdiValue);
+
+
 
 __attribute__((sysv_abi))
 void PushObject(int64_t object, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
 
-int64_t NewObject(int64_t type, int64_t size, int64_t param);
+__attribute__((sysv_abi))
+int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress, void *rbpValue);
+
+
+void PauseWorker(void *returnAddress, void *rbpValue, struct waiting_cause *waiting_data);
 
 #endif

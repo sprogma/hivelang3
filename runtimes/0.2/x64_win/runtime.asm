@@ -127,32 +127,12 @@ fastPushObject:
     end if
 
     ; TODO: add fast arrays and their workaround here
+    cmp BYTE [rdi - 9], 0
+    jne .push_object
 
-    
-.await_object:
-    ; extract return address
-    mov rax, [rsp]
-    EnterCCode
-
-    sub rsp, 32 ; more shadow bytes for 2 registers
-
-    ; save context
-    StoreContext context
-
-    ; run C code
-
-    mov r8, rax
-    mov r9, rbp
-    call PushObject
-
-    add rsp, 32
-
-    LeaveCCode
-    ret
-
-    cmp BYTE [rdi - 1], 2 ; if it is promise - set it as set
+    cmp BYTE [rdi - 10], 2 ; if it is promise - set it as set
     jne .not_promise
-    mov BYTE [rdi - 2], 1
+    mov BYTE [rdi - 11], 1
 .not_promise:
     
     ; for now, simply move to object
@@ -195,6 +175,27 @@ align 16
     add rdi, rdx
     rep movsb
     ret
+    
+.push_object:
+    ; extract return address
+    mov rax, [rsp]
+    EnterCCode
+
+    sub rsp, 32 ; more shadow bytes for 2 registers
+
+    ; save context
+    StoreContext context
+
+    ; run C code
+
+    mov r8, rax
+    mov r9, rbp
+    call PushObject
+
+    add rsp, 32
+
+    LeaveCCode
+    ret
 
 ; reverse to fastPushObject
 ; rsi=object
@@ -233,13 +234,14 @@ fastQueryObject:
     end if
 
     ; TODO: fast arrays, and add their workaround here
-    jmp .await_object
+    cmp BYTE [rsi - 9], 0
+    jne .await_object
     
     ; if it is promise, and doesn't set - start await
-    cmp BYTE [rsi - 1], 2
+    cmp BYTE [rsi - 10], 2
     jne .not_promise
     
-    cmp BYTE [rsi - 2], 0
+    cmp BYTE [rsi - 11], 0
     je .await_object
     
 .not_promise:
@@ -311,16 +313,21 @@ align 16
 
 ; for now, only enter c code and call new object - no fast version
 ; so
-; rcx=type
-; rdx=size
-; rdi=param
+; rdi=type
+; rsi=size
+; rdx=param
 ; result is in rax
 fastNewObject:
+    mov rcx, [rsp]
     EnterCCode
+    
+    StoreContext context
 
-    mov r8, rdi
+    mov r8, rbp
     
     call NewObject
+
+    mov rdi, rax
     
     LeaveCCode
 

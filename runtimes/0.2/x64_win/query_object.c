@@ -9,39 +9,62 @@
 #include "runtime.h"
 
 
-// static int64_t QueryObjectLocal()
-// {
-//     
-// }
+int64_t QueryLocalObject(void *destination, int64_t object, int64_t offset, int64_t size, int64_t *rdiValue)
+{
+    if (((BYTE *)object)[-10] == OBJECT_PROMISE)
+    {
+        struct object_promise *p = (struct object_promise *)(object - DATA_OFFSET(*p));
+        if (p->ready)
+        {
+            if (size < 0)
+            {
+                memcpy(rdiValue, p->data + offset, -size);
+            }
+            else
+            {
+                memcpy(destination, p->data + offset, size);
+            }
+            return 1;
+        }
+        return 0;
+    }
+    else
+    {
+        struct object_object *p = (struct object_object *)(object - DATA_OFFSET(*p));
+        if (size < 0)
+        {
+            memcpy(rdiValue, p->data + offset, -size);
+        }
+        else
+        {
+            memcpy(destination, p->data + offset, size);
+        }
+        return 1;
+    }
+}
 
 
 __attribute__((sysv_abi))
-int64_t QueryObject(void *destination, int64_t object_id, int64_t offset, int64_t size, void *returnAddress, void *rbpValue)
+int64_t QueryObject(void *destination, int64_t object, int64_t offset, int64_t size, void *returnAddress, void *rbpValue)
 {
-    /* check if object is local */
+    log("Query object %lld\n", object);
 
-    /* save context and select next worker */
-    struct waiting_worker *t = myMalloc(sizeof(*t));
+    if (((BYTE *)object)[-9] == 0)
+    {
+        int64_t rdiValue;
+        if (QueryLocalObject(destination, object, offset, size, &rdiValue))
+        {
+            return rdiValue;
+        }
+    }
 
-    memcpy(t->context, context, sizeof(t->context));
-    t->id = runningId;
-    t->ptr = returnAddress;
-    t->rbpValue = rbpValue;
-    t->size = size;
-    t->offset = offset;
-    t->destination = destination;
-    t->object = object_id;
-
-    log("Awaiting object at %p\n", object_id);
-
-    WaitListWorker(t);
-
+    /* shedule query */
+    struct waiting_query query = {
+        .destination = destination,
+        .object = object,
+        .size = size,
+        .offset = offset,
+    };
+    PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)&query);
     longjmpUN(&ShedulerBuffer, 1);
-
-    return 0;
-//     int64_t page = object_id >> 24;
-//     int64_t lay1 = 
-//     /* check local objects */
-// 
-//     GetHashtable(&local_objects, );
 }

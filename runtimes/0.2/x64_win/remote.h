@@ -41,10 +41,13 @@ struct hive_connection
     int address_len;
 };
 
+#define OBJECTS_PER_PAGE (1<<(8*3))
+
 struct memory_page
 {
     int64_t id;
     int64_t object_count;
+    _Atomic int64_t next_allocated_id;
 };
 
 struct memory_page_request
@@ -105,7 +108,7 @@ void SetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_leng
         - known objects table
             this is DNS-like structure which say from which hive you can fastest get to this object
             [object_id -> hive_id]
-        - local objects table
+        - local objects table [implicit]
             this table stores conversion from object_id to void * [to raw object]
         - local object copy table
             // TODO: do we need some cahe for remote objects? may be create it after LOCK call?
@@ -118,7 +121,7 @@ void SetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_leng
 
     answer on QUERY_OBJECT will be produced using this steps:
         if object is found in local table:
-            simply send bytes
+            simply send bytes [store bytes]
         if object is found in known objects table [and hive still exists]
             redirect query to that hive
         else 
@@ -136,13 +139,10 @@ void SetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_leng
     
         known objects table:
             hash table
-            
+
         local objects table:
-            paged layered structure [as virtual addresses]:
-            hashtable for page_id [1-5 bytes]
-            256 item array        [6 byte]
-            256 item array        [7 byte]
-            256 item array        [8 byte]
+            any object inside worker is pointer to struct object;
+            there located int64_t object_id;
 
         local object copy table:
             not implemented

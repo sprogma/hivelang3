@@ -103,7 +103,7 @@ struct object
 struct object_array
 {
     int64_t length;
-    int8_t _[7];
+    int8_t _[7+8]; // to use with v0.2 runtime
     int8_t type;
     BYTE data[];
 }; __attribute__((packed));

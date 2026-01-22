@@ -2,6 +2,7 @@
 #define RUNTIME_LIB
 
 
+#include "windows.h"
 #include "inttypes.h"
 
 
@@ -17,6 +18,7 @@ void *myMalloc(int64_t size);
 void myFree(void *mem);
 void init_lib();
 
+[[noreturn]] void assertion_failure(const char* file, int64_t line, const char* func, const char* expr);
 
 #define print(f, ...) myPrintf(L ## f, __VA_ARGS__)
 
@@ -25,6 +27,15 @@ void init_lib();
     #define log(f, ...) myPrintf(L ## f, __VA_ARGS__)
 #else
     #define log(...)
+#endif
+
+#ifndef NDEBUG
+    #define assert(expr) \
+        if (!(expr)) { \
+        assertion_failure(__FILE__, __LINE__, __func__, #expr); \
+        }
+#else
+    #define assert(expr)
 #endif
 
 

@@ -1,14 +1,14 @@
  a
 
- Timestamp is 69702fa7 (Wed Jan 21 04:45:11 2026)
+ Timestamp is 69717366 (Thu Jan 22 03:46:30 2026)
 
  Preferred load address is 0000000140000000
 
  Start         Length     Name                   Class
- 0001:00000000 0000374dH .text                   CODE
+ 0001:00000000 00003c83H .text                   CODE
  0002:00000000 000000d0H .rdata                  DATA
  0003:00000000 00000010H .data                   DATA
- 0003:00000010 007a5af8H .bss                    DATA
+ 0003:00000010 007a5ef8H .bss                    DATA
  0004:00000000 00000740H .data                   DATA
 
   Address         Publics by Value              Rva+Base               Lib:Object
@@ -19,94 +19,103 @@
  0001:00000530       GetHashtable               0000000140001530     api.o
  0001:00000670       SetHashtable               0000000140001670     api.o
  0001:000006b0       InitInternalStructures     00000001400016b0     api.o
- 0001:000007b0       NewObject                  00000001400017b0     new_object.o
- 0001:00000910       PushObject                 0000000140001910     push_object.o
- 0001:00000980       QueryObject                0000000140001980     query_object.o
- 0001:00000a10       GetConnectionById          0000000140001a10     remote.o
- 0001:00000a60       ConfirmPage                0000000140001a60     remote.o
- 0001:00000ac0       HandleNewConnection        0000000140001ac0     remote.o
- 0001:00000c20       SendPageAllocationConfirm  0000000140001c20     remote.o
- 0001:00000c80       RedirectBroadcastQuery     0000000140001c80     remote.o
- 0001:00000d70       ConfirmConnection          0000000140001d70     remote.o
- 0001:00000e50       InitiateConnection         0000000140001e50     remote.o
- 0001:00001020       RequestMemoryPage          0000000140002020     remote.o
- 0001:00001110       start_remote_subsystem     0000000140002110     remote.o
- 0001:00001c60       memset                     0000000140002c60     runtime_lib.o
- 0001:00001d40       myMalloc                   0000000140002d40     runtime_lib.o
- 0001:00001de0       myFree                     0000000140002de0     runtime_lib.o
- 0001:00001df0       memcpy                     0000000140002df0     runtime_lib.o
- 0001:00001f10       myAtoll                    0000000140002f10     runtime_lib.o
- 0001:00001fc0       myScanI64                  0000000140002fc0     runtime_lib.o
- 0001:00002080       myScanS                    0000000140003080     runtime_lib.o
- 0001:00002120       PrintI64                   0000000140003120     runtime_lib.o
- 0001:000021a0       PrintI64H                  00000001400031a0     runtime_lib.o
- 0001:000021e0       Print2H                    00000001400031e0     runtime_lib.o
- 0001:00002220       myPrintf                   0000000140003220     runtime_lib.o
- 0001:00002520       init_lib                   0000000140003520     runtime_lib.o
- 0001:000025a0       PrintObject                00000001400035a0     runtime.o
- 0001:000025b0       WaitListWorker             00000001400035b0     runtime.o
- 0001:000025d0       EnqueueWorker              00000001400035d0     runtime.o
- 0001:000025f0       SheduleWorker              00000001400035f0     runtime.o
- 0001:00002a50       StartNewWorker             0000000140003a50     runtime.o
- 0001:00002ab0       CallObject                 0000000140003ab0     runtime.o
- 0001:00002b40       LoadWorker                 0000000140003b40     runtime.o
- 0001:00003230       entry                      0000000140004230     runtime.o
- 0001:00003420       fastPushObject             0000000140004420     asm.o
- 0001:000034e6       fastQueryObject            00000001400044e6     asm.o
- 0001:000035ba       fastNewObject              00000001400045ba     asm.o
- 0001:000035ed       fastCallObject             00000001400045ed     asm.o
- 0001:00003620       ExecuteWorker              0000000140004620     asm.o
- 0001:00003667       setjmpUN                   0000000140004667     asm.o
- 0001:0000369a       longjmpUN                  000000014000469a     asm.o
- 0001:000036c3       DllCall                    00000001400046c3     asm.o
- 0001:00003750       BCryptGenRandom            0000000140004750     bcrypt:bcrypt.dll
+ 0001:000007b0       PauseWorker                00000001400017b0     await_worker.o
+ 0001:00000810       NewObject                  0000000140001810     new_object.o
+ 0001:00000a40       PushObject                 0000000140001a40     push_object.o
+ 0001:00000ab0       QueryLocalObject           0000000140001ab0     query_object.o
+ 0001:00000b20       QueryObject                0000000140001b20     query_object.o
+ 0001:00000be0       GetConnectionById          0000000140001be0     remote.o
+ 0001:00000c30       ConfirmPage                0000000140001c30     remote.o
+ 0001:00000c90       HandleNewConnection        0000000140001c90     remote.o
+ 0001:00000df0       SendPageAllocationConfirm  0000000140001df0     remote.o
+ 0001:00000e50       RedirectBroadcastQuery     0000000140001e50     remote.o
+ 0001:00000f40       ConfirmConnection          0000000140001f40     remote.o
+ 0001:00001020       InitiateConnection         0000000140002020     remote.o
+ 0001:000011f0       RequestMemoryPage          00000001400021f0     remote.o
+ 0001:000012e0       start_remote_subsystem     00000001400022e0     remote.o
+ 0001:000020c0       memset                     00000001400030c0     runtime_lib.o
+ 0001:000021a0       myMalloc                   00000001400031a0     runtime_lib.o
+ 0001:00002240       myFree                     0000000140003240     runtime_lib.o
+ 0001:00002250       memcpy                     0000000140003250     runtime_lib.o
+ 0001:00002370       myAtoll                    0000000140003370     runtime_lib.o
+ 0001:00002420       myScanI64                  0000000140003420     runtime_lib.o
+ 0001:000024e0       myScanS                    00000001400034e0     runtime_lib.o
+ 0001:00002580       PrintI64                   0000000140003580     runtime_lib.o
+ 0001:00002600       PrintI64H                  0000000140003600     runtime_lib.o
+ 0001:00002640       Print2H                    0000000140003640     runtime_lib.o
+ 0001:00002680       myPrintf                   0000000140003680     runtime_lib.o
+ 0001:00002980       assertion_failure          0000000140003980     runtime_lib.o
+ 0001:000029c0       init_lib                   00000001400039c0     runtime_lib.o
+ 0001:00002a40       PrintObject                0000000140003a40     runtime.o
+ 0001:00002a50       WaitListWorker             0000000140003a50     runtime.o
+ 0001:00002a70       EnqueueWorkerFromWaitList  0000000140003a70     runtime.o
+ 0001:00002ad0       EnqueueWorker              0000000140003ad0     runtime.o
+ 0001:00002af0       UpdateWaitingWorkers       0000000140003af0     runtime.o
+ 0001:00002c10       SheduleWorker              0000000140003c10     runtime.o
+ 0001:00002e40       StartNewWorker             0000000140003e40     runtime.o
+ 0001:00002ea0       CallObject                 0000000140003ea0     runtime.o
+ 0001:00002f30       LoadWorker                 0000000140003f30     runtime.o
+ 0001:00003620       entry                      0000000140004620     runtime.o
+ 0001:000038f8       fastPushObject             00000001400048f8     asm.o
+ 0001:000039c7       fastQueryObject            00000001400049c7     asm.o
+ 0001:00003aaa       fastNewObject              0000000140004aaa     asm.o
+ 0001:00003b23       fastCallObject             0000000140004b23     asm.o
+ 0001:00003b56       ExecuteWorker              0000000140004b56     asm.o
+ 0001:00003b9d       setjmpUN                   0000000140004b9d     asm.o
+ 0001:00003bd0       longjmpUN                  0000000140004bd0     asm.o
+ 0001:00003bf9       DllCall                    0000000140004bf9     asm.o
+ 0001:00003c90       BCryptGenRandom            0000000140004c90     bcrypt:bcrypt.dll
  0002:000000b8       __real@00000008            00000001400050b8     runtime.o
  0002:000000c0       in6addr_any                00000001400050c0     ws2_32:indef.obj
  0002:000000d0       ??_C@_1CC@DEIAIPBB@?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AAr?$AAe?$AAs?$AA?4?$AAb?$AAi?$AAn?$AA?$AA@ 00000001400050d0     runtime.o
  0002:000000f2       ??_C@_1EA@KBEMDBEM@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAC?$AAo?$AAu?$AAl?$AAd?$AA?5?$AAn?$AAo?$AAt?$AA?5?$AAc?$AAo?$AAn?$AAn?$AAe?$AAc?$AAt?$AA?5?$AAt?$AAo?$AA?5?$AA?$CF?$AAs?$AA?6?$AA?$AA@ 00000001400050f2     remote.o
- 0002:00000132       ??_C@_1FC@OGJDIOEJ@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAc?$AAa?$AAn?$AA?8?$AAt?$AA?5?$AAo?$AAp?$AAe?$AAn?$AA?5?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AAr?$AAe?$AAs?$AA?4?$AAb@ 0000000140005132     runtime.o
- 0002:00000184       ??_C@_1LA@ICLCBFDH@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAA?$AAP?$AAI?$AA_?$AAA?$AAN?$AAS?$AAW?$AAE?$AAR?$AA_?$AAR?$AAE?$AAQ?$AAU?$AAE?$AAS?$AAT?$AA_?$AAC?$AAO?$AAN?$AAN?$AAE?$AAC@ 0000000140005184     remote.o
- 0002:00000234       ??_C@_1DK@EHAPFJND@?$AAs?$AAe?$AAr?$AAv?$AAe?$AAr?$AA?5?$AAs?$AAt?$AAa?$AAr?$AAt?$AAe?$AAd?$AA?5?$AAo?$AAn?$AA?5?$AAp?$AAo?$AAr?$AAt?$AA?5?$AA?$CF?$AAl?$AAl?$AAd?$AA?6?$AA?$AA@ 0000000140005234     remote.o
- 0002:0000026e       ??_C@_1EG@JHJBOEP@?$AAG?$AAe?$AAt?$AA?5?$AAa?$AAp?$AAi?$AA?5?$AAc?$AAa?$AAl?$AAl?$AA?5?$AA?$CF?$AAl?$AAl?$AAd?$AA?5?$AAo?$AAf?$AA?5?$AAl?$AAe?$AAn?$AAg?$AAt?$AAh?$AA?3?$AA?5?$AA?$CF?$AAl?$AAl@ 000000014000526e     remote.o
- 0002:000002b4       ??_C@_1HI@GNCDLKLI@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAr?$AAu?$AAn?$AAt?$AAi?$AAm?$AAe?$AA?5?$AAd?$AAo?$AAe?$AAs?$AAn?$AA?8?$AAt?$AA?5?$AAs?$AAu?$AAp?$AAp?$AAo?$AAr?$AAt?$AA?5?$AAs@ 00000001400052b4     runtime.o
- 0002:0000032c       ??_C@_1JC@NNCBABAM@?$AAA?$AAS?$AAS?$AAE?$AAR?$AAT?$AA?5?$AAE?$AAR?$AAR?$AAO?$AAR?$AA?3?$AA?5?$AAb?$AAr?$AAo?$AAa?$AAd?$AAc?$AAa?$AAs?$AAt?$AA?9?$AA?$DO?$AAl?$AAo?$AAc?$AAa?$AAl?$AA_?$AAr@ 000000014000532c     remote.o
- 0002:000003be       ??_C@_1FG@DPFHIKFA@?$AA?$CB?$AA?$CB?$AA?$CB?$AAA?$AAL?$AAL?$AA?5?$AAE?$AAX?$AAI?$AAS?$AAT?$AAI?$AAN?$AAG?$AA?5?$AAW?$AAO?$AAR?$AAK?$AAE?$AAR?$AAS?$AA?5?$AAA?$AAR?$AAE?$AA?5?$AAD?$AAE?$AAA?$AAD@ 00000001400053be     runtime.o
- 0002:000005a0       __imp_AcquireSRWLockExclusive 00000001400055a0     kernel32:KERNEL32.dll
- 0002:000005a8       __imp_AcquireSRWLockShared 00000001400055a8     kernel32:KERNEL32.dll
- 0002:000005b0       __imp_CloseHandle          00000001400055b0     kernel32:KERNEL32.dll
- 0002:000005b8       __imp_CreateFileW          00000001400055b8     kernel32:KERNEL32.dll
- 0002:000005c0       __imp_CreateIoCompletionPort 00000001400055c0     kernel32:KERNEL32.dll
- 0002:000005c8       __imp_CreateThread         00000001400055c8     kernel32:KERNEL32.dll
- 0002:000005d0       __imp_ExitProcess          00000001400055d0     kernel32:KERNEL32.dll
- 0002:000005d8       __imp_GetFileSizeEx        00000001400055d8     kernel32:KERNEL32.dll
- 0002:000005e0       __imp_GetProcAddress       00000001400055e0     kernel32:KERNEL32.dll
- 0002:000005e8       __imp_GetQueuedCompletionStatus 00000001400055e8     kernel32:KERNEL32.dll
- 0002:000005f0       __imp_GetStdHandle         00000001400055f0     kernel32:KERNEL32.dll
- 0002:000005f8       __imp_LoadLibraryA         00000001400055f8     kernel32:KERNEL32.dll
- 0002:00000600       __imp_MultiByteToWideChar  0000000140005600     kernel32:KERNEL32.dll
- 0002:00000608       __imp_ReadConsoleW         0000000140005608     kernel32:KERNEL32.dll
- 0002:00000610       __imp_ReadFile             0000000140005610     kernel32:KERNEL32.dll
- 0002:00000618       __imp_ReleaseSRWLockExclusive 0000000140005618     kernel32:KERNEL32.dll
- 0002:00000620       __imp_ReleaseSRWLockShared 0000000140005620     kernel32:KERNEL32.dll
- 0002:00000628       __imp_VirtualAlloc         0000000140005628     kernel32:KERNEL32.dll
- 0002:00000630       __imp_WriteConsoleW        0000000140005630     kernel32:KERNEL32.dll
- 0002:00000640       __imp_BCryptGenRandom      0000000140005640     bcrypt:bcrypt.dll
- 0002:00000650       __imp_WSACleanup           0000000140005650     ws2_32:WS2_32.dll
- 0002:00000658       __imp_WSARecv              0000000140005658     ws2_32:WS2_32.dll
- 0002:00000660       __imp_WSAStartup           0000000140005660     ws2_32:WS2_32.dll
- 0002:00000668       __imp_accept               0000000140005668     ws2_32:WS2_32.dll
- 0002:00000670       __imp_bind                 0000000140005670     ws2_32:WS2_32.dll
- 0002:00000678       __imp_closesocket          0000000140005678     ws2_32:WS2_32.dll
- 0002:00000680       __imp_connect              0000000140005680     ws2_32:WS2_32.dll
- 0002:00000688       __imp_freeaddrinfo         0000000140005688     ws2_32:WS2_32.dll
- 0002:00000690       __imp_getaddrinfo          0000000140005690     ws2_32:WS2_32.dll
- 0002:00000698       __imp_getsockname          0000000140005698     ws2_32:WS2_32.dll
- 0002:000006a0       __imp_htons                00000001400056a0     ws2_32:WS2_32.dll
- 0002:000006a8       __imp_listen               00000001400056a8     ws2_32:WS2_32.dll
- 0002:000006b0       __imp_ntohs                00000001400056b0     ws2_32:WS2_32.dll
- 0002:000006b8       __imp_send                 00000001400056b8     ws2_32:WS2_32.dll
- 0002:000006c0       __imp_setsockopt           00000001400056c0     ws2_32:WS2_32.dll
- 0002:000006c8       __imp_socket               00000001400056c8     ws2_32:WS2_32.dll
+ 0002:00000132       ??_C@_1EI@GJCCEHA@?$AAF?$AAi?$AAl?$AAe?$AA?3?$AA?5?$AA?$CF?$AAs?$AA?0?$AA?5?$AAL?$AAi?$AAn?$AAe?$AA?3?$AA?5?$AA?$CF?$AAl?$AAl?$AAd?$AA?0?$AA?5?$AAF?$AAu?$AAn?$AAc?$AAt?$AAi?$AAo?$AAn?$AA?3?$AA?5@ 0000000140005132     runtime_lib.o
+ 0002:0000017a       ??_C@_1CM@EJGKJCED@?$AAA?$AAs?$AAs?$AAe?$AAr?$AAt?$AAi?$AAo?$AAn?$AA?5?$AAf?$AAa?$AAi?$AAl?$AAe?$AAd?$AA?3?$AA?5?$AA?$CF?$AAs?$AA?6?$AA?$AA@ 000000014000517a     runtime_lib.o
+ 0002:000001a6       ??_C@_1FC@OGJDIOEJ@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAc?$AAa?$AAn?$AA?8?$AAt?$AA?5?$AAo?$AAp?$AAe?$AAn?$AA?5?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AA?4?$AA?4?$AA?1?$AAr?$AAe?$AAs?$AA?4?$AAb@ 00000001400051a6     runtime.o
+ 0002:000001f8       ??_C@_1LA@ICLCBFDH@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAA?$AAP?$AAI?$AA_?$AAA?$AAN?$AAS?$AAW?$AAE?$AAR?$AA_?$AAR?$AAE?$AAQ?$AAU?$AAE?$AAS?$AAT?$AA_?$AAC?$AAO?$AAN?$AAN?$AAE?$AAC@ 00000001400051f8     remote.o
+ 0002:000002a8       ??_C@_1DK@EHAPFJND@?$AAs?$AAe?$AAr?$AAv?$AAe?$AAr?$AA?5?$AAs?$AAt?$AAa?$AAr?$AAt?$AAe?$AAd?$AA?5?$AAo?$AAn?$AA?5?$AAp?$AAo?$AAr?$AAt?$AA?5?$AA?$CF?$AAl?$AAl?$AAd?$AA?6?$AA?$AA@ 00000001400052a8     remote.o
+ 0002:000002e2       ??_C@_1EG@JHJBOEP@?$AAG?$AAe?$AAt?$AA?5?$AAa?$AAp?$AAi?$AA?5?$AAc?$AAa?$AAl?$AAl?$AA?5?$AA?$CF?$AAl?$AAl?$AAd?$AA?5?$AAo?$AAf?$AA?5?$AAl?$AAe?$AAn?$AAg?$AAt?$AAh?$AA?3?$AA?5?$AA?$CF?$AAl?$AAl@ 00000001400052e2     remote.o
+ 0002:00000328       ??_C@_1HI@GNCDLKLI@?$AAE?$AAr?$AAr?$AAo?$AAr?$AA?3?$AA?5?$AAr?$AAu?$AAn?$AAt?$AAi?$AAm?$AAe?$AA?5?$AAd?$AAo?$AAe?$AAs?$AAn?$AA?8?$AAt?$AA?5?$AAs?$AAu?$AAp?$AAp?$AAo?$AAr?$AAt?$AA?5?$AAs@ 0000000140005328     runtime.o
+ 0002:000003a0       ??_C@_1JC@NNCBABAM@?$AAA?$AAS?$AAS?$AAE?$AAR?$AAT?$AA?5?$AAE?$AAR?$AAR?$AAO?$AAR?$AA?3?$AA?5?$AAb?$AAr?$AAo?$AAa?$AAd?$AAc?$AAa?$AAs?$AAt?$AA?9?$AA?$DO?$AAl?$AAo?$AAc?$AAa?$AAl?$AA_?$AAr@ 00000001400053a0     remote.o
+ 0002:00000432       ??_C@_1CC@CNFLNLEB@?$AAN?$AAO?$AAT?$AA?5?$AAI?$AAM?$AAP?$AAL?$AAE?$AAM?$AAE?$AAN?$AAT?$AAE?$AAD?$AA?6?$AA?$AA@ 0000000140005432     runtime.o
+ 0002:00000454       ??_C@_1FG@DPFHIKFA@?$AA?$CB?$AA?$CB?$AA?$CB?$AAA?$AAL?$AAL?$AA?5?$AAE?$AAX?$AAI?$AAS?$AAT?$AAI?$AAN?$AAG?$AA?5?$AAW?$AAO?$AAR?$AAK?$AAE?$AAR?$AAS?$AA?5?$AAA?$AAR?$AAE?$AA?5?$AAD?$AAE?$AAA?$AAD@ 0000000140005454     runtime.o
+ 0002:00000640       __imp_AcquireSRWLockExclusive 0000000140005640     kernel32:KERNEL32.dll
+ 0002:00000648       __imp_AcquireSRWLockShared 0000000140005648     kernel32:KERNEL32.dll
+ 0002:00000650       __imp_CloseHandle          0000000140005650     kernel32:KERNEL32.dll
+ 0002:00000658       __imp_CreateFileW          0000000140005658     kernel32:KERNEL32.dll
+ 0002:00000660       __imp_CreateIoCompletionPort 0000000140005660     kernel32:KERNEL32.dll
+ 0002:00000668       __imp_CreateThread         0000000140005668     kernel32:KERNEL32.dll
+ 0002:00000670       __imp_ExitProcess          0000000140005670     kernel32:KERNEL32.dll
+ 0002:00000678       __imp_GetFileSizeEx        0000000140005678     kernel32:KERNEL32.dll
+ 0002:00000680       __imp_GetProcAddress       0000000140005680     kernel32:KERNEL32.dll
+ 0002:00000688       __imp_GetQueuedCompletionStatus 0000000140005688     kernel32:KERNEL32.dll
+ 0002:00000690       __imp_GetStdHandle         0000000140005690     kernel32:KERNEL32.dll
+ 0002:00000698       __imp_LoadLibraryA         0000000140005698     kernel32:KERNEL32.dll
+ 0002:000006a0       __imp_MultiByteToWideChar  00000001400056a0     kernel32:KERNEL32.dll
+ 0002:000006a8       __imp_ReadConsoleW         00000001400056a8     kernel32:KERNEL32.dll
+ 0002:000006b0       __imp_ReadFile             00000001400056b0     kernel32:KERNEL32.dll
+ 0002:000006b8       __imp_ReleaseSRWLockExclusive 00000001400056b8     kernel32:KERNEL32.dll
+ 0002:000006c0       __imp_ReleaseSRWLockShared 00000001400056c0     kernel32:KERNEL32.dll
+ 0002:000006c8       __imp_Sleep                00000001400056c8     kernel32:KERNEL32.dll
+ 0002:000006d0       __imp_VirtualAlloc         00000001400056d0     kernel32:KERNEL32.dll
+ 0002:000006d8       __imp_WriteConsoleW        00000001400056d8     kernel32:KERNEL32.dll
+ 0002:000006e8       __imp_BCryptGenRandom      00000001400056e8     bcrypt:bcrypt.dll
+ 0002:000006f8       __imp_WSACleanup           00000001400056f8     ws2_32:WS2_32.dll
+ 0002:00000700       __imp_WSARecv              0000000140005700     ws2_32:WS2_32.dll
+ 0002:00000708       __imp_WSAStartup           0000000140005708     ws2_32:WS2_32.dll
+ 0002:00000710       __imp_accept               0000000140005710     ws2_32:WS2_32.dll
+ 0002:00000718       __imp_bind                 0000000140005718     ws2_32:WS2_32.dll
+ 0002:00000720       __imp_closesocket          0000000140005720     ws2_32:WS2_32.dll
+ 0002:00000728       __imp_connect              0000000140005728     ws2_32:WS2_32.dll
+ 0002:00000730       __imp_freeaddrinfo         0000000140005730     ws2_32:WS2_32.dll
+ 0002:00000738       __imp_getaddrinfo          0000000140005738     ws2_32:WS2_32.dll
+ 0002:00000740       __imp_getsockname          0000000140005740     ws2_32:WS2_32.dll
+ 0002:00000748       __imp_htons                0000000140005748     ws2_32:WS2_32.dll
+ 0002:00000750       __imp_listen               0000000140005750     ws2_32:WS2_32.dll
+ 0002:00000758       __imp_ntohs                0000000140005758     ws2_32:WS2_32.dll
+ 0002:00000760       __imp_send                 0000000140005760     ws2_32:WS2_32.dll
+ 0002:00000768       __imp_setsockopt           0000000140005768     ws2_32:WS2_32.dll
+ 0002:00000770       __imp_socket               0000000140005770     ws2_32:WS2_32.dll
  0003:00000000       server_port                0000000140006000     remote.o
  0003:00000008       runningId                  0000000140006008     runtime.o
  0003:00000010       connections_lock           0000000140006010     api.o
@@ -119,34 +128,35 @@
  0003:00000090       known_objects              0000000140006090     api.o
  0003:000000b0       connections                00000001400060b0     api.o
  0003:000020b0       pages                      00000001400080b0     api.o
- 0003:000028b0       next_local_id              00000001400088b0     remote.o
- 0003:000028b8       hIOCP                      00000001400088b8     remote.o
- 0003:000028c0       data_buffer_end            00000001400088c0     runtime_lib.o
- 0003:000028c8       data_buffer                00000001400088c8     runtime_lib.o
- 0003:000028d0       commited                   00000001400088d0     runtime_lib.o
- 0003:000028d8       hInput                     00000001400088d8     runtime_lib.o
- 0003:000028e0       buf                        00000001400088e0     runtime_lib.o
- 0003:000038e0       hOutput                    00000001400098e0     runtime_lib.o
- 0003:000038f0       Workers                    00000001400098f0     runtime.o
- 0003:00004250       object_array               000000014000a250     runtime.o
- 0003:007a5450       object_array_len           00000001407ab450     runtime.o
- 0003:007a5458       wait_list_len              00000001407ab458     runtime.o
- 0003:007a5460       queue_len                  00000001407ab460     runtime.o
- 0003:007a5470       wait_list                  00000001407ab470     runtime.o
- 0003:007a5790       queue                      00000001407ab790     runtime.o
- 0003:007a5ab0       ShedulerBuffer             00000001407abab0     runtime.o
- 0003:007a5b00       defined_arrays             00000001407abb00     runtime.o
+ 0003:00002cb0       next_local_id              0000000140008cb0     remote.o
+ 0003:00002cb8       hIOCP                      0000000140008cb8     remote.o
+ 0003:00002cc0       data_buffer_end            0000000140008cc0     runtime_lib.o
+ 0003:00002cc8       data_buffer                0000000140008cc8     runtime_lib.o
+ 0003:00002cd0       commited                   0000000140008cd0     runtime_lib.o
+ 0003:00002cd8       hInput                     0000000140008cd8     runtime_lib.o
+ 0003:00002ce0       buf                        0000000140008ce0     runtime_lib.o
+ 0003:00003ce0       hOutput                    0000000140009ce0     runtime_lib.o
+ 0003:00003cf0       Workers                    0000000140009cf0     runtime.o
+ 0003:00004650       object_array               000000014000a650     runtime.o
+ 0003:007a5850       object_array_len           00000001407ab850     runtime.o
+ 0003:007a5858       wait_list_len              00000001407ab858     runtime.o
+ 0003:007a5860       queue_len                  00000001407ab860     runtime.o
+ 0003:007a5870       wait_list                  00000001407ab870     runtime.o
+ 0003:007a5b90       queue                      00000001407abb90     runtime.o
+ 0003:007a5eb0       ShedulerBuffer             00000001407abeb0     runtime.o
+ 0003:007a5f00       defined_arrays             00000001407abf00     runtime.o
  0004:00000400       context                    00000001407ac400     asm.o
 
- entry point at         0001:00003230
+ entry point at         0001:00003620
 
  Static symbols
 
- 0001:000011b0       Worker                     00000001400021b0     remote.o
- 0001:00001960       ConnectionListnerWorker    0000000140002960     remote.o
- 0001:00003420       .text                      0000000140004420     asm.o
- 0001:000034c0       .text                      00000001400044c0     asm.o
- 0001:00003510       .text                      0000000140004510     asm.o
+ 0001:000013a0       Worker                     00000001400023a0     remote.o
+ 0001:00001b50       ConnectionListnerWorker    0000000140002b50     remote.o
+ 0001:00001e50       PagesAllocator             0000000140002e50     remote.o
+ 0001:000038f8       .text                      00000001400048f8     asm.o
+ 0001:00003920       .text                      0000000140004920     asm.o
+ 0001:00003a00       .text                      0000000140004a00     asm.o
  0004:00000000       .data                      00000001407ac000     asm.o
  0004:000006c0       .data                      00000001407ac6c0     asm.o
  0004:00000700       .data                      00000001407ac700     asm.o

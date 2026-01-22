@@ -1364,52 +1364,52 @@ private:
                 
             case OP_NEW_STRING:
             {
-                // rcx=OBJECT_DEFINED_ARRAY=5
-                // rdx=defined object ID
-                // rdi=size of element
-                InsertInteger(op, {1, 8}, 0x05);
-                InsertInteger(op, {2, 8}, op->data[1]);
-                InsertInteger(op, {7, 8}, varType(op->data[0])->_vector.base->size);
+                // rdi=OBJECT_DEFINED_ARRAY=5
+                // rsi=defined object ID
+                // rdx=size of element
+                InsertInteger(op, {7, 8}, 0x05);
+                InsertInteger(op, {6, 8}, op->data[1]);
+                InsertInteger(op, {2, 8}, varType(op->data[0])->_vector.base->size);
                 runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
-                InsertMove(op, Register(op->data[0]), {0, 8}, false);
+                InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 break;
             }
             case OP_NEW_ARRAY:
             {
-                // rcx=OBJECT_ARRAY=3
-                // rdx=total size
-                // rdi=size of element
-                InsertInteger(op, {1, 8}, 0x03);
+                // rdi=OBJECT_ARRAY=3
+                // rsi=total size
+                // rdx=size of element
+                InsertInteger(op, {7, 8}, 0x03);
                 ExternTo64Bit(op, Register(op->data[1]), isSigned(op->data[1]));
-                printRRC(op, ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
-                InsertInteger(op, {7, 8}, varType(op->data[0])->_vector.base->size);
+                printRRC(op, ASM_IMUL_RRC, {6, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
+                InsertInteger(op, {2, 8}, varType(op->data[0])->_vector.base->size);
                 runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
-                InsertMove(op, Register(op->data[0]), {0, 8}, false);
+                InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 break;
             }
             case OP_NEW_PROMISE:
             {
-                // rcx=OBJECT_PROMISE=2
-                // rdx=total size
-                // rdi=size of element = total size
-                InsertInteger(op, {1, 8}, 0x02);
-                InsertInteger(op, {2, 8}, varType(op->data[0])->_vector.base->size);
-                InsertMove(op, {7, 8}, {2, 8}, false);
+                // rdi=OBJECT_PROMISE=2
+                // rsi=total size
+                // rdx=size of element = total size
+                InsertInteger(op, {7, 8}, 0x02);
+                InsertInteger(op, {6, 8}, varType(op->data[0])->_vector.base->size);
+                InsertMove(op, {2, 8}, {6, 8}, false);
                 runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
-                InsertMove(op, Register(op->data[0]), {0, 8}, false);
+                InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 break;
             }
             case OP_NEW_CLASS:
             {
-                // rcx=OBJECT_OBJECT=4
-                // rdx=total size
-                // rdi=size of element = total size
+                // rdi=OBJECT_OBJECT=4
+                // rsi=total size
+                // rdx=size of element = total size
                 int64_t cls_size = GetClassSize(varType(op->data[0]));
-                InsertInteger(op, {1, 8}, 0x04);
-                InsertInteger(op, {2, 8}, cls_size);
-                InsertMove(op, {7, 8}, {2, 8}, false);
+                InsertInteger(op, {7, 8}, 0x04);
+                InsertInteger(op, {6, 8}, cls_size);
+                InsertMove(op, {2, 8}, {6, 8}, false);
                 runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
-                InsertMove(op, Register(op->data[0]), {0, 8}, false);
+                InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 break;
             }
             case OP_NEW_PIPE:     printf("not supported: new_pipe\n"); break;
@@ -1540,7 +1540,7 @@ private:
                 if (isApiScalar(op->data[0]))
                 {
                     InsertInteger(op, {1, 8}, -varSize(op->data[0]));
-                    InsertInteger(op, {2, 8}, -16);
+                    InsertInteger(op, {2, 8}, -24);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
                     runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                     InsertMove(op, Register(op->data[0]), {7, 8}, false);
@@ -1548,7 +1548,7 @@ private:
                 else
                 {
                     InsertInteger(op, {1, 8}, varSize(op->data[0]));
-                    InsertInteger(op, {2, 8}, -16);
+                    InsertInteger(op, {2, 8}, -24);
                     InsertInteger(op, {7, 8}, memTable[op->data[0]]);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
                     runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});

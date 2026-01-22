@@ -1,26 +1,5 @@
-class messenger
+[export:yes]
+(i64[] a)main(i64? res)
 {
-    i16[][] messages;
-    i64 messages_len;
+    res <- a[0] + a[1];
 }
-
-# calculate fib(n)
-(i32[] args)main(i32? res)
-{
-    messenger msg;
-    
-    while msg = 0
-    {
-        msg <- `messenger`?(new i8[]"Messenger")GetNamedObject(*);
-        match msg = 0
-        {
-            -1 {
-                msg <- `messenger`?(new i8[]"Messenger")CreateNamedObject(*);
-            }
-        }
-    }
-}
-
-
-(i8[] name)GetNamedObject(object? object);
-(i8[] name)CreateNamedObject(object? object);

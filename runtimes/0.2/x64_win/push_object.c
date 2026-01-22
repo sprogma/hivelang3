@@ -13,9 +13,12 @@
 __attribute__((sysv_abi))
 void PushObject(int64_t object, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue)
 {
-    if (((BYTE *)object)[-1] == OBJECT_PROMISE)
+    log("PushObject to remote\n");
+    assert(((BYTE *)object)[-9] != 0);
+    
+    if (((BYTE *)object)[-10] == OBJECT_PROMISE)
     {
-        ((BYTE *)object)[-2] = 1;
+        ((BYTE *)object)[-11] = 1;
     }
     switch (size)
     {

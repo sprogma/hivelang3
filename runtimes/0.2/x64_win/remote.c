@@ -129,7 +129,7 @@ void ConfirmPage(int64_t page_id)
     log("!!!!! >>>>>> Page allocation id=%lld confirmed\n", page_id);
     
     AcquireSRWLockExclusive(&pages_lock);
-    pages[pages_len++] = (struct memory_page){page_id, 0};
+    pages[pages_len++] = (struct memory_page){page_id, 0, 0};
     ReleaseSRWLockExclusive(&pages_lock);
 }
 
@@ -737,6 +737,36 @@ void RequestMemoryPage(int64_t page_id)
     }
 }
 
+
+/*---------------------------------------------- processes logic ---------------------------------------------*/
+
+static DWORD PagesAllocator(void *param)
+{
+    while (1)
+    {
+        // check if there is more pages
+        int64_t free_objects = 0;
+        AcquireSRWLockShared(&pages_lock);
+        for (int64_t i = 0; i < pages_len; ++i)
+        {
+            free_objects += OBJECTS_PER_PAGE - pages[i].next_allocated_id;
+        }
+        ReleaseSRWLockShared(&pages_lock);
+
+        // buffer for ~1e6 allocation/second for 0.5 minute
+        if (free_objects < OBJECTS_PER_PAGE * 2)
+        {
+            // request rendom page
+            int64_t page_id = 0;
+            BCryptGenRandom(NULL, (BYTE *)&page_id, 5, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+            RequestMemoryPage(page_id);
+        }
+        
+        Sleep(50);
+    }
+}
+
+
 void start_remote_subsystem() 
 {
     WSADATA wsa;
@@ -753,6 +783,11 @@ void start_remote_subsystem()
     DWORD clId;
     HANDLE hcl = CreateThread(NULL, 0, ConnectionListnerWorker, &port, 0, &clId);
     (void)hcl;
+
+    
+    DWORD paId;
+    HANDLE hpa = CreateThread(NULL, 0, PagesAllocator, &port, 0, &paId);
+    (void)hpa;
 
     
 //     while (1) 

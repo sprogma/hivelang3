@@ -73,7 +73,7 @@ int64_t myAtoll(wchar_t *number)
     }
     while ('0' <= *number && *number <= '9')
     {
-        res = (*number) * 0xF + res * 10;
+        res = ((*number) - '0') + res * 10;
         ++number;
     }
     return (neg ? -res : res);
@@ -235,6 +235,12 @@ void myPrintf(const wchar_t *format, ...)
     WriteConsoleW(hOutput, buf, d - buf, &written, NULL);
 }
 
+[[noreturn]] void assertion_failure(const char* file, int64_t line, const char* func, const char* expr) 
+{
+    myPrintf(L"Assertion failed: %s\n", expr);
+    myPrintf(L"File: %s, Line: %lld, Function: %s\n", file, line, func);
+    ExitProcess(0x0);
+}
 
 void init_lib()
 {
