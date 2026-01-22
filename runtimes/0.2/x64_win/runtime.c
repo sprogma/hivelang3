@@ -109,7 +109,6 @@ void UpdateWaitingWorkers()
                 if (((BYTE *)cause->object)[-9] != 0) // is_remote
                 {
                     // is processing in other place
-                    // TODO: send one more request [if previous got lost]
                     break;
                 }
                 else
@@ -118,7 +117,6 @@ void UpdateWaitingWorkers()
                     if (QueryLocalObject(cause->destination, cause->object, cause->offset, cause->size, &rdiValue))
                     {
                         EnqueueWorkerFromWaitList(w, rdiValue);
-                        
                         myFree(w);
                         wait_list[i] = wait_list[--wait_list_len];
                         i--;

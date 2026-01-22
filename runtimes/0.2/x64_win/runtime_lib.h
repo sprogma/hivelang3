@@ -18,6 +18,8 @@ void *myMalloc(int64_t size);
 void myFree(void *mem);
 void init_lib();
 
+int64_t myAbs(int64_t);
+
 [[noreturn]] void assertion_failure(const char* file, int64_t line, const char* func, const char* expr);
 
 #define print(f, ...) myPrintf(L ## f, __VA_ARGS__)

@@ -57,7 +57,11 @@ int64_t QueryObject(void *destination, int64_t object, int64_t offset, int64_t s
             return rdiValue;
         }
     }
-
+    else
+    {
+        // send request
+        RequestObjectGet(object, offset, myAbs(size));
+    }
     /* shedule query */
     struct waiting_query query = {
         .destination = destination,

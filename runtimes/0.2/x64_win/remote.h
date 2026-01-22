@@ -97,6 +97,7 @@ int64_t GetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_l
 void SetHashtable(struct hashtable *h, BYTE *address, int64_t address_length, int64_t new_value);
 void SetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_length, int64_t new_value);
 
+void RequestObjectGet(int64_t object, int64_t offset, int64_t size);
 
 
 

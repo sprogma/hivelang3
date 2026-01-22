@@ -23,7 +23,7 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
     {
         if (pages[i].next_allocated_id < OBJECTS_PER_PAGE)
         {
-            remote_id = pages[i].next_allocated_id++;
+            remote_id = (pages[i].id << 24) | (pages[i].next_allocated_id++);
             set = 1;
             break;
         }
@@ -45,7 +45,7 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
     // generate header
     struct object header;
     header.type = type;
-    header.is_remote = 0;
+    header.is_remote = 1;
     header.remote_id = remote_id;
 
     // create object

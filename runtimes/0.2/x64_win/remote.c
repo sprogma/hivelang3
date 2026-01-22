@@ -738,10 +738,20 @@ void RequestMemoryPage(int64_t page_id)
 }
 
 
+void RequestObjectGet(int64_t object, int64_t offset, int64_t size)
+{
+    (void)object;
+    (void)offset;
+    (void)size;
+    print("NOT IMPLEMENTED\n");
+}
+
+
 /*---------------------------------------------- processes logic ---------------------------------------------*/
 
 static DWORD PagesAllocator(void *param)
 {
+    (void)param;
     while (1)
     {
         // check if there is more pages

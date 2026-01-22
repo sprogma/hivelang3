@@ -242,6 +242,11 @@ void myPrintf(const wchar_t *format, ...)
     ExitProcess(0x0);
 }
 
+int64_t myAbs(int64_t x)
+{
+    return (x < 0 ? -x : x);
+}
+
 void init_lib()
 {
     data_buffer = data_buffer_end = VirtualAlloc(NULL, MAX_MEMORY, MEM_RESERVE, PAGE_READWRITE);
