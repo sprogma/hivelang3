@@ -12,9 +12,9 @@ $jobs += Start-ThreadJob {
     $using:files | % {
         $o = $_-replace"\.c$",".o"
         $z += $o
-        & $using:CC $_ -c -o $o -O3 -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS $using:rlsFF
+        & $using:CC $_ -c -o $o -O3 -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS $using:rlsFF || Write-Host "Error in compilation"
     }
-    & $using:CC $z asm.o -o a.exe -O3 "-Wl,/subsystem:console" "-Wl,/MAP:release.map" $using:FLAGS $using:LF $using:rlsLF $using:rlsFF
+    & $using:CC $z asm.o -o a.exe -O3 "-Wl,/subsystem:console" "-Wl,/MAP:release.map" $using:FLAGS $using:LF $using:rlsLF $using:rlsFF || Write-Host "Error in compilation"
 }
 $jobs += Start-ThreadJob {
     fasm runtime_dbg.asm asm_dbg.o
@@ -22,8 +22,8 @@ $jobs += Start-ThreadJob {
     $using:files | % {
         $o = $_-replace"\.c$","_dbg.o"
         $z += $o
-        & $using:CC $_ -c -o $o -g -D_DEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS # -fsanitize=address
+        & $using:CC $_ -c -o $o -g -D_DEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS  || Write-Host "Error in compilation" # -fsanitize=address
     }
-    & $using:CC $z asm_dbg.o -g -o d.exe "-Wl,/subsystem:console" "-Wl,/MAP:debug.map" $using:FLAGS $using:LF $using:dbgLF # -fsanitize=address
+    & $using:CC $z asm_dbg.o -g -o d.exe "-Wl,/subsystem:console" "-Wl,/MAP:debug.map" $using:FLAGS $using:LF $using:dbgLF  || Write-Host "Error in compilation" # -fsanitize=address
 }
 $jobs | Wait-Job | Receive-Job

@@ -22,6 +22,8 @@ void *memset(void *_dst, int value, size_t size)
 HANDLE hOutput;
 HANDLE hInput;
 
+int64_t frequency;
+
 BYTE *data_buffer, *data_buffer_end;
 int64_t commited;
  // 64MB
@@ -80,15 +82,37 @@ int64_t myAtoll(wchar_t *number)
 }
 
 
+char get_char()
+{
+    DWORD mode = 0;
+    if (GetConsoleMode(hInput, &mode))
+    {
+        wchar_t ch = 0;
+        DWORD read = 0;
+        if (ReadConsoleW(hInput, &ch, 1, &read, NULL) && read == 1)
+        {
+            return ch;  
+        }
+    }
+    else
+    {
+        wchar_t ch = 0;
+        DWORD bytesRead = 0;
+        if (ReadFile(hInput, &ch, 1, &bytesRead, NULL) && bytesRead == 1)
+        {
+            return ch;
+        }
+    }
+    return L'\0';
+}
+
 
 int64_t myScanI64()
 {
     int64_t res = 0, y = 0, t = 1;
     while (t)
     {
-        wchar_t buf;
-        DWORD read;
-        ReadConsole(hInput, &buf, 1, &read, NULL);
+        wchar_t buf = get_char();
         if (buf < '0' || buf > '9')
         {
             t -= y;
@@ -108,9 +132,12 @@ void myScanS(char *str)
     char *end = str;
     do
     {
-        wchar_t buf;
-        DWORD read;
-        ReadConsole(hInput, &buf, 1, &read, NULL);
+        wchar_t buf = get_char();
+        if (buf == 0)
+        {
+            end++;
+            break;
+        }
         *end++ = buf;
         if (end[-1] == ' ' && end == str + 1)
         {
@@ -247,11 +274,20 @@ int64_t myAbs(int64_t x)
     return (x < 0 ? -x : x);
 }
 
+int64_t SheduleTimeoutFromNow(int64_t microseconds)
+{
+    int64_t now;
+    QueryPerformanceCounter((void *)&now);
+    return now + (frequency * microseconds) / 1000000;
+}
+
 void init_lib()
 {
     data_buffer = data_buffer_end = VirtualAlloc(NULL, MAX_MEMORY, MEM_RESERVE, PAGE_READWRITE);
     commited = COMMIT_BLOCK_SIZE;
     VirtualAlloc(data_buffer, COMMIT_BLOCK_SIZE, MEM_COMMIT, PAGE_READWRITE);
+
+    QueryPerformanceFrequency((void *)&frequency);
     
     hOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     hInput = GetStdHandle(STD_INPUT_HANDLE);

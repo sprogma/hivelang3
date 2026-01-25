@@ -31,8 +31,6 @@ extrn QueryObject
 extrn CallObject
 extrn myPrintf
 
-extrn object_array
-
 section '.text' code readable executable
 
 macro StoreContext dest {
@@ -127,56 +125,6 @@ fastPushObject:
     end if
 
     ; TODO: add fast arrays and their workaround here
-    cmp BYTE [rdi - 9], 0
-    jne .push_object
-
-    cmp BYTE [rdi - 10], 2 ; if it is promise - set it as set
-    jne .not_promise
-    mov BYTE [rdi - 11], 1
-.not_promise:
-    
-    ; for now, simply move to object
-    cmp rcx, 0
-    jg .copy_block    
-    
-    lea rax, [.jump_table]
-    jmp qword [rax + rcx * 8]
-        
-    
-section ".data" readable writable align 64
-align 64
-    dq .push64
-    dq 0
-    dq 0
-    dq 0
-    dq .push32
-    dq 0
-    dq .push16
-    dq .push8
-.jump_table:
-
-section ".text" code readable executable align 16
-align 16
-.push64:
-    mov [rdi + rdx], rsi
-    ret
-.push32:
-    mov [rdi + rdx], esi
-    ret
-.push16:
-    mov [rdi + rdx], si
-    ret
-.push8:
-    mov BYTE [rdi + rdx], sil
-    ret
-    
-align 16
-.copy_block:
-    add rdi, rdx
-    rep movsb
-    ret
-    
-.push_object:
     ; extract return address
     mov rax, [rsp]
     EnterCCode
@@ -233,61 +181,6 @@ fastQueryObject:
 
     end if
 
-    ; TODO: fast arrays, and add their workaround here
-    cmp BYTE [rsi - 9], 0
-    jne .await_object
-    
-    ; if it is promise, and doesn't set - start await
-    cmp BYTE [rsi - 10], 2
-    jne .not_promise
-    
-    cmp BYTE [rsi - 11], 0
-    je .await_object
-    
-.not_promise:
-    ; for now, simply move to object
-    cmp rcx, 0
-    jg .copy_blockq
-
-    
-    lea rax, [.jump_table]
-    jmp qword [rax + rcx * 8]
-        
-    
-section ".data" readable writable align 64
-align 64
-    dq .query64
-    dq 0
-    dq 0
-    dq 0
-    dq .query32
-    dq 0
-    dq .query16
-    dq .query8
-.jump_table:
-
-section ".text" code readable executable align 16
-align 16
-.query64:
-    mov rdi, [rsi + rdx]
-    ret
-.query32:
-    mov edi, [rsi + rdx]
-    ret
-.query16:
-    movzx edi, WORD [rsi + rdx]
-    ret
-.query8:
-    movzx edi, BYTE [rsi + rdx]
-    ret
-    
-align 16
-.copy_blockq:
-    add rsi, rdx
-    rep movsb
-    ret
-
-.await_object:
     ; extract return address
     mov rax, [rsp]
     EnterCCode
@@ -463,7 +356,7 @@ DllCall:
     ; call dll entry
     call rax
 
-    ; if result size is 1 2 4 8 or 16 - save result
+    ; if result size is 1 2 4 8 - save result
     test r13, r13
     jz .noRet
     mov BYTE [r13 - 2], 1

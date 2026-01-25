@@ -58,7 +58,7 @@ struct waiting_cause
 struct waiting_push
 {
     struct waiting_cause;
-    int64_t object; 
+    int64_t object_id; 
     void *destination;
     int64_t offset;
     int64_t size;
@@ -67,16 +67,20 @@ struct waiting_push
 struct waiting_query
 {
     struct waiting_cause;
-    int64_t object; 
+    int64_t object_id; 
     void *destination;
     int64_t offset;
     int64_t size;
+    int64_t repeat_timeout;
 };
 
-struct waiting_pages {};
+struct waiting_pages {
+    struct waiting_cause;
+};
 
 struct waiting_timer 
 {
+    struct waiting_cause;
     int64_t endTicks; // use with QueryPerformanceCounter
 };
 
@@ -130,16 +134,14 @@ typedef uint8_t BYTE;
 
 struct __attribute__((packed)) object
 {
-    int8_t type;       // [-10]
-    int8_t is_remote;  // [-9]
-    int64_t remote_id; // [-8]
+    int8_t type;       // [-1]
     BYTE data[];
 };
 
 struct __attribute__((packed)) object_array
 {
     int64_t length;
-    int8_t _[6];
+    int8_t _[7];
     struct object;
 };
 
@@ -161,10 +163,6 @@ struct worker_info
     int64_t inputSize;
 };
 extern struct worker_info Workers[];
-
-
-extern struct object *object_array[];
-extern int64_t object_array_len;
 
 struct defined_array
 {
@@ -202,12 +200,12 @@ extern struct defined_array *defined_arrays;
 __attribute__((sysv_abi)) 
 int64_t QueryObject(void *destination, int64_t object, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
 
-int64_t QueryLocalObject(void *destination, int64_t object, int64_t offset, int64_t size, int64_t *rdiValue);
-
-
+int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue);
 
 __attribute__((sysv_abi))
 void PushObject(int64_t object, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
+
+void UpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);
 
 __attribute__((sysv_abi))
 int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress, void *rbpValue);

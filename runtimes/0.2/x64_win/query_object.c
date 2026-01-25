@@ -9,9 +9,9 @@
 #include "runtime.h"
 
 
-int64_t QueryLocalObject(void *destination, int64_t object, int64_t offset, int64_t size, int64_t *rdiValue)
+int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue)
 {
-    if (((BYTE *)object)[-10] == OBJECT_PROMISE)
+    if (((BYTE *)object)[-1] == OBJECT_PROMISE)
     {
         struct object_promise *p = (struct object_promise *)(object - DATA_OFFSET(*p));
         if (p->ready)
@@ -45,14 +45,16 @@ int64_t QueryLocalObject(void *destination, int64_t object, int64_t offset, int6
 
 
 __attribute__((sysv_abi))
-int64_t QueryObject(void *destination, int64_t object, int64_t offset, int64_t size, void *returnAddress, void *rbpValue)
+int64_t QueryObject(void *destination, int64_t object_id, int64_t offset, int64_t size, void *returnAddress, void *rbpValue)
 {
-    log("Query object %lld\n", object);
+    log("Query object %lld\n", object_id);
 
-    if (((BYTE *)object)[-9] == 0)
+    BYTE *obj = (BYTE *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
+
+    if (obj != NULL)
     {
         int64_t rdiValue;
-        if (QueryLocalObject(destination, object, offset, size, &rdiValue))
+        if (QueryLocalObject(destination, obj, offset, size, &rdiValue))
         {
             return rdiValue;
         }
@@ -60,15 +62,18 @@ int64_t QueryObject(void *destination, int64_t object, int64_t offset, int64_t s
     else
     {
         // send request
-        RequestObjectGet(object, offset, myAbs(size));
+        RequestObjectGet(object_id, offset, myAbs(size));
     }
     /* shedule query */
-    struct waiting_query query = {
+    struct waiting_query *query = myMalloc(sizeof(*query));
+    *query = (struct waiting_query){
+        .type = WAITING_QUERY,
         .destination = destination,
-        .object = object,
+        .object_id = object_id,
         .size = size,
         .offset = offset,
+        .repeat_timeout = SheduleTimeoutFromNow(300000),
     };
-    PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)&query);
+    PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)query);
     longjmpUN(&ShedulerBuffer, 1);
 }

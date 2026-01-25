@@ -21,7 +21,7 @@ void PauseWorker(void *returnAddress, void *rbpValue, struct waiting_cause *wait
     t->rbpValue = rbpValue;
     t->waiting_data = waiting_data;
 
-    log("Paused worker %lld\n", runningId);
+    log("Paused worker %lld [cause %lld]\n", runningId, (int64_t)waiting_data->type);
 
     WaitListWorker(t);
 }

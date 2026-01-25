@@ -9,6 +9,12 @@
 #include "runtime.h"
 
 
+void RegisterObjectWithId(int64_t id, void *object)
+{
+    SetHashtable(&local_objects, (BYTE *)&id, 8, (int64_t)object);
+}
+
+
 // if allocating ARRAY, param must be element size.
 // [it can be used to split big arrays on diffrent hives]
 // if allocating OBJECT, param = 1
@@ -23,9 +29,13 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
     {
         if (pages[i].next_allocated_id < OBJECTS_PER_PAGE)
         {
-            remote_id = (pages[i].id << 24) | (pages[i].next_allocated_id++);
-            set = 1;
-            break;
+            int64_t t = pages[i].next_allocated_id++;
+            if (t < OBJECTS_PER_PAGE)
+            {
+                remote_id = (pages[i].id << 24) | t;
+                set = 1;
+                break;
+            }
         }
     }
     ReleaseSRWLockShared(&pages_lock);
@@ -37,16 +47,15 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
             return 0;
         }
         /* wait for new pages */
-        struct waiting_pages cause;
-        PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)&cause);
+        struct waiting_pages *cause = myMalloc(sizeof(*cause));
+        cause->type = WAITING_PAGES,
+        PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)cause);
         longjmpUN(&ShedulerBuffer, 1);
     }
     
     // generate header
     struct object header;
     header.type = type;
-    header.is_remote = 1;
-    header.remote_id = remote_id;
 
     // create object
     switch (type)
@@ -57,10 +66,10 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
             struct object_array *res = myMalloc(sizeof(*res) + size);
             memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
             res->length = size / param;
-            int64_t id = (int64_t)res + DATA_OFFSET(*res);
-            object_array[object_array_len++] = (struct object *)id;
-            log("[id=%llx]\n", id);
-            return id;
+            int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
+            RegisterObjectWithId(remote_id, (struct object *)pointer);
+            log("[id=%llx]\n", remote_id);
+            return remote_id;
         }
         case OBJECT_PROMISE:
         {
@@ -69,20 +78,20 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
             memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
             res->type = OBJECT_PROMISE;
             res->ready = 0;
-            int64_t id = (int64_t)res + DATA_OFFSET(*res);
-            object_array[object_array_len++] = (struct object *)id;
-            log("[id=%llx]\n", id);
-            return id;
+            int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
+            RegisterObjectWithId(remote_id, (struct object *)pointer);
+            log("[id=%llx]\n", remote_id);
+            return remote_id;
         }
         case OBJECT_OBJECT:
         {
             log("Class for size %lld allocated\n", size);
             struct object_object *res = myMalloc(sizeof(*res) + size);
             res->type = OBJECT_OBJECT;
-            int64_t id = (int64_t)res + DATA_OFFSET(*res);
-            object_array[object_array_len++] = (struct object *)id;
-            log("[id=%llx]\n", id);
-            return id;
+            int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
+            RegisterObjectWithId(remote_id, (struct object *)pointer);
+            log("[id=%llx]\n", remote_id);
+            return remote_id;
         }
         case OBJECT_DEFINED_ARRAY:
         {
@@ -101,13 +110,15 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
                 log(" %02x", res->data[i]);
             }
             log("\n");
-            int64_t id = (int64_t)res + DATA_OFFSET(*res);
-            object_array[object_array_len++] = (struct object *)id;
-            log("[id=%llx]\n", id);
-            return id;
+            int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
+            RegisterObjectWithId(remote_id, (struct object *)pointer);
+            log("[id=%llx]\n", remote_id);
+            return remote_id;
         }
         default:
             log("Wrong type in NewObject\n");
     }
     return -1;
 }
+
+

@@ -20,6 +20,7 @@ struct hashtable known_hives;
 struct hashtable known_broadcasts;
 struct hashtable known_objects;
 struct hashtable local_objects;
+struct hashtable query_requests;
 
 int64_t equal_bytes(BYTE *a, BYTE *b, int64_t len)
 {
@@ -143,4 +144,5 @@ void InitInternalStructures()
     INIT_HASHTABLE(known_hives);
     INIT_HASHTABLE(local_objects);
     INIT_HASHTABLE(known_objects);
+    INIT_HASHTABLE(query_requests);
 }

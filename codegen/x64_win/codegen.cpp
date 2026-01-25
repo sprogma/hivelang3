@@ -1540,7 +1540,7 @@ private:
                 if (isApiScalar(op->data[0]))
                 {
                     InsertInteger(op, {1, 8}, -varSize(op->data[0]));
-                    InsertInteger(op, {2, 8}, -24);
+                    InsertInteger(op, {2, 8}, -16);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
                     runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                     InsertMove(op, Register(op->data[0]), {7, 8}, false);
@@ -1548,7 +1548,7 @@ private:
                 else
                 {
                     InsertInteger(op, {1, 8}, varSize(op->data[0]));
-                    InsertInteger(op, {2, 8}, -24);
+                    InsertInteger(op, {2, 8}, -16);
                     InsertInteger(op, {7, 8}, memTable[op->data[0]]);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
                     runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});

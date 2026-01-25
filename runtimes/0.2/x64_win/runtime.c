@@ -15,8 +15,6 @@
 struct defined_array *defined_arrays;
 
 struct worker_info Workers[100] = {};
-struct object *object_array[1000000] = {};
-int64_t object_array_len = 0;
 
 struct jmpbuf ShedulerBuffer;
 int64_t runningId = -1;
@@ -31,11 +29,10 @@ int64_t queue_len = 0;
 void PrintObject(struct object *object_ptr)
 {
     BYTE *ptr = (BYTE *)object_ptr;
-    log("remoteId=%llx", *(int64_t *)(&ptr[-8]));
-    switch (ptr[-9])
+    switch (ptr[-1])
     {
         case OBJECT_PROMISE:
-            log("Promise(set=%02x, first4bytes=", ptr[-10]);
+            log("Promise(set=%02x, first4bytes=", ptr[-2]);
             for (int i = 0; i < 4; ++i)
                 log("%02x ", ptr[i]);
             log(")\n");
@@ -95,9 +92,13 @@ void EnqueueWorker(struct queued_worker *t)
 
 void UpdateWaitingWorkers()
 {
+    int64_t ticks;
+    QueryPerformanceCounter((void *)&ticks);
+    print("wait list: %lld\n", wait_list_len);
     for (int i = 0; i < wait_list_len; ++i)
     {
         struct waiting_worker *w = wait_list[i];
+        print("waiting type %lld\n", (int64_t)w->waiting_data->type);
         switch (w->waiting_data->type)
         {
             case WAITING_PUSH:
@@ -105,16 +106,24 @@ void UpdateWaitingWorkers()
                 break;
             case WAITING_QUERY:
             {
+                print("waiting\n");
                 struct waiting_query *cause = (struct waiting_query *)w->waiting_data;
-                if (((BYTE *)cause->object)[-9] != 0) // is_remote
+                struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&cause->object_id, 8, 0);
+                if (obj == 0)
                 {
-                    // is processing in other place
+                    // remote object, repeat request, with timeout
+                    print("%lld/%lld\n", ticks, cause->repeat_timeout);
+                    if (ticks > cause->repeat_timeout)
+                    {
+                        RequestObjectGet(cause->object_id, cause->offset, myAbs(cause->size));
+                        cause->repeat_timeout = SheduleTimeoutFromNow(300000);
+                    }
                     break;
                 }
                 else
                 {
                     int64_t rdiValue;
-                    if (QueryLocalObject(cause->destination, cause->object, cause->offset, cause->size, &rdiValue))
+                    if (QueryLocalObject(cause->destination, obj, cause->offset, cause->size, &rdiValue))
                     {
                         EnqueueWorkerFromWaitList(w, rdiValue);
                         myFree(w);
@@ -138,11 +147,10 @@ void SheduleWorker()
 {
     setjmpUN(&ShedulerBuffer);
 
-    log("\nSheduling new worker\n");
-
     // call next worker
     if (queue_len > 0)
     {
+        log("\nSheduling new worker\n");
         --queue_len;
         log("Continue worker %lld from %p [rdi=%llx] [context=%p] [rbp=%p]\n", 
                 queue[queue_len]->id, queue[queue_len]->ptr, queue[queue_len]->rdiValue, queue[queue_len]->context, queue[queue_len]->rbpValue);
@@ -156,7 +164,7 @@ void SheduleWorker()
             struct dll_call_data *data = Workers[runningId].ptr;
             
             void *args = (void *)queue[queue_len]->rdiValue;
-            void *result_promise = NULL;
+            int64_t result_promise_id = 0;
             
             // TODO: remove 16 args limit [use alloca?]
             int64_t call_data[32] = {}, *cd;
@@ -169,8 +177,11 @@ void SheduleWorker()
                 data->output_size != 4 && 
                 data->output_size != 8)
             {
-                output = __builtin_alloca(data->output_size);
                 *cd++ = (int64_t)output;
+            }
+            else if (data->output_size != -1)
+            {
+                output = __builtin_alloca(data->output_size);
             }
             
             for (int64_t i = 0; i < data->sizes_len; ++i)
@@ -198,7 +209,7 @@ void SheduleWorker()
 
             if (data->output_size != -1)
             {
-                result_promise = *(void **)args;
+                result_promise_id = *(int64_t*)args;
                 args += 8;
             }
 
@@ -207,28 +218,16 @@ void SheduleWorker()
             {
                 log("ARG[%lld] = %lld\n", i, call_data[i]);
             }
-            log("output is %p [->to promise %p]\n", output, result_promise);
+            log("output is %p [->to promise %lld]\n", output, result_promise_id);
 
-            DllCall(
-                queue[queue_len]->ptr,
-                call_data,
-                (output == NULL || data->output_size == -1 ? result_promise : output)
-            );
-
-            // MessageBox(0, L"Text", L"Caption", 0x40);
+            DllCall(queue[queue_len]->ptr, call_data, output);
 
             log("returned + Error=%lld\n", (int64_t)GetLastError());
 
             if (output != NULL)
             {
-                memcpy(result_promise, output, data->output_size);
-                myFree(output);
+                RegisterPushEvent(result_promise_id, 0, data->output_size, output);
             }
-            else
-            {
-                PrintObject(result_promise);
-            }
-            // TODO: free interrupts mutex
         }
         else
         {
@@ -555,13 +554,6 @@ int entry()
 
 
 
-
-
-
-
-
-
-
     ////////////////////////// running stage
     
     InitInternalStructures();
@@ -598,7 +590,13 @@ int entry()
         inputId = NewObject(3, 8 * inputLen, 8, NULL, NULL);
         Sleep(10);
     }
-    memcpy((void *)inputId, input, 8 * inputLen);
+
+    struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&inputId, 8, 0);
+    if (obj == 0)
+    {
+        print("Error: allocated array isn't local\n");
+    }
+    memcpy(obj, input, 8 * inputLen);
     
     int64_t resCodeId = 0;
     
@@ -616,28 +614,53 @@ int entry()
         
     log("Running...\n");
 
-    while (queue_len > 0)
+    while (queue_len > 0 || wait_list_len > 0)
     {
         SheduleWorker();
     }
 
-    log("At end objects:\n");
-    for (int i = 0; i < object_array_len; ++i)
-    {
-        log("%02x=[%llx]", i, object_array[i]); PrintObject(object_array[i]);
-    }
+    // TODO: create new dump analog
+    // log("At end objects:\n");
+    // for (int i = 0; i < object_array_len; ++i)
+    // {
+    //     log("%02x=[%llx]", i, object_array[i]); PrintObject(object_array[i]);
+    // }
     
     if (wait_list_len != 0)
     {
         myPrintf(L"!!!ALL EXISTING WORKERS ARE DEADLOCKED!!!\n");
     }
 
-    struct object_promise *p = (struct object_promise *)(resCodeId - DATA_OFFSET(struct object_promise));
-    if (p->ready)
+    print("Program finished\n");
+    struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);
+    if (p == NULL)
     {
-        log("Program exited with code %llx\n", *(int *)p->data);
-        ExitProcess(*(int *)p->data);
+        print("Result promise not found on machine\n");
     }
-    log("Result of main function isn't ready after program end\n");
+    else
+    {
+        p = (void *)((BYTE *)p - DATA_OFFSET(*p));
+        if (p->ready)
+        {
+            log("Program exited with code %llx\n", *(int *)p->data);
+
+            #ifndef NDEBUG
+            print("Press Ctrl+C to end\n");
+            while (1){};
+            #endif
+            
+            ExitProcess(*(int *)p->data);
+        }
+        else
+        {
+            log("Result of main function isn't ready after program end\n");
+        }
+    }
+
+    #ifndef NDEBUG
+    print("Press Ctrl+C to end\n");
+    while (1){};
+    #endif
+    
     ExitProcess(1);
 }

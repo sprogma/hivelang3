@@ -58,6 +58,27 @@ struct memory_page_request
     int32_t requested;
 };
 
+#define QUERY_HASHING_BYTES 24
+struct linked_node
+{
+    int64_t local_id;
+    struct linked_node *next;
+};
+struct query_object_request
+{
+    int64_t object_id;
+    int64_t offset;
+    int64_t size;
+    struct linked_node *local_ids;
+};
+
+#define INFINITY_DISTANCE 999999
+struct known_object
+{
+    int64_t local_id;
+    int64_t distance;
+};
+
 struct hashtable_node
 {
     struct hashtable_node *next;
@@ -98,6 +119,8 @@ void SetHashtable(struct hashtable *h, BYTE *address, int64_t address_length, in
 void SetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_length, int64_t new_value);
 
 void RequestObjectGet(int64_t object, int64_t offset, int64_t size);
+
+void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const void *source);
 
 
 
@@ -152,28 +175,9 @@ void RequestObjectGet(int64_t object, int64_t offset, int64_t size);
             hash table to forward-linked lists
 */
 
-struct known_object
-{
-    int64_t local_id; // hive to ask
-};
-
-struct local_object_table_1
-{
-    struct local_object_table_2 *lay[256];
-};
-
-struct local_object_table_2
-{
-    struct local_object_table_3 *lay[256];
-};
-
-struct local_object_table_3
-{
-    void *lay[256];
-};
-
 extern struct hashtable known_objects;
 extern struct hashtable local_objects;
+extern struct hashtable query_requests;
 
 
 // ------------- other -----------

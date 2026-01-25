@@ -57,3 +57,64 @@ function Close-TCPConnection {
         Write-Debug "Connection to $($Connection.Client.Client.RemoteEndPoint) closed."
     }
 }
+
+function Start-Hive
+{
+    param(
+        [Parameter(Mandatory=$true)][string]$Executable,
+        [string[]]$ArgumentList
+    )
+    $p = Get-Random -min 16000 -max 32000
+    [pscustomobject]@{
+        Port=$p
+        Executable=$Executable
+        ArgumentList=$ArgumentList
+        Input=,"p $p"
+    }
+}
+
+function Deploy-System
+{
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)] $hive
+    )
+    begin
+    {
+        $tmps = @()
+        $res = @()
+    }
+    process 
+    {
+        $hive.Input += "r"
+        $tmp = New-TemporaryFile
+        $hive.Input -join "`n" | Set-Content $tmp
+        $hive.ArgumentList = $hive.ArgumentList -replace "@", "$($tmp.FullName)"
+        Write-Host $hive.ArgumentList
+        #  -RedirectStandardInput $tmp
+        $res += Start-Process -FilePath $hive.Executable -ArgumentList $hive.ArgumentList -WindowStyle Normal -PassThru
+        $tmps += $tmp
+    }
+    end
+    {
+        Write-Host "System deployed" -Fore green
+        Write-Host "[waiting for closing all nodes]" -Fore darkgray
+        $res | Wait-Process
+        $tmps | rm
+        Write-Host "All processes terminated"
+    }
+}
+
+function Connect-Hive
+{
+    param(
+        $hive1,
+        $hive2
+    )
+
+    $hive1.Input += ,"c ::1 $($hive2.Port)"
+    $hive2.Input += ,"c ::1 $($hive1.Port)"
+}
+
+
+
+. .\topology.ps1
