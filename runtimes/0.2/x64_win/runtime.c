@@ -23,6 +23,7 @@ SRWLOCK wait_list_lock = SRWLOCK_INIT;
 struct waiting_worker *wait_list[10000];
 int64_t wait_list_len = 0;
 
+SRWLOCK queue_lock = SRWLOCK_INIT;
 struct queued_worker *queue[10000];
 int64_t queue_len = 0;
 
@@ -85,7 +86,6 @@ void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
     EnqueueWorker(t);
 }
 
-SRWLOCK queue_lock = SRWLOCK_INIT;
 void EnqueueWorker(struct queued_worker *t)
 {
     AcquireSRWLockExclusive(&queue_lock);
@@ -98,12 +98,12 @@ void UpdateWaitingWorkers()
 {
     int64_t ticks;
     QueryPerformanceCounter((void *)&ticks);
-    print("wait list: %lld\n", wait_list_len);
+    log("wait list: %lld\n", wait_list_len);
     AcquireSRWLockExclusive(&wait_list_lock);
     for (int i = 0; i < wait_list_len; ++i)
     {
         struct waiting_worker *w = wait_list[i];
-        print("waiting type %lld\n", (int64_t)w->waiting_data->type);
+        log("waiting type %lld\n", (int64_t)w->waiting_data->type);
         switch (w->waiting_data->type)
         {
             case WAITING_PUSH:
@@ -113,17 +113,17 @@ void UpdateWaitingWorkers()
                 if (obj == 0)
                 {
                     // remote object, repeat request, with timeout
-                    print("waiting for remote push %lld/%lld\n", ticks, cause->repeat_timeout);
+                    log("waiting for remote push %lld/%lld\n", ticks, cause->repeat_timeout);
                     if (ticks > cause->repeat_timeout)
                     {
                         RequestObjectSet(cause->object_id, cause->offset, myAbs(cause->size), cause->data);
-                        cause->repeat_timeout = SheduleTimeoutFromNow(300000);
+                        cause->repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT);
                     }
                     break;
                 }
                 else
                 {
-                    print("ERROR: waiting for push to local\n");
+                    log("ERROR: waiting for push to local\n");
                     break;
                 }
             }
@@ -134,17 +134,17 @@ void UpdateWaitingWorkers()
                 if (obj == 0)
                 {
                     // remote object, repeat request, with timeout
-                    print("waiting for remote query %lld/%lld\n", ticks, cause->repeat_timeout);
+                    log("waiting for remote query %lld/%lld\n", ticks, cause->repeat_timeout);
                     if (ticks > cause->repeat_timeout)
                     {
                         RequestObjectGet(cause->object_id, cause->offset, myAbs(cause->size));
-                        cause->repeat_timeout = SheduleTimeoutFromNow(300000);
+                        cause->repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT);
                     }
                     break;
                 }
                 else
                 {
-                    print("waiting for local %lld\n", cause->object_id);
+                    log("waiting for local %lld\n", cause->object_id);
                     int64_t rdiValue;
                     if (QueryLocalObject(cause->destination, obj, cause->offset, cause->size, &rdiValue))
                     {
@@ -174,6 +174,16 @@ void SheduleWorker()
 {
     setjmpUN(&ShedulerBuffer);
 
+    static int64_t prevPrint = 0;
+    int64_t now = GetTicks();
+    if (now - prevPrint > MicrosecondsToTicks(100000))
+    {
+        print("[info]: Wait|Queued %lld|%lld\n", wait_list_len, queue_len);
+        prevPrint = now;
+    }
+
+    // UpdateWaitingWorkers();
+    
     // call next worker
     if (queue_len > 0)
     {
@@ -256,17 +266,17 @@ void SheduleWorker()
 
             if (output != NULL)
             {
-                RegisterPushEvent(result_promise_id, 0, data->output_size, output);
+                RequestObjectSet(result_promise_id, 0, data->output_size, output);
             }
         }
         else
         {
-            // print("context=");
+            // log("context=");
             // for (int64_t i = 0; i < (int64_t)sizeof(copy->context); ++i)
             // {
-            //     print("%02x ", ((BYTE *)copy->context)[i]);
+            //     log("%02x ", ((BYTE *)copy->context)[i]);
             // }
-            // print("\n");
+            // log("\n");
             ExecuteWorker(
                 copy->ptr,
                 copy->rdiValue,
@@ -286,7 +296,7 @@ void StartNewWorker(int64_t workerId, BYTE *inputTable, int64_t except_this_loca
     int64_t rnd = 0;
     BCryptGenRandom(NULL, (BYTE *)&rnd, 8, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
     AcquireSRWLockShared(&wait_list_lock);
-    if (((rnd % 100 < 5 * (wait_list_len + queue_len) && rnd % 2) || except_this_local_id == -1) && except_this_local_id != -3)
+    if (rnd % 100 < 5 * (wait_list_len + queue_len || except_this_local_id == -1) && except_this_local_id != -3)
     {
         ReleaseSRWLockShared(&wait_list_lock);
         /* select random connection */
@@ -294,7 +304,11 @@ void StartNewWorker(int64_t workerId, BYTE *inputTable, int64_t except_this_loca
         if (connections_len != 0)
         {
             int64_t t = rnd % connections_len;
-            if (connections[t]->local_id != except_this_local_id)
+            log("Want run remote, but: %lld %lld [con=%p]\n", connections[t]->wait_list_len, connections[t]->queue_len, connections[t]);
+            if (connections[t]->outgoing != INVALID_SOCKET && 
+                connections[t]->local_id != except_this_local_id &&
+                ((connections[t]->wait_list_len < 50 && connections[t]->queue_len < 10) || 
+                  connections[t]->queue_len == 0))
             {
                 StartNewWorkerRemote(connections[t], workerId, inputTable);
                 ReleaseSRWLockShared(&connections_lock);
@@ -549,7 +563,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                         break;
                     }
                     default:
-                        myPrintf(L"Error: runtime doesn't support string table encoding: %lld\n", (int64_t)encoding);
+                        print("Error: runtime doesn't support string table encoding: %lld\n", (int64_t)encoding);
                         return NULL;
                 }
                 break;
@@ -580,7 +594,7 @@ int entry()
     );
 
     if (hFile == INVALID_HANDLE_VALUE) {
-        myPrintf(L"Error: can't open ../../../res.bin file\n");
+        print("Error: can't open ../../../res.bin file\n");
         return 1;
     }
 
@@ -633,7 +647,7 @@ int entry()
     if (argc > 1 && argv[1][0] == 'n')
     {
         connectingToMain = 1;
-        log("Starting without any workers\n");
+        print("Starting without any workers\n");
     }
     else
     {
@@ -650,12 +664,13 @@ int entry()
         #else
         inputLen = myScanI64();
         int64_t *input = myMalloc(8 * inputLen);
-        for (int i = 0; i < inputLen; ++i)
+        for (int64_t i = 0; i < inputLen; ++i)
         {
             input[i] = myScanI64();
         }
         #endif
 
+        print("waiting startup pages\n");
 
         while (inputId == 0)
         {
@@ -681,18 +696,17 @@ int entry()
         memcpy(tbl + 0, &inputId, 8);
         memcpy(tbl + 8, &resCodeId, 8);
 
-        print("resCodeId=%p\n", resCodeId);
+        log("resCodeId=%p\n", resCodeId);
         StartNewWorker(0, tbl, -3);
 
         myFree(tbl);
     }
         
-    log("Running...\n");
+    print("Running...\n");
 
     while (connectingToMain || queue_len > 0 || wait_list_len > 0)
     {
         SheduleWorker();
-        Sleep(100);
     }
 
     // TODO: create new dump analog
@@ -704,7 +718,7 @@ int entry()
     
     if (wait_list_len != 0)
     {
-        myPrintf(L"!!!There is %lld more workers in wait_list!!!\n", wait_list_len);
+        print("!!!There is %lld more workers in wait_list!!!\n", wait_list_len);
     }
     
     print("Program finished\n");

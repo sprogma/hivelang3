@@ -2,7 +2,7 @@
 [export:yes]
 (i64[] input)main(i32? res)
 {
-    res <- ?(8)fib(*);
+    res <- ?(30)fib(*);
 }
 
 

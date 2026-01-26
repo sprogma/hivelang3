@@ -178,6 +178,7 @@ extern SRWLOCK wait_list_lock;
 extern struct waiting_worker *wait_list[];
 extern int64_t wait_list_len;
 
+extern SRWLOCK queue_lock;
 extern struct queued_worker *queue[];
 extern int64_t queue_len;
 

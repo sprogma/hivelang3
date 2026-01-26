@@ -1,7 +1,18 @@
+param(
+    [switch]$Release
+)
 
 $exe = "pwsh"
-$ag = "-NoExit", "-c", 'gc "@"; lldb d.exe -o """process launch -i @ -- n"""'
-$agMain = "-NoExit", "-c", 'gc "@"; lldb d.exe -o """process launch -i @ -- 3 4"""'
+if ($Release)
+{
+    $ag = "-NoExit", "-c", 'gc "@"; gc "@" | .\a.exe n'
+    $agMain = "-NoExit", "-c", 'gc "@"; gc "@" | .\a.exe'
+}
+else
+{
+    $ag = "-NoExit", "-c", 'gc "@"; lldb d.exe -o """process launch -i @ -- n"""'
+    $agMain = "-NoExit", "-c", 'gc "@"; lldb d.exe -o """process launch -i @ -- 3 4"""'
+}
 
 $h1 = Start-Hive -Executable $exe -ArgumentList $agMain
 $h2 = Start-Hive -Executable $exe -ArgumentList $ag

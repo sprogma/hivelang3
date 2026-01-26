@@ -16,8 +16,11 @@ void *memcpy(void *dst, const void *src, size_t size);
 int64_t myAtoll(wchar_t *number);
 void *myMalloc(int64_t size);
 void myFree(void *mem);
-void init_lib();
+int64_t GetTicks();
+int64_t TicksToMicroseconds(int64_t ticks);
+int64_t MicrosecondsToTicks(int64_t ticks);
 int64_t SheduleTimeoutFromNow(int64_t microseconds);
+void init_lib();
 
 int64_t myAbs(int64_t);
 

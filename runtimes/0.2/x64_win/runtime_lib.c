@@ -21,32 +21,26 @@ void *memset(void *_dst, int value, size_t size)
 
 HANDLE hOutput;
 HANDLE hInput;
-
+HANDLE hHeap;
 int64_t frequency;
-
-BYTE *data_buffer, *data_buffer_end;
-int64_t commited;
- // 64MB
-#define MAX_MEMORY (1024*1024*1024)
-#define COMMIT_BLOCK_SIZE (4*4096) 
-
+    
 
 void *myMalloc(int64_t size)
 {
-    data_buffer_end += (8 - (data_buffer_end - data_buffer) % 8) % 8;
-    void *res = data_buffer_end;
-    data_buffer_end += size;
-    while (data_buffer_end - data_buffer > commited)
+    void *mem = HeapAlloc(hHeap, HEAP_ZERO_MEMORY, size);
+    if (mem == NULL)
     {
-        VirtualAlloc(data_buffer + commited, COMMIT_BLOCK_SIZE, MEM_COMMIT, PAGE_READWRITE);
-        commited += COMMIT_BLOCK_SIZE;
+        print("Error: failed to allocate memory: %lld\n", (int64_t)GetLastError());
     }
-    return res;
+    return mem;
 }
 
 void myFree(void *mem)
 {
-    (void)mem;
+    if (HeapFree(hHeap, 0, mem) == 0)
+    {
+        print("Error: failed to free memory: %lld\n", (int64_t)GetLastError());
+    }
 }
 
 
@@ -274,21 +268,35 @@ int64_t myAbs(int64_t x)
     return (x < 0 ? -x : x);
 }
 
+int64_t MicrosecondsToTicks(int64_t microseconds)
+{
+    return (frequency * microseconds) / 1000000;
+}
+
+int64_t TicksToMicroseconds(int64_t ticks)
+{
+    return (ticks * 1000000) / frequency;
+}
+
+int64_t GetTicks()
+{
+    int64_t now;
+    QueryPerformanceCounter((void *)&now);
+    return now;
+}
+
 int64_t SheduleTimeoutFromNow(int64_t microseconds)
 {
     int64_t now;
     QueryPerformanceCounter((void *)&now);
-    return now + (frequency * microseconds) / 1000000;
+    return now + MicrosecondsToTicks(microseconds);
 }
 
 void init_lib()
 {
-    data_buffer = data_buffer_end = VirtualAlloc(NULL, MAX_MEMORY, MEM_RESERVE, PAGE_READWRITE);
-    commited = COMMIT_BLOCK_SIZE;
-    VirtualAlloc(data_buffer, COMMIT_BLOCK_SIZE, MEM_COMMIT, PAGE_READWRITE);
-
     QueryPerformanceFrequency((void *)&frequency);
     
     hOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     hInput = GetStdHandle(STD_INPUT_HANDLE);
+    hHeap = GetProcessHeap();
 }

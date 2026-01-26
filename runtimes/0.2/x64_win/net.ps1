@@ -1,3 +1,7 @@
+param(
+    [switch]$Release
+)
+
 function New-TCPConnection {
     param(
         [Parameter(Mandatory=$true)][string] $RemoteHost,
@@ -85,7 +89,7 @@ function Deploy-System
     }
     process 
     {
-        $hive.Input += "r"
+        $hive.Input += "r`n0"
         $tmp = New-TemporaryFile
         $hive.Input -join "`n" | Set-Content $tmp
         $hive.ArgumentList = $hive.ArgumentList -replace "@", "$($tmp.FullName)"
@@ -115,4 +119,4 @@ function Connect-Hive
 
 
 
-. .\topology.ps1
+. .\topology.ps1 -Release:$Release

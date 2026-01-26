@@ -66,7 +66,7 @@ int64_t QueryObject(void *destination, int64_t object_id, int64_t offset, int64_
         .object_id = object_id,
         .size = size,
         .offset = offset,
-        .repeat_timeout = SheduleTimeoutFromNow(300000),
+        .repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT),
     };
     PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)query);
     longjmpUN(&ShedulerBuffer, 1);

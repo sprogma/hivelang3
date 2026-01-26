@@ -31,6 +31,7 @@ struct connection_context
     BYTE buffer[4096];
 };
 
+#define INT_INFINITY 999999
 struct hive_connection
 {
     SRWLOCK lock;
@@ -40,6 +41,10 @@ struct hive_connection
     // temporary fields, use them only then connecting (becouse address can change)
     SOCKADDR_STORAGE address;
     int address_len;
+    // usage data
+    int64_t wait_list_len;
+    int64_t queue_len;
+    int64_t idle_time;
 };
 
 #define OBJECTS_PER_PAGE (1<<(8*3))
@@ -183,6 +188,9 @@ void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const vo
         global objects await queue:
             hash table to forward-linked lists
 */
+
+#define PUSH_REPEAT_TIMEOUT (20*1000)
+#define QUERY_REPEAT_TIMEOUT (20*1000)
 
 extern struct hashtable known_objects;
 extern struct hashtable local_objects;
