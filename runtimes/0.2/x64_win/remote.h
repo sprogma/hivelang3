@@ -33,6 +33,7 @@ struct connection_context
 
 struct hive_connection
 {
+    SRWLOCK lock;
     struct connection_context *ctx;
     SOCKET outgoing;
     int64_t local_id;
@@ -65,6 +66,14 @@ struct linked_node
     struct linked_node *next;
 };
 struct query_object_request
+{
+    int64_t object_id;
+    int64_t offset;
+    int64_t size;
+    struct linked_node *local_ids;
+};
+#define PUSH_HASHING_BYTES 24
+struct push_object_request
 {
     int64_t object_id;
     int64_t offset;
@@ -119,9 +128,9 @@ void SetHashtable(struct hashtable *h, BYTE *address, int64_t address_length, in
 void SetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_length, int64_t new_value);
 
 void RequestObjectGet(int64_t object, int64_t offset, int64_t size);
-
+void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data);
+void StartNewWorkerRemote(struct hive_connection *con, int64_t worker_id, void *inputTable);
 void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const void *source);
-
 
 
 
@@ -178,6 +187,7 @@ void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const vo
 extern struct hashtable known_objects;
 extern struct hashtable local_objects;
 extern struct hashtable query_requests;
+extern struct hashtable push_requests;
 
 
 // ------------- other -----------

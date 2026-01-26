@@ -126,7 +126,7 @@ int64_t RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t exce
 void RequestObjectPathBroadcast(int64_t object, int64_t except_this_local_id);
 void AnswerRequestObjectPath(int64_t object, int64_t distance);
 void AnswerQueryObject(struct hive_connection *con, void *shifted_buffer, int64_t object_id, int64_t offset, int64_t size);
-
+void AnswerPushObject(struct hive_connection *con, int64_t object_id, int64_t offset, int64_t size);
 
 void ConfirmPage(int64_t page_id)
 {
@@ -146,6 +146,7 @@ void HandleNewConnection(SOCKET client, SOCKADDR_STORAGE storage, int storage_le
     struct connection_context *new_context = myMalloc(sizeof(*new_context));
 
     // initializate new connection
+    new_connection->lock = (SRWLOCK)SRWLOCK_INIT;
     new_connection->outgoing = INVALID_SOCKET;
     new_connection->local_id = next_local_id++;
     new_connection->address = storage;
@@ -217,11 +218,14 @@ static DWORD ConnectionListnerWorker(void *param)
 #define API_REQUEST_CONNECTION 0x00
 #define API_REQUEST_MEM_PAGE 0x02
 #define API_QUERY_OBJECT 0x04
+#define API_PUSH_OBJECT 0x06
 #define API_REQUEST_PATH 0x08
+#define API_CALL_WORKER 0x10
 
 #define API_ANSWER_REQUEST_CONNECTION (API_REQUEST_CONNECTION | 0x1)
 #define API_ANSWER_REQUEST_MEM_PAGE (API_REQUEST_MEM_PAGE | 0x1)
 #define API_ANSWER_QUERY_OBJECT (API_QUERY_OBJECT | 0x1)
+#define API_ANSWER_PUSH_OBJECT (API_PUSH_OBJECT | 0x1)
 #define API_ANSWER_REQUEST_PATH (API_REQUEST_PATH | 0x1)
 
 #define BROADCAST_ID_LENGTH 27
@@ -254,9 +258,22 @@ static DWORD ConnectionListnerWorker(void *param)
             8 byte: offset
             8 byte: size
 
+        API_PUSH_OBJECT
+            8 byte: object_id
+            8 byte: offset
+            8 byte: size
+            ----
+            raw bytes
+
         API_REQUEST_PATH
             8 byte: object_id
             27 byte: broadcast ID
+
+        API_CALL_WORKER
+            8 byte: worker_id
+            ----
+            raw bytes
+            
 
     api ANSWERS:
 
@@ -270,7 +287,13 @@ static DWORD ConnectionListnerWorker(void *param)
             8 byte: object_id
             8 byte: offset
             8 byte: size
+            ----
             raw bytes
+
+        API_ANSWER_PUSH_OBJECT
+            8 byte: object_id
+            8 byte: offset
+            8 byte: size
 
         API_ANSWER_REQUEST_PATH
             8 byte: object_id
@@ -297,7 +320,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         case API_ANSWER_REQUEST_CONNECTION:
         {
             // update that id
-            AcquireSRWLockShared(&connections_lock);
+            AcquireSRWLockExclusive(&connections_lock);
             int64_t local_id = *(int64_t *)ctx->res_buffer;
             for (int64_t i = 0; i < connections_len; ++i)
             {
@@ -311,12 +334,12 @@ static int64_t HandleApiCall(struct hive_connection *con)
                     struct hive_connection *old_con = GetConnectionById(local_id, &index);
                     myFree(old_con);
                     connections[index] = connections[--connections_len];
-                    ReleaseSRWLockShared(&connections_lock);
+                    ReleaseSRWLockExclusive(&connections_lock);
                     return 1;
                 }
             }
             print("Error: API_ANSWER_REQUEST_CONNECTION becouse there is no connection with local_id=%lld\n", local_id);
-            ReleaseSRWLockShared(&connections_lock);
+            ReleaseSRWLockExclusive(&connections_lock);
             return 0;
         }
         case API_REQUEST_MEM_PAGE:
@@ -380,7 +403,9 @@ static int64_t HandleApiCall(struct hive_connection *con)
             {
                 if (broadcast->local_redirect_id != con->local_id)
                 {
-                    print("ASSERT ERROR: broadcast->local_redirect_id != con->local_id [line %lld]\n", (int64_t)__LINE__);
+                    /* simply answer yes */
+                    log("Confirmed becouse local_id differs\n");
+                    SendPageAllocationConfirm(con, broadcast_id);
                 }
             }
 
@@ -494,7 +519,110 @@ static int64_t HandleApiCall(struct hive_connection *con)
             }
             
             /* for each program in waiting list - continue if this is it's request */
-            print("UNSUPPORTED CONTINUE FROM WAITING LIST\n");
+            AcquireSRWLockExclusive(&wait_list_lock);
+            for (int64_t i = 0; i < wait_list_len; ++i)
+            {
+                struct waiting_worker *w = wait_list[i];
+                if (w->waiting_data->type == WAITING_QUERY)
+                {
+                    struct waiting_query *cause = (struct waiting_query *)w->waiting_data;
+                    if (cause->object_id == object_id && myAbs(cause->size) == query_size && cause->offset == query_offset)
+                    {
+                        int64_t rdiValue = 0;
+                        UpdateFromQueryResult(cause->destination, object_id, query_offset, query_size, data, &rdiValue);
+                        EnqueueWorkerFromWaitList(w, rdiValue);
+                        myFree(w);
+                        wait_list[i] = wait_list[--wait_list_len];
+                        i--;
+                    }
+                }
+            }
+            ReleaseSRWLockExclusive(&wait_list_lock);
+            
+            return 1;
+        }
+        case API_PUSH_OBJECT:
+        {
+            int64_t object_id = *(int64_t *)(ctx->res_buffer);
+            int64_t offset = *(int64_t *)(ctx->res_buffer+8);
+            int64_t size = *(int64_t *)(ctx->res_buffer+16);
+            BYTE *data = ctx->res_buffer + 24;
+            
+            /* if this is local object - answer */
+            struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
+            if (obj != NULL)
+            {
+                UpdateLocalPush(obj, offset, size, data);
+                AnswerPushObject(con, object_id, offset, size);
+                return 1;
+            }
+            /* else - add request to global request hashtable */
+            struct linked_node *new_node = myMalloc(sizeof(*new_node));
+            new_node->local_id = con->local_id;
+            
+            AcquireSRWLockExclusive(&push_requests.lock);
+            
+            struct push_object_request key = { object_id, offset, size, NULL };
+            struct push_object_request *p = (void *)GetHashtableNoLock(&push_requests, (BYTE *)&key, PUSH_HASHING_BYTES, 0);
+            if (p == NULL)
+            {
+                myMalloc(sizeof(*p));
+                *p = key;
+                SetHashtable(&push_requests, (BYTE *)p, PUSH_HASHING_BYTES, (int64_t)p);
+            }
+            /* update p's linked list */
+            new_node->next = p->local_ids;
+            p->local_ids = new_node;
+            ReleaseSRWLockExclusive(&push_requests.lock);
+            return 1;
+        }
+        case API_ANSWER_PUSH_OBJECT:
+        {
+            int64_t object_id = *(int64_t *)(ctx->res_buffer);
+            int64_t offset = *(int64_t *)(ctx->res_buffer+8);
+            int64_t size = *(int64_t *)(ctx->res_buffer+16);
+
+            /* for each local_id requesting this query - answer */
+            AcquireSRWLockExclusive(&push_requests.lock);
+            struct query_object_request key = { object_id, offset, size, NULL };
+            struct query_object_request *p = (void *)GetHashtableNoLock(&push_requests, (BYTE *)&key, PUSH_HASHING_BYTES, 0);
+            struct linked_node *cur = NULL;
+            if (p != NULL)
+            {
+                cur = p->local_ids;
+                p->local_ids = NULL;
+            }
+            ReleaseSRWLockExclusive(&push_requests.lock);
+
+            /* redirect answer */
+            while (cur)
+            {
+                AnswerPushObject(GetConnectionById(cur->local_id, NULL), object_id, offset, size);
+                void *tmp = cur;
+                cur = cur->next;
+                myFree(tmp);
+            }
+            
+            /* for each program in waiting list - continue if this is it's request */
+            AcquireSRWLockExclusive(&wait_list_lock);
+            for (int64_t i = 0; i < wait_list_len; ++i)
+            {
+                struct waiting_worker *w = wait_list[i];
+                if (w->waiting_data->type == WAITING_PUSH)
+                {
+                    struct waiting_push *cause = (struct waiting_push *)w->waiting_data;
+                    if (cause->object_id == object_id && myAbs(cause->size) == size && cause->offset == offset)
+                    {
+                        EnqueueWorkerFromWaitList(w, 0);
+                        myFree(cause->data);
+                        myFree(cause);
+                        myFree(w);
+                        wait_list[i] = wait_list[--wait_list_len];
+                        i--;
+                    }
+                }
+            }
+            ReleaseSRWLockExclusive(&wait_list_lock);
             
             return 1;
         }
@@ -524,6 +652,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         {
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             int64_t distance = *(int64_t *)(ctx->res_buffer + 8);
+            log("UPDATE PATH TO %lld [distance=%lld]\n", object_id, distance);
             /* update known objects base */
             AcquireSRWLockExclusive(&known_objects.lock);
             struct known_object *obj = (void *)GetHashtableNoLock(&known_objects, (BYTE *)&object_id, 8, 0);
@@ -547,6 +676,14 @@ static int64_t HandleApiCall(struct hive_connection *con)
                 return 1;
             }
             ReleaseSRWLockExclusive(&known_objects.lock);
+            return 1;
+        }
+        case API_CALL_WORKER:
+        {
+            int64_t worker_id = *(int64_t *)ctx->res_buffer;
+            BYTE *data = ctx->res_buffer + 8;
+            print("Get remote start worker %lld\n", worker_id);
+            StartNewWorker(worker_id, data, con->local_id);
             return 1;
         }
     }
@@ -678,7 +815,9 @@ void SendPageAllocationConfirm(struct hive_connection *con, BYTE *broadcast_id)
     log("Send confirmation of page allocation to local_id=%lld\n", con->local_id);
     BYTE message[8+27] = {API_ANSWER_REQUEST_MEM_PAGE, BROADCAST_ID_LENGTH, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     memcpy(message + 8, broadcast_id, BROADCAST_ID_LENGTH);
+    AcquireSRWLockExclusive(&con->lock);
     send(con->outgoing, (char *)message, sizeof(message), 0);
+    ReleaseSRWLockExclusive(&con->lock);
 }
 
 
@@ -689,12 +828,15 @@ int64_t RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t exce
     memcpy(message + 8,  &page_id, 5);
     memcpy(message + 8+5, broadcast_id, BROADCAST_ID_LENGTH);
     int64_t send_cnt = 0;
+    DumpConnections();
     for (int64_t i = 0; i < connections_len; ++i)
     {
         if (connections[i]->ctx != NULL && connections[i]->local_id != except_this_local_id)
         {
             log("Redirecting query to local_id=%lld\n", connections[i]->local_id);
+            AcquireSRWLockExclusive(&connections[i]->lock);
             send(connections[i]->outgoing, (char *)message, sizeof(message), 0);
+            ReleaseSRWLockExclusive(&connections[i]->lock);
             send_cnt++;
         }
     }
@@ -756,6 +898,7 @@ int64_t InitiateConnection(const char *host, const char *port)
     if (server_port == -1)
     {
         log("Error - server_port == -1 [server isn't started]\n");
+        return -1;
     }
 
     struct addrinfo hints = {0}, *result = NULL;
@@ -799,6 +942,7 @@ int64_t InitiateConnection(const char *host, const char *port)
         int64_t conn = connections_len++;
         
         connections[conn] = myMalloc(sizeof(**connections));
+        connections[conn]->lock = (SRWLOCK)SRWLOCK_INIT;
         connections[conn]->ctx = NULL;
         connections[conn]->outgoing = s;
         connections[conn]->local_id = local_id;
@@ -813,7 +957,7 @@ int64_t InitiateConnection(const char *host, const char *port)
     } 
     else 
     {
-        print("Error: Could not connect to %s\n", host);
+        print("Error: Could not connect to %s [error=%lld]\n", host, (int64_t)GetLastError());
         return -1;
     }
 }
@@ -854,16 +998,30 @@ void RequestMemoryPage(int64_t page_id)
 }
 
 
+void AnswerPushObject(struct hive_connection *con, int64_t object_id, int64_t offset, int64_t size)
+{    
+    print("Answer Push Object to localid=%lld [%lld+%lld:%lld]\n", con->local_id, object_id, offset, size);
+    BYTE header[8] = {API_ANSWER_PUSH_OBJECT, 24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    AcquireSRWLockExclusive(&con->lock);
+    send(con->outgoing, (char *) header, sizeof(header), 0);
+    send(con->outgoing, (char *)&object_id, 8, 0);
+    send(con->outgoing, (char *)&offset, 8, 0);
+    send(con->outgoing, (char *)&size,   8, 0);
+    ReleaseSRWLockExclusive(&con->lock);
+}
+
 void AnswerQueryObject(struct hive_connection *con, void *shifted_buffer, int64_t object_id, int64_t offset, int64_t size)
 {    
     print("Answer Query Object to localid=%lld [%lld+%lld:%lld]\n", con->local_id, object_id, offset, size);
     BYTE header[8] = {API_ANSWER_QUERY_OBJECT, 24+size, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    AcquireSRWLockExclusive(&con->lock);
     send(con->outgoing, (char *) header, sizeof(header), 0);
     send(con->outgoing, (char *)&object_id, 8, 0);
     send(con->outgoing, (char *)&offset, 8, 0);
     send(con->outgoing, (char *)&size,   8, 0);
     // send data
     send(con->outgoing, (char *)shifted_buffer, size, 0);
+    ReleaseSRWLockExclusive(&con->lock);
 }
                 
 
@@ -871,14 +1029,16 @@ void AnswerRequestObjectPath(int64_t object, int64_t distance)
 {
     BYTE message[8+16] = {API_ANSWER_REQUEST_PATH, 16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     memcpy(message + 8, &object, 8);
-    memcpy(message + 8, &distance, 8);
+    memcpy(message + 16, &distance, 8);
     AcquireSRWLockShared(&connections_lock);
     for (int64_t i = 0; i < connections_len; ++i)
     {
         if (connections[i]->ctx != NULL)
         {
             log("send broadcast answer path to local_id=%lld\n", connections[i]->local_id);
+            AcquireSRWLockExclusive(&connections[i]->lock);
             send(connections[i]->outgoing, (char *)message, sizeof(message), 0);
+            ReleaseSRWLockExclusive(&connections[i]->lock);
         }
     }
     ReleaseSRWLockShared(&connections_lock);
@@ -910,7 +1070,9 @@ void RequestObjectPathBroadcast(int64_t object, int64_t except_this_local_id)
         if (connections[i]->ctx != NULL && connections[i]->local_id != except_this_local_id)
         {
             log("send broadcast path request to local_id=%lld\n", connections[i]->local_id);
+            AcquireSRWLockExclusive(&connections[i]->lock);
             send(connections[i]->outgoing, (char *)message, sizeof(message), 0);
+            ReleaseSRWLockExclusive(&connections[i]->lock);
         }
     }
     ReleaseSRWLockShared(&connections_lock);
@@ -932,11 +1094,38 @@ void RequestObjectGet(int64_t object, int64_t offset, int64_t size)
     // now, we know which hive handles object - request it from him
     struct hive_connection *connection = GetConnectionById(obj->local_id, NULL);
 
-    BYTE header[8] = {API_QUERY_OBJECT, 0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    BYTE header[8] = {API_QUERY_OBJECT, 24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    AcquireSRWLockExclusive(&connection->lock);
     send(connection->outgoing, (char *) header, sizeof(header), 0);
     send(connection->outgoing, (char *)&object, 8, 0);
     send(connection->outgoing, (char *)&offset, 8, 0);
     send(connection->outgoing, (char *)&size,   8, 0);
+    ReleaseSRWLockExclusive(&connection->lock);
+}
+
+void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data)
+{
+    // find object in object table
+    struct known_object *obj = (void *)GetHashtable(&known_objects, (BYTE *)&object_id, 8, 0);
+    if (obj == NULL || obj->local_id == -1)
+    {
+        // we need to find path
+        print("Sending broadcast to find object=%lld\n", object_id);
+        RequestObjectPathBroadcast(object_id, -1);
+        // now, we can't resolve request
+        return;
+    }
+    // now, we know which hive handles object - request it from him
+    struct hive_connection *connection = GetConnectionById(obj->local_id, NULL);
+
+    BYTE header[8] = {API_PUSH_OBJECT, 24 + size, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    AcquireSRWLockExclusive(&connection->lock);
+    send(connection->outgoing, (char *) header, sizeof(header), 0);
+    send(connection->outgoing, (char *)&object_id, 8, 0);
+    send(connection->outgoing, (char *)&offset,    8, 0);
+    send(connection->outgoing, (char *)&size,      8, 0);
+    send(connection->outgoing, (char *) data,   size, 0);
+    ReleaseSRWLockExclusive(&connection->lock);
 }
 
 // this function must allocate inner block to save source
@@ -949,12 +1138,26 @@ void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const vo
     print("NOT IMPLEMENTED push register event\n");
 }
 
+void StartNewWorkerRemote(struct hive_connection *con, int64_t worker_id, void *inputTable)
+{
+    log("Starting new REMOTE worker %lld [input table %p]\n", worker_id, inputTable);
+    BYTE header[8] = {API_CALL_WORKER, 8 + Workers[worker_id].inputSize, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    AcquireSRWLockExclusive(&con->lock);
+    send(con->outgoing, (char *) header, sizeof(header), 0);
+    send(con->outgoing, (char *)&worker_id, 8, 0);
+    send(con->outgoing, (char *) inputTable, Workers[worker_id].inputSize, 0);
+    ReleaseSRWLockExclusive(&con->lock);
+}
+
 
 /*---------------------------------------------- processes logic ---------------------------------------------*/
 
 static DWORD PagesAllocator(void *param)
 {
     (void)param;
+    #ifdef SEQUENCE_PAGE_ALLOCATION
+    int64_t next_page = 0;
+    #endif
     while (1)
     {
         // check if there is more pages
@@ -970,12 +1173,16 @@ static DWORD PagesAllocator(void *param)
         if (free_objects < OBJECTS_PER_PAGE * 2)
         {
             // request rendom page
+            #ifdef SEQUENCE_PAGE_ALLOCATION
+            int64_t page_id = next_page++;
+            #else
             int64_t page_id = 0;
             BCryptGenRandom(NULL, (BYTE *)&page_id, 5, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+            #endif
             RequestMemoryPage(page_id);
         }
         
-        Sleep(50);
+        Sleep(300);
     }
 }
 
@@ -1029,10 +1236,6 @@ void start_remote_subsystem()
             int64_t res = InitiateConnection(host, port);
             print("Temporary local_id = %lld\n", res);
         }
-        else if (cmd[0] == 'd' || cmd[0] == 'D')
-        {
-            DumpConnections();
-        }
         else if (cmd[0] == 'r' || cmd[0] == 'R')
         {
             print("Configuration confirmed\n");
@@ -1040,6 +1243,9 @@ void start_remote_subsystem()
         }
         myScanS(cmd);
     }
+
+    Sleep(1000);
+    DumpConnections();
     
     DWORD paId;
     HANDLE hpa = CreateThread(NULL, 0, PagesAllocator, &port, 0, &paId);

@@ -9,6 +9,14 @@
 #include "runtime.h"
 
 
+void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue)
+{
+    (void)object_id;
+    (void)offset;
+    memcpy((size < 0 ? rdiValue : destination), result_data, myAbs(size));
+}
+
+
 int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue)
 {
     if (((BYTE *)object)[-1] == OBJECT_PROMISE)
@@ -16,14 +24,7 @@ int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_
         struct object_promise *p = (struct object_promise *)(object - DATA_OFFSET(*p));
         if (p->ready)
         {
-            if (size < 0)
-            {
-                memcpy(rdiValue, p->data + offset, -size);
-            }
-            else
-            {
-                memcpy(destination, p->data + offset, size);
-            }
+            memcpy((size < 0 ? rdiValue : destination), p->data + offset, myAbs(size));
             return 1;
         }
         return 0;
@@ -31,14 +32,7 @@ int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_
     else
     {
         struct object_object *p = (struct object_object *)(object - DATA_OFFSET(*p));
-        if (size < 0)
-        {
-            memcpy(rdiValue, p->data + offset, -size);
-        }
-        else
-        {
-            memcpy(destination, p->data + offset, size);
-        }
+        memcpy((size < 0 ? rdiValue : destination), p->data + offset, myAbs(size));
         return 1;
     }
 }

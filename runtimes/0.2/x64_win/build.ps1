@@ -1,7 +1,7 @@
 param([string]$CC="clang")
 $FLAGS = ,"-fno-stack-protector", "-DUNICODE", "-D_UNICODE", "-municode", "-ffreestanding", "-nostdlib", "-mno-stack-arg-probe", "-fms-extensions", "-Wno-microsoft"
-$LF = ,"-lkernel32", "-lbcrypt", "-lws2_32", "-Wl,-entry:entry", "-Wl,-dynamicbase:no"
-$dbgLF = ,"-lshell32", "-Wl,/debug"
+$LF = ,"-lshell32", "-lkernel32", "-lbcrypt", "-lws2_32", "-Wl,-entry:entry", "-Wl,-dynamicbase:no"
+$dbgLF = , "-Wl,/debug"
 $rlsLF = ,"-flto", "-fuse-ld=lld"
 $rlsFF = ,"-fno-unwind-tables", "-fno-asynchronous-unwind-tables"
 $files = (ls *.c)

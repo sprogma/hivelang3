@@ -59,9 +59,10 @@ struct waiting_push
 {
     struct waiting_cause;
     int64_t object_id; 
-    void *destination;
     int64_t offset;
     int64_t size;
+    void *data;
+    int64_t repeat_timeout;
 };
 
 struct waiting_query
@@ -173,6 +174,7 @@ struct defined_array
 extern struct jmpbuf ShedulerBuffer;
 extern int64_t runningId;
 
+extern SRWLOCK wait_list_lock;
 extern struct waiting_worker *wait_list[];
 extern int64_t wait_list_len;
 
@@ -200,6 +202,7 @@ extern struct defined_array *defined_arrays;
 __attribute__((sysv_abi)) 
 int64_t QueryObject(void *destination, int64_t object, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
 
+void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue);
 int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue);
 
 __attribute__((sysv_abi))
@@ -211,6 +214,8 @@ __attribute__((sysv_abi))
 int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress, void *rbpValue);
 
 
+void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value);
+void StartNewWorker(int64_t workerId, BYTE *inputTable, int64_t except_this_local_id);
 void PauseWorker(void *returnAddress, void *rbpValue, struct waiting_cause *waiting_data);
 
 #endif

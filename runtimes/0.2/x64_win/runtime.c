@@ -19,10 +19,11 @@ struct worker_info Workers[100] = {};
 struct jmpbuf ShedulerBuffer;
 int64_t runningId = -1;
 
-struct waiting_worker *wait_list[100];
+SRWLOCK wait_list_lock = SRWLOCK_INIT;
+struct waiting_worker *wait_list[10000];
 int64_t wait_list_len = 0;
 
-struct queued_worker *queue[100];
+struct queued_worker *queue[10000];
 int64_t queue_len = 0;
 
 
@@ -67,8 +68,10 @@ void PrintObject(struct object *object_ptr)
 
 void WaitListWorker(struct waiting_worker *t)
 {
+    AcquireSRWLockExclusive(&wait_list_lock);
     wait_list[wait_list_len++] = t;
     log("Worker add to wait list [next=%p]\n", t->ptr);
+    ReleaseSRWLockExclusive(&wait_list_lock);
 }
 
 void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
@@ -78,16 +81,17 @@ void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
     t->ptr = w->ptr;
     t->rbpValue = w->rbpValue;
     t->rdiValue = rdi_value;
+    memcpy(t->context, w->context, sizeof(t->context));
     EnqueueWorker(t);
-
-    queue[queue_len++] = t;
-    log("Worker enqueued [next=%p]\n", t->ptr);
 }
 
+SRWLOCK queue_lock = SRWLOCK_INIT;
 void EnqueueWorker(struct queued_worker *t)
 {
+    AcquireSRWLockExclusive(&queue_lock);
     queue[queue_len++] = t;
     log("Worker enqueued [next=%p]\n", t->ptr);
+    ReleaseSRWLockExclusive(&queue_lock);
 }
 
 void UpdateWaitingWorkers()
@@ -95,6 +99,7 @@ void UpdateWaitingWorkers()
     int64_t ticks;
     QueryPerformanceCounter((void *)&ticks);
     print("wait list: %lld\n", wait_list_len);
+    AcquireSRWLockExclusive(&wait_list_lock);
     for (int i = 0; i < wait_list_len; ++i)
     {
         struct waiting_worker *w = wait_list[i];
@@ -102,17 +107,34 @@ void UpdateWaitingWorkers()
         switch (w->waiting_data->type)
         {
             case WAITING_PUSH:
-                // is processing in other place
-                break;
+            {
+                struct waiting_push *cause = (struct waiting_push *)w->waiting_data;
+                struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&cause->object_id, 8, 0);
+                if (obj == 0)
+                {
+                    // remote object, repeat request, with timeout
+                    print("waiting for remote push %lld/%lld\n", ticks, cause->repeat_timeout);
+                    if (ticks > cause->repeat_timeout)
+                    {
+                        RequestObjectSet(cause->object_id, cause->offset, myAbs(cause->size), cause->data);
+                        cause->repeat_timeout = SheduleTimeoutFromNow(300000);
+                    }
+                    break;
+                }
+                else
+                {
+                    print("ERROR: waiting for push to local\n");
+                    break;
+                }
+            }
             case WAITING_QUERY:
             {
-                print("waiting\n");
                 struct waiting_query *cause = (struct waiting_query *)w->waiting_data;
                 struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&cause->object_id, 8, 0);
                 if (obj == 0)
                 {
                     // remote object, repeat request, with timeout
-                    print("%lld/%lld\n", ticks, cause->repeat_timeout);
+                    print("waiting for remote query %lld/%lld\n", ticks, cause->repeat_timeout);
                     if (ticks > cause->repeat_timeout)
                     {
                         RequestObjectGet(cause->object_id, cause->offset, myAbs(cause->size));
@@ -122,10 +144,12 @@ void UpdateWaitingWorkers()
                 }
                 else
                 {
+                    print("waiting for local %lld\n", cause->object_id);
                     int64_t rdiValue;
                     if (QueryLocalObject(cause->destination, obj, cause->offset, cause->size, &rdiValue))
                     {
                         EnqueueWorkerFromWaitList(w, rdiValue);
+                        myFree(cause);
                         myFree(w);
                         wait_list[i] = wait_list[--wait_list_len];
                         i--;
@@ -135,12 +159,15 @@ void UpdateWaitingWorkers()
                 }
             }
             case WAITING_TIMER:
-                print("NOT IMPLEMENTED\n"); break;
+                print("NOT IMPLEMENTED WAITING_TIMER\n"); break;
             
             case WAITING_PAGES:
-                print("NOT IMPLEMENTED\n"); break;
+            {
+                print("NOT IMPLEMENTED WAITING_PAGES\n"); break;
+            }
         }
     }
+    ReleaseSRWLockExclusive(&wait_list_lock);
 }
 
 void SheduleWorker()
@@ -151,11 +178,14 @@ void SheduleWorker()
     if (queue_len > 0)
     {
         log("\nSheduling new worker\n");
+        AcquireSRWLockExclusive(&queue_lock);
         --queue_len;
+        struct queued_worker *copy = queue[queue_len];
+        ReleaseSRWLockExclusive(&queue_lock);
         log("Continue worker %lld from %p [rdi=%llx] [context=%p] [rbp=%p]\n", 
-                queue[queue_len]->id, queue[queue_len]->ptr, queue[queue_len]->rdiValue, queue[queue_len]->context, queue[queue_len]->rbpValue);
+                copy->id, copy->ptr, copy->rdiValue, copy->context, copy->rbpValue);
 
-        runningId = queue[queue_len]->id;
+        runningId = copy->id;
         if (Workers[runningId].isDllCall)
         {
             // TODO: lock interrupts mutex
@@ -163,7 +193,7 @@ void SheduleWorker()
             // prepare data
             struct dll_call_data *data = Workers[runningId].ptr;
             
-            void *args = (void *)queue[queue_len]->rdiValue;
+            void *args = (void *)copy->rdiValue;
             int64_t result_promise_id = 0;
             
             // TODO: remove 16 args limit [use alloca?]
@@ -220,7 +250,7 @@ void SheduleWorker()
             }
             log("output is %p [->to promise %lld]\n", output, result_promise_id);
 
-            DllCall(queue[queue_len]->ptr, call_data, output);
+            DllCall(copy->ptr, call_data, output);
 
             log("returned + Error=%lld\n", (int64_t)GetLastError());
 
@@ -231,11 +261,17 @@ void SheduleWorker()
         }
         else
         {
+            // print("context=");
+            // for (int64_t i = 0; i < (int64_t)sizeof(copy->context); ++i)
+            // {
+            //     print("%02x ", ((BYTE *)copy->context)[i]);
+            // }
+            // print("\n");
             ExecuteWorker(
-                queue[queue_len]->ptr,
-                queue[queue_len]->rdiValue,
-                queue[queue_len]->rbpValue,
-                (BYTE *)queue[queue_len]->context
+                copy->ptr,
+                copy->rdiValue,
+                copy->rbpValue,
+                (BYTE *)copy->context
             );
         }
     }
@@ -244,15 +280,47 @@ void SheduleWorker()
     UpdateWaitingWorkers();
 }
 
-void StartNewWorker(int64_t workerId, BYTE *inputTable)
+void StartNewWorker(int64_t workerId, BYTE *inputTable, int64_t except_this_local_id)
 {
-    log("Starting new worker %lld [input table %p]\n", workerId, inputTable);
+    /* if we are running too many tasks - redirect new worker to another hive */
+    int64_t rnd = 0;
+    BCryptGenRandom(NULL, (BYTE *)&rnd, 8, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    AcquireSRWLockShared(&wait_list_lock);
+    if (((rnd % 100 < 5 * (wait_list_len + queue_len) && rnd % 2) || except_this_local_id == -1) && except_this_local_id != -3)
+    {
+        ReleaseSRWLockShared(&wait_list_lock);
+        /* select random connection */
+        AcquireSRWLockShared(&connections_lock);
+        if (connections_len != 0)
+        {
+            int64_t t = rnd % connections_len;
+            if (connections[t]->local_id != except_this_local_id)
+            {
+                StartNewWorkerRemote(connections[t], workerId, inputTable);
+                ReleaseSRWLockShared(&connections_lock);
+                return;
+            }
+        }
+        ReleaseSRWLockShared(&connections_lock);
+    }
+    else
+    {
+        ReleaseSRWLockShared(&wait_list_lock);
+    }
+
+    log("Starting new local worker %lld [input table %p]\n", workerId, inputTable);
+
+    // TODO: remove 2048 body size constant
+    int64_t tableSize = Workers[workerId].inputSize;
+    void *data = myMalloc(tableSize + 2048);
+    memcpy(data, inputTable, tableSize);
     
     struct queued_worker *t = myMalloc(sizeof(*t));
     t->id = workerId;
     t->ptr = Workers[workerId].ptr;
-    t->rdiValue = (int64_t)inputTable;
-    t->rbpValue = inputTable + Workers[workerId].inputSize;
+    t->rdiValue = (int64_t)data;
+    t->rbpValue = (BYTE *)data + Workers[workerId].inputSize;
+    memset(t->context, 0, sizeof(t->context));
 
     EnqueueWorker(t);
 }
@@ -269,11 +337,7 @@ void CallObject(BYTE *param, int64_t workerId)
     }
     log("\n");
 
-    // TODO: remove 512 body size constant
-    void *data = myMalloc(tableSize + 1024);
-    memcpy(data, param, tableSize);
-
-    StartNewWorker(workerId, data);
+    StartNewWorker(workerId, param, -2);
 }
 
 
@@ -561,62 +625,74 @@ int entry()
     
     // run first worker with comand line arguments as i64 array
 
-    int64_t inputLen = 0;
-    #ifdef _DEBUG
+    int64_t inputLen = 0, connectingToMain = 0;
+    int64_t inputId = 0;
+    int64_t resCodeId = 0;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    inputLen = argc - 1;
-    int64_t *input = myMalloc(8 * inputLen);
-    log("READING INPUT AS: ");
-    for (int i = 1; i < argc; ++i)
+    if (argc > 1 && argv[1][0] == 'n')
     {
-        input[i - 1] = myAtoll(argv[i]);
-        log("%lld ", input[i - 1]);
+        connectingToMain = 1;
+        log("Starting without any workers\n");
     }
-    log("\n");
-    #else
-    inputLen = myScanI64();
-    int64_t *input = myMalloc(8 * inputLen);
-    for (int i = 0; i < inputLen; ++i)
+    else
     {
-        input[i] = myScanI64();
-    }
-    #endif
+        #ifdef _DEBUG
+        inputLen = argc - 1;
+        int64_t *input = myMalloc(8 * inputLen);
+        log("READING INPUT AS: ");
+        for (int i = 1; i < argc; ++i)
+        {
+            input[i - 1] = myAtoll(argv[i]);
+            log("%lld ", input[i - 1]);
+        }
+        log("\n");
+        #else
+        inputLen = myScanI64();
+        int64_t *input = myMalloc(8 * inputLen);
+        for (int i = 0; i < inputLen; ++i)
+        {
+            input[i] = myScanI64();
+        }
+        #endif
 
-    int64_t inputId = 0;
 
-    while (inputId == 0)
-    {
-        inputId = NewObject(3, 8 * inputLen, 8, NULL, NULL);
-        Sleep(10);
-    }
+        while (inputId == 0)
+        {
+            inputId = NewObject(3, 8 * inputLen, 8, NULL, NULL);
+            Sleep(10);
+        }
 
-    struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&inputId, 8, 0);
-    if (obj == 0)
-    {
-        print("Error: allocated array isn't local\n");
-    }
-    memcpy(obj, input, 8 * inputLen);
-    
-    int64_t resCodeId = 0;
-    
-    while (resCodeId == 0)
-    {
-        resCodeId = NewObject(2, 4, 4, NULL, NULL);
-        Sleep(10);
-    }
+        struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&inputId, 8, 0);
+        if (obj == 0)
+        {
+            print("Error: allocated array isn't local\n");
+        }
+        memcpy(obj, input, 8 * inputLen);
+        
+        
+        while (resCodeId == 0)
+        {
+            resCodeId = NewObject(2, 4, 4, NULL, NULL);
+            Sleep(10);
+        }
 
-    BYTE *tbl = myMalloc(16 + 2048);
-    memcpy(tbl + 0, &inputId, 8);
-    memcpy(tbl + 8, &resCodeId, 8);
-    
-    StartNewWorker(0, tbl);
+        BYTE *tbl = myMalloc(16);
+        memcpy(tbl + 0, &inputId, 8);
+        memcpy(tbl + 8, &resCodeId, 8);
+
+        print("resCodeId=%p\n", resCodeId);
+        StartNewWorker(0, tbl, -3);
+
+        myFree(tbl);
+    }
         
     log("Running...\n");
 
-    while (queue_len > 0 || wait_list_len > 0)
+    while (connectingToMain || queue_len > 0 || wait_list_len > 0)
     {
         SheduleWorker();
+        Sleep(100);
     }
 
     // TODO: create new dump analog
@@ -628,9 +704,9 @@ int entry()
     
     if (wait_list_len != 0)
     {
-        myPrintf(L"!!!ALL EXISTING WORKERS ARE DEADLOCKED!!!\n");
+        myPrintf(L"!!!There is %lld more workers in wait_list!!!\n", wait_list_len);
     }
-
+    
     print("Program finished\n");
     struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);
     if (p == NULL)

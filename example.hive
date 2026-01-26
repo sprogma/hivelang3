@@ -1,5 +1,22 @@
+
 [export:yes]
-(i64[] a)main(i64? res)
+(i64[] input)main(i32? res)
 {
-    res <- a[0] + a[1];
+    res <- ?(8)fib(*);
+}
+
+
+(i32 n)fib(i32? res)
+{
+    match n <= 1
+    {
+        -1 {
+            res <- n;
+        }
+        0 {
+            (n - 1)fib(var t1);
+            (n - 2)fib(var t2);
+            res <- ?t1 + ?t2;
+        }
+    }
 }

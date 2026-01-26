@@ -1,0 +1,2 @@
+-DSEQUENCE_PAGE_ALLOCATION
+    will allocate pages from 0 to ... instead of trying to allocate random page

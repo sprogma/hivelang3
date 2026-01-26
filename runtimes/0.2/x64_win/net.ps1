@@ -110,9 +110,7 @@ function Connect-Hive
         $hive1,
         $hive2
     )
-
     $hive1.Input += ,"c ::1 $($hive2.Port)"
-    $hive2.Input += ,"c ::1 $($hive1.Port)"
 }
 
 

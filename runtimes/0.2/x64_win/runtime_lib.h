@@ -23,6 +23,7 @@ int64_t myAbs(int64_t);
 
 [[noreturn]] void assertion_failure(const char* file, int64_t line, const char* func, const char* expr);
 
+// #define print(f, ...) myPrintf(L"%s:" L ## f, __FILE_NAME__, __VA_ARGS__)
 #define print(f, ...) myPrintf(L ## f, __VA_ARGS__)
 
 

@@ -42,10 +42,21 @@ void PushObject(int64_t object_id, void *source, int64_t offset, int64_t size, v
     BYTE *obj = (BYTE *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
     if (obj == 0)
     {
-        // remote object
-        (void)returnAddress;
-        (void)rbpValue;
-        print("NOT IMPLEMENTED: push to remote object\n");
+        void *data = myMalloc(myAbs(size));
+        memcpy(data, (size < 0 ? &source : source), myAbs(size));
+        /* shedule query */
+        RequestObjectSet(object_id, offset, myAbs(size), data);
+        struct waiting_push *push = myMalloc(sizeof(*push));
+        *push = (struct waiting_push){
+            .type = WAITING_PUSH,
+            .object_id = object_id,
+            .size = size,
+            .offset = offset,
+            .data = data,
+            .repeat_timeout = SheduleTimeoutFromNow(300000),
+        };
+        PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)push);
+        longjmpUN(&ShedulerBuffer, 1);
     }
     else
     {

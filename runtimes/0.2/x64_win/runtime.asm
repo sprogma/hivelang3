@@ -126,13 +126,14 @@ fastPushObject:
 
     ; TODO: add fast arrays and their workaround here
     ; extract return address
+    
+    ; save context
+    StoreContext context
+    
     mov rax, [rsp]
     EnterCCode
 
     sub rsp, 32 ; more shadow bytes for 2 registers
-
-    ; save context
-    StoreContext context
 
     ; run C code
 
@@ -182,13 +183,14 @@ fastQueryObject:
     end if
 
     ; extract return address
+
+    ; save context
+    StoreContext context
+    
     mov rax, [rsp]
     EnterCCode
 
     sub rsp, 32 ; more shadow bytes for 2 registers
-
-    ; save context
-    StoreContext context
 
     ; run C code
     
@@ -212,9 +214,10 @@ fastQueryObject:
 ; result is in rax
 fastNewObject:
     mov rcx, [rsp]
-    EnterCCode
     
     StoreContext context
+    
+    EnterCCode
 
     mov r8, rbp
     
@@ -249,7 +252,6 @@ ExecuteWorker:
     push rbx
     push rbp
 
-    
 
     mov rbp, r8
     mov rdi, rdx
