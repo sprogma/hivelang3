@@ -16,11 +16,10 @@ struct defined_array *defined_arrays;
 
 struct worker_info Workers[100] = {};
 
-struct jmpbuf ShedulerBuffer;
-int64_t runningId = -1;
+DWORD dwTlsIndex;
 
 SRWLOCK wait_list_lock = SRWLOCK_INIT;
-struct waiting_worker *wait_list[10000];
+struct waiting_worker *wait_list[100000];
 _Atomic int64_t wait_list_len = 0;
 
 SRWLOCK queue_lock = SRWLOCK_INIT;
@@ -101,7 +100,10 @@ void UpdateWaitingWorkers()
     int64_t ticks;
     QueryPerformanceCounter((void *)&ticks);
     log("wait list: %lld\n", wait_list_len);
-    AcquireSRWLockExclusive(&wait_list_lock);
+    if (!TryAcquireSRWLockExclusive(&wait_list_lock))
+    {
+        return;
+    }
     for (int i = 0; i < wait_list_len; ++i)
     {
         struct waiting_worker *w = wait_list[i];
@@ -185,16 +187,14 @@ void UpdateWaitingWorkers()
     ReleaseSRWLockExclusive(&wait_list_lock);
 }
 
-void SheduleWorker()
+void SheduleWorker(struct thread_data *lc_data)
 {
-    setjmpUN(&ShedulerBuffer);
+    setjmpUN(&lc_data->ShedulerBuffer);
 
-    static int64_t prevPrint = 0;
-    static int64_t completedTasks = 0;
     int64_t now = GetTicks();
-    if (now - prevPrint > MicrosecondsToTicks(100000))
+    if (now - lc_data->prevPrint > MicrosecondsToTicks(100000))
     {
-        print("Wait|Queued %lld|%lld [%lld completed]\n", wait_list_len, queue_len, completedTasks);
+        print("thread %lld:  Wait|Queued %lld|%lld [%lld completed]\n", lc_data->number, wait_list_len, queue_len, lc_data->completedTasks);
         // AcquireSRWLockShared(&wait_list_lock);
         // int64_t cnt[10] = {};
         // for (int64_t i = 0; i < wait_list_len; ++i)
@@ -204,16 +204,14 @@ void SheduleWorker()
         // print("wait for WAITING_PUSH:  %lld\n", cnt[WAITING_PUSH]);
         // print("wait for WAITING_QUERY: %lld\n", cnt[WAITING_QUERY]);
         // ReleaseSRWLockShared(&wait_list_lock);
-        prevPrint = now;
-        completedTasks = 0;
+        lc_data->prevPrint = now;
+        lc_data->completedTasks = 0;
     }
-
-    // UpdateWaitingWorkers();
     
     // call next worker
     if (queue_len > 0)
     {
-        completedTasks++;
+        lc_data->completedTasks++;
         log("\nSheduling new worker\n");
         AcquireSRWLockExclusive(&queue_lock);
         --queue_len;
@@ -222,13 +220,13 @@ void SheduleWorker()
         log("Continue worker %lld from %p [rdi=%llx] [context=%p] [rbp=%p]\n", 
                 copy->id, copy->ptr, copy->rdiValue, copy->context, copy->rbpValue);
 
-        runningId = copy->id;
-        if (Workers[runningId].isDllCall)
+        lc_data->runningId = copy->id;
+        if (Workers[copy->id].isDllCall)
         {
             // TODO: lock interrupts mutex
             
             // prepare data
-            struct dll_call_data *data = Workers[runningId].ptr;
+            struct dll_call_data *data = Workers[copy->id].ptr;
             
             void *args = (void *)copy->rdiValue;
             int64_t result_promise_id = 0;
@@ -280,7 +278,7 @@ void SheduleWorker()
                 args += 8;
             }
 
-            log("calling worker %lld\n", runningId);
+            log("calling worker %lld\n", lc_data->runningId);
             for (int64_t i = 0; i < data->sizes_len; ++i)
             {
                 log("ARG[%lld] = %lld\n", i, call_data[i]);
@@ -313,8 +311,6 @@ void SheduleWorker()
         }
         // myFree(copy);
     }
-    
-    // pass: check for available to run
     UpdateWaitingWorkers();
 }
 
@@ -606,6 +602,22 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
 }
 
 
+DWORD ShedulerInstance(void *param)
+{
+    struct thread_data *lc_data = myMalloc(sizeof(*lc_data));
+    TlsSetValue(dwTlsIndex, lc_data);
+    lc_data->number = (int64_t)param;
+    lc_data->completedTasks = 0;
+    lc_data->prevPrint = 0;
+    while (1)
+    {
+        SheduleWorker(lc_data);
+    }
+    myFree(lc_data);
+    return 0;
+}
+
+
 #ifdef FREESTANDING
 int entry()
 #else
@@ -614,6 +626,8 @@ int wmain(void)
 {
     ////////////////////////// loading stage
     init_lib();
+    
+    dwTlsIndex = TlsAlloc();    
 
     
     HANDLE hFile = CreateFile(
@@ -737,22 +751,33 @@ int wmain(void)
         
     print("Running...\n");
 
-    while (connectingToMain || queue_len > 0 || wait_list_len > 0)
+    const int NUM_THREADS = 1;
+
+    // TODO: make better program end determination
+    (void)connectingToMain;
+    
+    HANDLE hThreads[NUM_THREADS];
+    DWORD threadId;
+
+    for (int64_t i = 0; i < NUM_THREADS; ++i) 
     {
-        SheduleWorker();
+        hThreads[i] = CreateThread(NULL, 0, ShedulerInstance, (void *)i, 0, &threadId);
+        if (hThreads[i] == NULL) 
+        {
+            print("Failed to create thread %lld\n", i);
+            return 1;
+        }
     }
 
-    // TODO: create new dump analog
-    // log("At end objects:\n");
-    // for (int i = 0; i < object_array_len; ++i)
-    // {
-    //     log("%02x=[%llx]", i, object_array[i]); PrintObject(object_array[i]);
-    // }
+    DWORD waitResult = WaitForMultipleObjects(NUM_THREADS, hThreads, TRUE, INFINITE);
+    (void)waitResult;
     
     if (wait_list_len != 0)
     {
         print("!!!There is %lld more workers in wait_list!!!\n", wait_list_len);
     }
+    
+    TlsFree(dwTlsIndex);    
     
     print("Program finished\n");
     struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);

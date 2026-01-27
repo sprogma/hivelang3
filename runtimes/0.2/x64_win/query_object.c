@@ -69,5 +69,7 @@ int64_t QueryObject(void *destination, int64_t object_id, int64_t offset, int64_
         .repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT),
     };
     PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)query);
-    longjmpUN(&ShedulerBuffer, 1);
+    
+    struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+    longjmpUN(&lc_data->ShedulerBuffer, 1);
 }

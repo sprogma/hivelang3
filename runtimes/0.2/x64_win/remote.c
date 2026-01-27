@@ -1307,7 +1307,6 @@ void start_remote_subsystem()
         myScanS(cmd);
     }
 
-
     for (int64_t i = 0; i < 2; ++i)
     {
         DWORD wkId;

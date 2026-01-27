@@ -133,7 +133,9 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
         cause->size = size,
         cause->param = param,
         PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)cause);
-        longjmpUN(&ShedulerBuffer, 1);
+        
+        struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+        longjmpUN(&lc_data->ShedulerBuffer, 1);
     }
 
     NewObjectUsingPage(type, size, param, remote_id);

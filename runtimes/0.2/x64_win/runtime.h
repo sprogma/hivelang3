@@ -174,8 +174,15 @@ struct defined_array
     int64_t size;
 };
 
-extern struct jmpbuf ShedulerBuffer;
-extern int64_t runningId;
+struct thread_data
+{
+    int64_t number;
+    struct jmpbuf ShedulerBuffer;
+    int64_t runningId;
+    int64_t completedTasks;
+    int64_t prevPrint;
+};
+extern DWORD dwTlsIndex;
 
 extern SRWLOCK wait_list_lock;
 extern struct waiting_worker *wait_list[];
@@ -186,11 +193,6 @@ extern struct queued_worker *queue[];
 extern _Atomic int64_t queue_len;
 
 extern struct defined_array *defined_arrays;
-
-
-
-
-
 
 
 

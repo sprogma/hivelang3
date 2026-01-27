@@ -56,7 +56,9 @@ void PushObject(int64_t object_id, void *source, int64_t offset, int64_t size, v
             .repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT),
         };
         PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)push);
-        longjmpUN(&ShedulerBuffer, 1);
+    
+        struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+        longjmpUN(&lc_data->ShedulerBuffer, 1);
     }
     else
     {
