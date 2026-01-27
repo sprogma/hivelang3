@@ -1308,7 +1308,7 @@ void start_remote_subsystem()
     }
 
 
-    for (int64_t i = 0; i < 5; ++i)
+    for (int64_t i = 0; i < 2; ++i)
     {
         DWORD wkId;
         HANDLE hwk = CreateThread(NULL, 0, Worker, NULL, 0, &wkId);

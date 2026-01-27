@@ -1,2 +1,5 @@
 -DSEQUENCE_PAGE_ALLOCATION
     will allocate pages from 0 to ... instead of trying to allocate random page
+
+
+! topology is best circular buffer - else hives sometimes don't have time to process all messages, and send() hangs all system
