@@ -17,7 +17,8 @@ struct memory_page pages[128];
 int64_t pages_len = 0;
 
 struct hashtable known_hives;
-struct hashtable known_broadcasts;
+struct hashtable known_page_broadcasts;
+struct hashtable known_path_broadcasts;
 struct hashtable known_objects;
 struct hashtable local_objects;
 struct hashtable query_requests;
@@ -30,7 +31,7 @@ int64_t equal_bytes(BYTE *a, BYTE *b, int64_t len)
 }
 
 
-static int64_t GetKnownHiveHash(BYTE *address, int64_t address_length)
+static uint64_t GetKnownHiveHash(BYTE *address, int64_t address_length)
 {
     uint64_t hash = 123;
     int64_t i = 0;
@@ -96,7 +97,7 @@ void SetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_leng
             cur = old_table[i];
             while (cur != NULL)
             {
-                int64_t new_hash = GetKnownHiveHash(cur->bytes, cur->length) % h->alloc;
+                uint64_t new_hash = GetKnownHiveHash(cur->bytes, cur->length) % h->alloc;
                 struct hashtable_node *tmp = cur->next;
                 cur->next = h->table[new_hash];
                 h->table[new_hash] = cur;
@@ -136,12 +137,14 @@ void SetHashtable(struct hashtable *h, BYTE *address, int64_t address_length, in
 void InitInternalStructures()
 {
     #define INIT_HASHTABLE(h) \
+        h.lock = (SRWLOCK)SRWLOCK_INIT; \
         h.len = 0; \
         h.alloc = 1024; \
         h.table = myMalloc(sizeof(*h.table) * h.alloc); \
         memset(h.table, 0, sizeof(*h.table) * h.alloc);
 
-    INIT_HASHTABLE(known_broadcasts);
+    INIT_HASHTABLE(known_page_broadcasts);
+    INIT_HASHTABLE(known_path_broadcasts);
     INIT_HASHTABLE(known_hives);
     INIT_HASHTABLE(local_objects);
     INIT_HASHTABLE(known_objects);

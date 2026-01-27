@@ -1,5 +1,6 @@
 param(
-    [switch]$Release
+    [switch]$Release,
+    [switch]$Debugger
 )
 
 function New-TCPConnection {
@@ -119,4 +120,4 @@ function Connect-Hive
 
 
 
-. .\topology.ps1 -Release:$Release
+. .\topology.ps1 -Release:$Release -Debugger:$Debugger

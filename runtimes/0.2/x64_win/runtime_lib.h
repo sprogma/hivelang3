@@ -8,14 +8,19 @@
 
 typedef uint8_t BYTE;
 
+#ifdef FREESTANDING
+[[nodiscard]] void *myMalloc(int64_t size);
+void myFree(void *mem);
+#else
+#define myMalloc(x) calloc(1, (x))
+#define myFree(x) free(x)
+#endif
 
 void myPrintf(const wchar_t *format_string, ...);
 int64_t myScanI64();
 void myScanS(char *);
 void *memcpy(void *dst, const void *src, size_t size);
 int64_t myAtoll(wchar_t *number);
-void *myMalloc(int64_t size);
-void myFree(void *mem);
 int64_t GetTicks();
 int64_t TicksToMicroseconds(int64_t ticks);
 int64_t MicrosecondsToTicks(int64_t ticks);

@@ -8,6 +8,7 @@
 #include "runtime_lib.h"
 
 // for generated
+#ifdef FREESTANDING
 void *memset(void *_dst, int value, size_t size)
 {
     BYTE *dst = _dst;
@@ -19,13 +20,25 @@ void *memset(void *_dst, int value, size_t size)
 }
 
 
+void *memcpy(void *_dst, const void *_src, size_t size)
+{
+    BYTE *dst = _dst, *src = (void *)_src;
+    while (size--)
+    {
+        *dst++ = *src++;
+    }
+    return dst;
+}
+#endif
+
+
 HANDLE hOutput;
 HANDLE hInput;
 HANDLE hHeap;
 int64_t frequency;
     
-
-void *myMalloc(int64_t size)
+#ifdef FREESTANDING
+[[nodiscard]] void *myMalloc(int64_t size)
 {
     void *mem = HeapAlloc(hHeap, HEAP_ZERO_MEMORY, size);
     if (mem == NULL)
@@ -42,17 +55,7 @@ void myFree(void *mem)
         print("Error: failed to free memory: %lld\n", (int64_t)GetLastError());
     }
 }
-
-
-void *memcpy(void *_dst, const void *_src, size_t size)
-{
-    BYTE *dst = _dst, *src = (void *)_src;
-    while (size--)
-    {
-        *dst++ = *src++;
-    }
-    return dst;
-}
+#endif
 
 int64_t myAtoll(wchar_t *number)
 {

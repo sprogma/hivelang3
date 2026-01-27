@@ -21,11 +21,11 @@ int64_t runningId = -1;
 
 SRWLOCK wait_list_lock = SRWLOCK_INIT;
 struct waiting_worker *wait_list[10000];
-int64_t wait_list_len = 0;
+_Atomic int64_t wait_list_len = 0;
 
 SRWLOCK queue_lock = SRWLOCK_INIT;
 struct queued_worker *queue[10000];
-int64_t queue_len = 0;
+_Atomic int64_t queue_len = 0;
 
 
 void PrintObject(struct object *object_ptr)
@@ -71,7 +71,9 @@ void WaitListWorker(struct waiting_worker *t)
 {
     AcquireSRWLockExclusive(&wait_list_lock);
     wait_list[wait_list_len++] = t;
-    log("Worker add to wait list [next=%p]\n", t->ptr);
+    int64_t c = (t->waiting_data->type == WAITING_QUERY ? ((struct waiting_query *)t->waiting_data)->offset : ((struct waiting_push *)t->waiting_data)->offset);
+    int64_t d = (t->waiting_data->type == WAITING_QUERY ? ((struct waiting_query *)t->waiting_data)->object_id : ((struct waiting_push *)t->waiting_data)->object_id);
+    log("Worker add to wait list [id=%lld next=%p offset=%lld object=%lld]\n", t->id, t->ptr, c, d);
     ReleaseSRWLockExclusive(&wait_list_lock);
 }
 
@@ -90,7 +92,7 @@ void EnqueueWorker(struct queued_worker *t)
 {
     AcquireSRWLockExclusive(&queue_lock);
     queue[queue_len++] = t;
-    log("Worker enqueued [next=%p]\n", t->ptr);
+    log("Worker enqueued [id=%lld, next=%p]\n", t->id, t->ptr);
     ReleaseSRWLockExclusive(&queue_lock);
 }
 
@@ -126,6 +128,7 @@ void UpdateWaitingWorkers()
                     log("ERROR: waiting for push to local\n");
                     break;
                 }
+                break;
             }
             case WAITING_QUERY:
             {
@@ -157,13 +160,25 @@ void UpdateWaitingWorkers()
                     }
                     break;
                 }
+                break;
             }
             case WAITING_TIMER:
                 print("NOT IMPLEMENTED WAITING_TIMER\n"); break;
-            
             case WAITING_PAGES:
             {
-                print("NOT IMPLEMENTED WAITING_PAGES\n"); break;
+                struct waiting_pages *cause = (struct waiting_pages *)w->waiting_data;
+                int64_t new_id;
+                if (GetNewObjectId(&new_id))
+                {
+                    NewObjectUsingPage(cause->obj_type, cause->size, cause->param, new_id);
+                    EnqueueWorkerFromWaitList(w, new_id);
+                    myFree(cause);
+                    myFree(w);
+                    wait_list[i] = wait_list[--wait_list_len];
+                    i--;
+                    break;
+                }
+                break;
             }
         }
     }
@@ -175,11 +190,22 @@ void SheduleWorker()
     setjmpUN(&ShedulerBuffer);
 
     static int64_t prevPrint = 0;
+    static int64_t completedTasks = 0;
     int64_t now = GetTicks();
     if (now - prevPrint > MicrosecondsToTicks(100000))
     {
-        print("[info]: Wait|Queued %lld|%lld\n", wait_list_len, queue_len);
+        print("Wait|Queued %lld|%lld [%lld completed]\n", wait_list_len, queue_len, completedTasks);
+        // AcquireSRWLockShared(&wait_list_lock);
+        // int64_t cnt[10] = {};
+        // for (int64_t i = 0; i < wait_list_len; ++i)
+        // {
+        //     cnt[wait_list[i]->waiting_data->type]++;
+        // }
+        // print("wait for WAITING_PUSH:  %lld\n", cnt[WAITING_PUSH]);
+        // print("wait for WAITING_QUERY: %lld\n", cnt[WAITING_QUERY]);
+        // ReleaseSRWLockShared(&wait_list_lock);
         prevPrint = now;
+        completedTasks = 0;
     }
 
     // UpdateWaitingWorkers();
@@ -187,6 +213,7 @@ void SheduleWorker()
     // call next worker
     if (queue_len > 0)
     {
+        completedTasks++;
         log("\nSheduling new worker\n");
         AcquireSRWLockExclusive(&queue_lock);
         --queue_len;
@@ -284,6 +311,7 @@ void SheduleWorker()
                 (BYTE *)copy->context
             );
         }
+        // myFree(copy);
     }
     
     // pass: check for available to run
@@ -295,8 +323,9 @@ void StartNewWorker(int64_t workerId, BYTE *inputTable, int64_t except_this_loca
     /* if we are running too many tasks - redirect new worker to another hive */
     int64_t rnd = 0;
     BCryptGenRandom(NULL, (BYTE *)&rnd, 8, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    rnd = myAbs(rnd);
     AcquireSRWLockShared(&wait_list_lock);
-    if (rnd % 100 < 5 * (wait_list_len + queue_len || except_this_local_id == -1) && except_this_local_id != -3)
+    if ((rnd & 0x80000000) && (rnd % 100 < 5 * (wait_list_len + queue_len) || except_this_local_id == -1) && except_this_local_id != -3 && wait_list_len < 100)
     {
         ReleaseSRWLockShared(&wait_list_lock);
         /* select random connection */
@@ -307,7 +336,7 @@ void StartNewWorker(int64_t workerId, BYTE *inputTable, int64_t except_this_loca
             log("Want run remote, but: %lld %lld [con=%p]\n", connections[t]->wait_list_len, connections[t]->queue_len, connections[t]);
             if (connections[t]->outgoing != INVALID_SOCKET && 
                 connections[t]->local_id != except_this_local_id &&
-                ((connections[t]->wait_list_len < 50 && connections[t]->queue_len < 10) || 
+                ((connections[t]->wait_list_len < 50 && connections[t]->queue_len < 30) || 
                   connections[t]->queue_len == 0))
             {
                 StartNewWorkerRemote(connections[t], workerId, inputTable);
@@ -577,7 +606,11 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
 }
 
 
+#ifdef FREESTANDING
 int entry()
+#else
+int wmain(void)
+#endif
 {
     ////////////////////////// loading stage
     init_lib();
@@ -732,7 +765,7 @@ int entry()
         p = (void *)((BYTE *)p - DATA_OFFSET(*p));
         if (p->ready)
         {
-            log("Program exited with code %llx\n", *(int *)p->data);
+            print("Program exited with code %llx\n", *(int *)p->data);
 
             #ifndef NDEBUG
             print("Press Ctrl+C to end\n");
@@ -743,7 +776,7 @@ int entry()
         }
         else
         {
-            log("Result of main function isn't ready after program end\n");
+            print("Result of main function isn't ready after program end\n");
         }
     }
 

@@ -121,7 +121,8 @@ extern struct memory_page pages[];
 extern int64_t pages_len;
 
 extern struct hashtable known_hives;
-extern struct hashtable known_broadcasts;
+extern struct hashtable known_page_broadcasts;
+extern struct hashtable known_path_broadcasts;
 
 
 int64_t equal_bytes(BYTE *a, BYTE *b, int64_t len);

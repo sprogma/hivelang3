@@ -77,6 +77,9 @@ struct waiting_query
 
 struct waiting_pages {
     struct waiting_cause;
+    int64_t obj_type;
+    int64_t size;
+    int64_t param;
 };
 
 struct waiting_timer 
@@ -176,11 +179,11 @@ extern int64_t runningId;
 
 extern SRWLOCK wait_list_lock;
 extern struct waiting_worker *wait_list[];
-extern int64_t wait_list_len;
+extern _Atomic int64_t wait_list_len;
 
 extern SRWLOCK queue_lock;
 extern struct queued_worker *queue[];
-extern int64_t queue_len;
+extern _Atomic int64_t queue_len;
 
 extern struct defined_array *defined_arrays;
 
@@ -214,6 +217,8 @@ void UpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);
 __attribute__((sysv_abi))
 int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress, void *rbpValue);
 
+int64_t GetNewObjectId(int64_t *result);
+void NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id);
 
 void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value);
 void StartNewWorker(int64_t workerId, BYTE *inputTable, int64_t except_this_local_id);

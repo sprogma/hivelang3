@@ -15,44 +15,8 @@ void RegisterObjectWithId(int64_t id, void *object)
 }
 
 
-// if allocating ARRAY, param must be element size.
-// [it can be used to split big arrays on diffrent hives]
-// if allocating OBJECT, param = 1
-// if allocating PROMISE/PIPE, param is unused
-__attribute__((sysv_abi))
-int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress, void *rbpValue)
+void NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id)
 {
-    // find non empty memory page
-    int64_t remote_id = 0, set = 0;
-    AcquireSRWLockShared(&pages_lock);
-    for (int64_t i = 0; i < pages_len; ++i)
-    {
-        if (pages[i].next_allocated_id < OBJECTS_PER_PAGE)
-        {
-            int64_t t = pages[i].next_allocated_id++;
-            if (t < OBJECTS_PER_PAGE)
-            {
-                remote_id = (pages[i].id << 24) | t;
-                set = 1;
-                break;
-            }
-        }
-    }
-    ReleaseSRWLockShared(&pages_lock);
-
-    if (set == 0)
-    {
-        if (returnAddress == NULL)
-        {
-            return 0;
-        }
-        /* wait for new pages */
-        struct waiting_pages *cause = myMalloc(sizeof(*cause));
-        cause->type = WAITING_PAGES,
-        PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)cause);
-        longjmpUN(&ShedulerBuffer, 1);
-    }
-    
     // generate header
     struct object header;
     header.type = type;
@@ -69,7 +33,7 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
             int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
             RegisterObjectWithId(remote_id, (struct object *)pointer);
             log("[id=%llx]\n", remote_id);
-            return remote_id;
+            return;
         }
         case OBJECT_PROMISE:
         {
@@ -81,7 +45,7 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
             int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
             RegisterObjectWithId(remote_id, (struct object *)pointer);
             log("[id=%llx]\n", remote_id);
-            return remote_id;
+            return;
         }
         case OBJECT_OBJECT:
         {
@@ -91,7 +55,7 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
             int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
             RegisterObjectWithId(remote_id, (struct object *)pointer);
             log("[id=%llx]\n", remote_id);
-            return remote_id;
+            return;
         }
         case OBJECT_DEFINED_ARRAY:
         {
@@ -113,12 +77,67 @@ int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress
             int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
             RegisterObjectWithId(remote_id, (struct object *)pointer);
             log("[id=%llx]\n", remote_id);
-            return remote_id;
+            return;
         }
         default:
             log("Wrong type in NewObject\n");
     }
-    return -1;
+    return;
+}
+
+
+int64_t GetNewObjectId(int64_t *result)
+{
+    int64_t remote_id = 0, set = 0;
+    AcquireSRWLockShared(&pages_lock);
+    for (int64_t i = 0; i < pages_len; ++i)
+    {
+        if (pages[i].next_allocated_id < OBJECTS_PER_PAGE)
+        {
+            int64_t t = pages[i].next_allocated_id++;
+            if (t < OBJECTS_PER_PAGE)
+            {
+                remote_id = (pages[i].id << 24) | t;
+                set = 1;
+                break;
+            }
+        }
+    }
+    ReleaseSRWLockShared(&pages_lock);
+
+    *result = remote_id;
+    return set;
+}
+
+
+// if allocating ARRAY, param must be element size.
+// [it can be used to split big arrays on diffrent hives]
+// if allocating OBJECT, param = 1
+// if allocating PROMISE/PIPE, param is unused
+__attribute__((sysv_abi))
+int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress, void *rbpValue)
+{
+    // find non empty memory page
+    int64_t remote_id;
+    
+    if (!GetNewObjectId(&remote_id))
+    {
+        if (returnAddress == NULL)
+        {
+            return 0;
+        }
+        /* wait for new pages */
+        struct waiting_pages *cause = myMalloc(sizeof(*cause));
+        cause->type = WAITING_PAGES,
+        cause->obj_type = type,
+        cause->size = size,
+        cause->param = param,
+        PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)cause);
+        longjmpUN(&ShedulerBuffer, 1);
+    }
+
+    NewObjectUsingPage(type, size, param, remote_id);
+    return remote_id;
 }
 
 
