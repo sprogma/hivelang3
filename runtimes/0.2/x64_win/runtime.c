@@ -314,16 +314,15 @@ void SheduleWorker(struct thread_data *lc_data)
     UpdateWaitingWorkers();
 }
 
-void StartNewWorker(int64_t workerId, BYTE *inputTable, int64_t except_this_local_id)
+void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
 {
     /* if we are running too many tasks - redirect new worker to another hive */
     int64_t rnd = 0;
     BCryptGenRandom(NULL, (BYTE *)&rnd, 8, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
     rnd = myAbs(rnd);
-    AcquireSRWLockShared(&wait_list_lock);
-    if ((rnd & 0x80000000) && (rnd % 100 < 5 * (wait_list_len + queue_len) || except_this_local_id == -1) && except_this_local_id != -3 && wait_list_len < 100)
+    int64_t random_confirm = (rnd & 0x80000000) && (rnd % 100 < 5 * (wait_list_len + queue_len));
+    if ((random_confirm || global_id != 0) && global_id != 1)
     {
-        ReleaseSRWLockShared(&wait_list_lock);
         /* select random connection */
         AcquireSRWLockShared(&connections_lock);
         if (connections_len != 0)
@@ -331,44 +330,39 @@ void StartNewWorker(int64_t workerId, BYTE *inputTable, int64_t except_this_loca
             int64_t t = rnd % connections_len;
             log("Want run remote, but: %lld %lld [con=%p]\n", connections[t]->wait_list_len, connections[t]->queue_len, connections[t]);
             if (connections[t]->outgoing != INVALID_SOCKET && 
-                connections[t]->local_id != except_this_local_id &&
                 ((connections[t]->wait_list_len < 50 && connections[t]->queue_len < 30) || 
                   connections[t]->queue_len == 0))
             {
-                StartNewWorkerRemote(connections[t], workerId, inputTable);
+                StartNewWorkerRemote(connections[t], workerId, (IS_CALL_PARAM_GLOBAL_ID(global_id) ? global_id : 0), inputTable);
                 ReleaseSRWLockShared(&connections_lock);
                 return;
             }
         }
         ReleaseSRWLockShared(&connections_lock);
     }
-    else
-    {
-        ReleaseSRWLockShared(&wait_list_lock);
-    }
 
     log("Starting new local worker %lld [input table %p]\n", workerId, inputTable);
 
     // TODO: remove 2048 body size constant
     int64_t tableSize = Workers[workerId].inputSize;
-    void *data = myMalloc(tableSize + 2048);
-    memcpy(data, inputTable, tableSize);
+    void *data = myMalloc(1024 + 2048);
+    memcpy(data + 1024 - tableSize, inputTable, tableSize);
     
     struct queued_worker *t = myMalloc(sizeof(*t));
     t->id = workerId;
     t->ptr = Workers[workerId].ptr;
-    t->rdiValue = (int64_t)data;
-    t->rbpValue = (BYTE *)data + Workers[workerId].inputSize;
+    t->rdiValue = (int64_t)data + 1024 - tableSize;
+    t->rbpValue = (BYTE *)data + 1024;
     memset(t->context, 0, sizeof(t->context));
 
     EnqueueWorker(t);
 }
 
-void CallObject(BYTE *param, int64_t workerId)
+void CallObject(BYTE *param, int64_t workerId, int64_t moditifer)
 {
     int64_t tableSize = Workers[workerId].inputSize;
-    
-    log("Calling worker %lld [data=%p]\n", workerId, param);
+
+    log("Calling worker %lld [data=%p, mod=%lld]\n", workerId, param, moditifer);
     log("Table = ");
     for (int64_t i = 0; i < tableSize; ++i)
     {
@@ -376,7 +370,7 @@ void CallObject(BYTE *param, int64_t workerId)
     }
     log("\n");
 
-    StartNewWorker(workerId, param, -2);
+    StartNewWorker(workerId, moditifer, param);
 }
 
 
@@ -451,6 +445,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
             case 1: // QueryObject
             case 2: // NewObject
             case 3: // CallObject
+            case 8: // PushPipe
+            case 9: // QueryPipe
             {
                 // read positions and replace calls
                 int64_t count = *(int64_t *)pos;
@@ -466,6 +462,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                         case 1: *callPosition = (uint64_t)&fastQueryObject; break;
                         case 2: *callPosition = (uint64_t)&fastNewObject; break;
                         case 3: *callPosition = (uint64_t)&fastCallObject; break;
+                        case 8: *callPosition = (uint64_t)&fastPushPipe; break;
+                        case 9: *callPosition = (uint64_t)&fastQueryPipe; break;
                     }
                     log("ptr=%p\n", (void *)*callPosition);
                 }
@@ -744,7 +742,7 @@ int wmain(void)
         memcpy(tbl + 8, &resCodeId, 8);
 
         log("resCodeId=%p\n", resCodeId);
-        StartNewWorker(0, tbl, -3);
+        StartNewWorker(0, 1, tbl);
 
         myFree(tbl);
     }
@@ -769,12 +767,21 @@ int wmain(void)
         }
     }
 
-    DWORD waitResult = WaitForMultipleObjects(NUM_THREADS, hThreads, TRUE, INFINITE);
-    (void)waitResult;
-    
-    if (wait_list_len != 0)
+    while (1)
     {
-        print("!!!There is %lld more workers in wait_list!!!\n", wait_list_len);
+        DWORD waitResult = WaitForMultipleObjects(NUM_THREADS, hThreads, TRUE, 50); // INFINITE
+        (void)waitResult;
+
+        // if resCodeId is ready - print it and return
+        struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);
+        if (p != NULL)
+        {
+            p = (void *)((BYTE *)p - DATA_OFFSET(*p));
+            if (p->ready)
+            {
+                break;
+            }
+        }
     }
     
     TlsFree(dwTlsIndex);    

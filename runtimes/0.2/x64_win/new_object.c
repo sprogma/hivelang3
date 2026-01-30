@@ -24,6 +24,18 @@ void NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remot
     // create object
     switch (type)
     {
+        case OBJECT_PIPE:
+        {
+            log("Pipe for size %lld allocated\n", size);
+            struct object_promise *res = myMalloc(sizeof(*res) + size);
+            memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
+            res->type = OBJECT_PROMISE;
+            res->ready = 0;
+            int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
+            RegisterObjectWithId(remote_id, (struct object *)pointer);
+            log("[id=%llx]\n", remote_id);
+            return;
+        }
         case OBJECT_ARRAY:
         {
             log("Array of %lld bytes, element of size %lld allocated\n", size, param);

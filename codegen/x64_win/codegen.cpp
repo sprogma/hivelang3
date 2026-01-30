@@ -934,7 +934,9 @@ private:
 
     // header key, value
     #define HEADER_ENTRY_PUSH_OBJECT 0
+    #define HEADER_ENTRY_PUSH_PIPE 8
     #define HEADER_ENTRY_QUERY_OBJECT 1
+    #define HEADER_ENTRY_QUERY_PIPE 9
     #define HEADER_ENTRY_NEW_OBJECT 2
     #define HEADER_ENTRY_CALL_OBJECT 3
     map<BYTE, vector<api_call_entry>> runtimeApiHeader;
@@ -1043,10 +1045,11 @@ private:
         if (wk->content == NULL)
         {
             // if this function is extern, create it's header
-            if (wk->attributes.contains("dllimport"))
+            if (wk->attributes.contains("dllimport") && holds_alternative<string>(wk->attributes["dllimport"]))
             {
-                string &lib = wk->attributes["dllimport"];
-                string entry = (wk->attributes.contains("dllimport.entry") ? wk->attributes["dllimport.entry"] : wk->name);
+                string &lib = get<string>(wk->attributes["dllimport"]);
+                string entry = (wk->attributes.contains("dllimport.entry") && holds_alternative<string>(wk->attributes["dllimport.entry"])
+                               ? get<string>(wk->attributes["dllimport.entry"]) : wk->name);
                 if (wk->outputs.size() > 1)
                 {
                     logError(ir->filename, ir->code, wk->code_start, wk->code_end, "DLLIMPORT function have more than 1 return argument");
@@ -1339,8 +1342,30 @@ private:
                 int64_t callTableSize = GetWorkerInputTableSize(op->data[0]);
                 // rdx=worker id
                 // rsi=call table
+                // rdi="on" parameter
                 InsertInteger(op, {2, 8}, op->data[0]);
                 InsertMove(op, {6, 8}, {5, 8}, false);
+                if (op->attributes.contains("on"))
+                {
+                    if (op->attributes["on"] == string("local"))
+                    {
+                        InsertInteger(op, {7, 8}, 1);
+                    }
+                    else if (op->attributes["on"] == string("remote"))
+                    {
+                        InsertInteger(op, {7, 8}, 2);
+                    }
+                    else if (holds_alternative<int64_t>(op->attributes["on"]))
+                    {
+                        // this is temporary ID that holds global compueter name
+                        InsertMove(op, {7, 8}, Register(get<int64_t>(op->attributes["on"])), false);
+                    }
+                    else
+                    {
+                        logError(ir->filename, "", op->code_start, op->code_end, "Wrong \"on\" call attribute value: %s", get<string>(op->attributes["on"]).c_str());
+                    }
+                }
+                else { InsertInteger(op, {7, 8}, 0); } // default run attribute
                 printRC(op, ASM_ADD_RC, {6, 8}, -callTableSize);
                 runtimeApiHeader[HEADER_ENTRY_CALL_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 break;
@@ -1412,7 +1437,18 @@ private:
                 InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 break;
             }
-            case OP_NEW_PIPE:     printf("not supported: new_pipe\n"); break;
+            case OP_NEW_PIPE:
+            {
+                // rdi=OBJECT_PIPE=1
+                // rsi=total size
+                // rdx=size of element = total size
+                InsertInteger(op, {7, 8}, 0x01);
+                InsertInteger(op, {6, 8}, varType(op->data[0])->_vector.base->size);
+                InsertMove(op, {2, 8}, {6, 8}, false);
+                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                InsertMove(op, Register(op->data[0]), {7, 8}, false);
+                break;
+            }
             
             case OP_PUSH_VAR:
                 // TODO: what if data[3] is not scalar?
@@ -1449,7 +1485,6 @@ private:
                 break;
             }
             
-            case OP_PUSH_PIPE:
             case OP_PUSH_PROMISE:
             {
                 // TODO: remove usage of source as size provider
@@ -1469,6 +1504,29 @@ private:
                     InsertMove(op, {7, 8}, Register(op->data[0]), false);
                     InsertInteger(op, {6, 8}, memTable[op->data[1]]);
                     runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                }
+                break;
+            }
+            
+            case OP_PUSH_PIPE:
+            {
+                // TODO: remove usage of source as size provider
+                // rcx=size rdx=offset rdi=object rsi=value
+                if (isApiScalar(op->data[1]))
+                {
+                    InsertInteger(op, {1, 8}, -varSize(op->data[1]));
+                    InsertInteger(op, {2, 8}, 0);
+                    InsertMove(op, {7, 8}, Register(op->data[0]), false);
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_PIPE].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                }
+                else
+                {
+                    InsertInteger(op, {1, 8}, varSize(op->data[1]));
+                    InsertInteger(op, {2, 8}, 0);
+                    InsertMove(op, {7, 8}, Register(op->data[0]), false);
+                    InsertInteger(op, {6, 8}, memTable[op->data[1]]);
+                    runtimeApiHeader[HEADER_ENTRY_PUSH_PIPE].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1602,7 +1660,28 @@ private:
                 break;
             }
             
-            case OP_QUERY_PIPE:    printf("not supported: query_pipe\n"); break;
+            case OP_QUERY_PIPE:
+            {
+                // TODO: remove usage of destination as size provider
+                // rcx=size rdx=offset rdi=value rsi=object
+                if (isApiScalar(op->data[0]))
+                {
+                    InsertInteger(op, {1, 8}, -varSize(op->data[0]));
+                    InsertInteger(op, {2, 8}, 0);
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_PIPE].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    InsertMove(op, Register(op->data[0]), {7, 8}, false);
+                }
+                else
+                {
+                    InsertInteger(op, {1, 8}, varSize(op->data[0]));
+                    InsertInteger(op, {2, 8}, 0);
+                    InsertInteger(op, {7, 8}, memTable[op->data[0]]);
+                    InsertMove(op, {6, 8}, Register(op->data[1]), false);
+                    runtimeApiHeader[HEADER_ENTRY_QUERY_PIPE].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                }
+                break;
+            }
              
             case OP_BOR:   ABEL_BINOP(ASM_OR) break;
             case OP_BAND:  ABEL_BINOP(ASM_AND) break;

@@ -16,13 +16,15 @@ SRWLOCK pages_lock = SRWLOCK_INIT;
 struct memory_page pages[128];
 int64_t pages_len = 0;
 
-struct hashtable known_hives;
+struct hashtable known_id_broadcasts;
 struct hashtable known_page_broadcasts;
 struct hashtable known_path_broadcasts;
+struct hashtable known_path_id_broadcasts;
 struct hashtable known_objects;
 struct hashtable local_objects;
 struct hashtable query_requests;
 struct hashtable push_requests;
+struct hashtable known_hives;
 
 int64_t equal_bytes(BYTE *a, BYTE *b, int64_t len)
 {
@@ -143,11 +145,13 @@ void InitInternalStructures()
         h.table = myMalloc(sizeof(*h.table) * h.alloc); \
         memset(h.table, 0, sizeof(*h.table) * h.alloc);
 
+    INIT_HASHTABLE(known_id_broadcasts);
     INIT_HASHTABLE(known_page_broadcasts);
     INIT_HASHTABLE(known_path_broadcasts);
-    INIT_HASHTABLE(known_hives);
+    INIT_HASHTABLE(known_path_id_broadcasts);
     INIT_HASHTABLE(local_objects);
     INIT_HASHTABLE(known_objects);
     INIT_HASHTABLE(query_requests);
     INIT_HASHTABLE(push_requests);
+    INIT_HASHTABLE(known_hives);
 }

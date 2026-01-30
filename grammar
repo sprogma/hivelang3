@@ -30,7 +30,11 @@ rule "worker_decl" [
     v [attribute_list; Sn; "("; arguments_list; Sn; ")"; Sn; identifer; Sn; "("; arguments_list; Sn; ")"; Sn; ";"] [] []
 ]
 rule "attribute_list" [
-    v [] [Sn; "["; Sn; identifer_or_number; Sn; ":"; Sn; identifer_or_number; Sn; "]"] []
+    v [] [attribute_list_entity] []
+]
+rule "attribute_list_entity" [
+    v [Sn; "["; Sn; identifer; Sn; "::"; Sn; expression; Sn; "]"] [] []
+    v [Sn; "["; Sn; identifer; Sn; ":"; Sn; identifer_or_number; Sn; "]"] [] []
 ]
 rule "arguments_list" [
     v [] [var_type; S; identifer; Sn; ","] [var_type; S; identifer]

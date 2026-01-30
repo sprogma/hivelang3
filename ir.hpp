@@ -138,11 +138,12 @@ enum OperationType
 
 inline constexpr auto IS_JUMP = is_one<OP_JMP, OP_JZ, OP_JNZ>;
 
+
 struct OperationBlock
 {
     OperationType type;
     vector<int64_t> data;
-    map<string, string> attributes = {};
+    map<string, variant<string, int64_t>> attributes = {};
     vector<OperationBlock *> next;
     set<OperationBlock *> prev;
     
@@ -165,7 +166,7 @@ struct WorkerContext
 struct WorkerDeclarationContext
 {
     string name;
-    map<string, string> attributes;
+    map<string, variant<string, int64_t>> attributes;
     vector<pair<string, TypeContext *>> inputs;
     vector<pair<string, TypeContext *>> outputs;
     WorkerContext *content;

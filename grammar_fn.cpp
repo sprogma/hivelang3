@@ -42,8 +42,9 @@ pair<Node *, int64_t>grammar_fn_identifer(char *content, int64_t position)
 
 pair<Node *, int64_t>grammar_fn_identifer_or_number(char *content, int64_t position)
 {
+    /* read up to next ']' */
     int64_t start = position;
-    while (isalpha(content[position]) || isdigit(content[position]) || content[position] == '_' || content[position] == '/' || content[position] == '\\' || content[position] == '.' || content[position] == '-') { position++; }
+    while (content[position] != ']') { position++; }
     if (position == start)
     {
         return {NULL, position};

@@ -10,9 +10,7 @@ using namespace std;
 
 #include "logger.hpp"
 #include "ast.hpp"
-
-template<class... Fs> struct overload : Fs... { using Fs::operator()...; };
-template<class... Fs> overload(Fs...) -> overload<Fs...>;
+#include "utils.hpp"
 
 // rule id + position -> result + position
 map<pair<int64_t, int64_t>, pair<Node *, int64_t>> cache;
@@ -28,7 +26,7 @@ pair<Node *, int64_t> parseRule(Rule *rule, char *content, int64_t position);
 
 pair<Node *, int64_t> parseAtom(Atom &atom, char *content, int64_t position)
 {
-    return std::visit(overload{
+    return visit(overload{
         [&](Rule *const &atom_rule) -> pair<Node*,int64_t> {
             auto [res, pos] = parseRule(atom_rule, content, position);
             if (res == NULL) { return {NULL, pos}; }

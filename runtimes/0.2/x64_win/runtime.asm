@@ -5,6 +5,8 @@ public fastPushObject
 public fastNewObject
 public fastCallObject
 public fastQueryObject
+public fastPushPipe
+public fastQueryPipe
 
 public ExecuteWorker
 public DllCall
@@ -29,6 +31,8 @@ extrn PushObject
 extrn NewObject
 extrn QueryObject
 extrn CallObject
+extrn QueryPipe
+extrn PushPipe
 extrn myPrintf
 
 section '.text' code readable executable
@@ -146,6 +150,29 @@ fastPushObject:
     LeaveCCode
     ret
 
+
+; rcx=size
+; rdx=offset
+; rdi=object
+; rsi=source/value
+fastPushPipe:
+    ; save context
+    StoreContext context
+    
+    mov rax, [rsp]
+    EnterCCode
+
+    sub rsp, 32 ; more shadow bytes for 2 registers - unused
+
+    mov r8, rax
+    mov r9, rbp
+    call PushPipe
+
+    add rsp, 32
+
+    LeaveCCode
+    ret
+
 ; reverse to fastPushObject
 ; rsi=object
 ; rdi=dest/value
@@ -190,13 +217,39 @@ fastQueryObject:
     mov rax, [rsp]
     EnterCCode
 
-    sub rsp, 32 ; more shadow bytes for 2 registers
+    sub rsp, 32 ; more shadow bytes for 2 registers - unused
 
     ; run C code
     
     mov r8, rax
     mov r9, rbp
     call QueryObject
+    mov rdi, rax
+    
+    add rsp, 32
+    
+    LeaveCCode
+    ret
+    
+; reverse to fastPushObject
+; rsi=object
+; rdi=dest/value
+; rcx=size
+; rdx=offset
+fastQueryPipe:
+    ; save context
+    StoreContext context
+    
+    mov rax, [rsp]
+    EnterCCode
+
+    sub rsp, 32 ; more shadow bytes for 2 registers - unused
+
+    ; run C code
+    
+    mov r8, rax
+    mov r9, rbp
+    call QueryPipe
     mov rdi, rax
     
     add rsp, 32
@@ -229,11 +282,12 @@ fastNewObject:
 
     ret
 
-; rdx=workerId rsi=callTable
+; rdx=workerId rsi=callTable rdi=parameter
 fastCallObject:
     EnterCCode
 
     mov rcx, rsi
+    mov r8, rdi
 
     call CallObject
 

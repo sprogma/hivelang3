@@ -68,6 +68,46 @@ int64_t QueryObject(void *destination, int64_t object_id, int64_t offset, int64_
         .offset = offset,
         .repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT),
     };
+    BCryptGenRandom(NULL, query->id, BROADCAST_ID_LENGTH, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)query);
+    
+    struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+    longjmpUN(&lc_data->ShedulerBuffer, 1);
+}
+
+
+__attribute__((sysv_abi))
+int64_t QueryPipe(void *destination, int64_t object_id, int64_t offset, int64_t size, void *returnAddress, void *rbpValue)
+{
+    log("query from pipe %lld\n", object_id);
+    ExitProcess(0);
+
+    BYTE *obj = (BYTE *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
+
+    if (obj != NULL)
+    {
+        int64_t rdiValue;
+        if (QueryLocalObject(destination, obj, offset, size, &rdiValue))
+        {
+            return rdiValue;
+        }
+    }
+    else
+    {
+        // send request
+        RequestObjectGet(object_id, offset, myAbs(size));
+    }
+    /* shedule query */
+    struct waiting_query *query = myMalloc(sizeof(*query));
+    *query = (struct waiting_query){
+        .type = WAITING_QUERY,
+        .destination = destination,
+        .object_id = object_id,
+        .size = size,
+        .offset = offset,
+        .repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT),
+    };
+    BCryptGenRandom(NULL, query->id, BROADCAST_ID_LENGTH, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
     PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)query);
     
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);

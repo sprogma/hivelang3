@@ -30,7 +30,7 @@ struct Operation
 {
     OperationType type;
     vector<int64_t> data;
-    map<string, string> attributes = {};
+    map<string, variant<string, int64_t>> attributes = {};
 
     int64_t code_start, code_end;
 };
@@ -38,6 +38,7 @@ struct Operation
 
 pair<vector<Operation>, int64_t> buildExpression(BuildContext *ctx, Node *node);
 vector<Operation> buildCodeBlock(BuildContext *ctx, Node *node);
+void freeTemp(vector<Operation> &code, int64_t id);
 
 void append(vector<Operation> &a, vector<Operation> &b)
 {
@@ -48,6 +49,17 @@ int64_t append(vector<Operation> &a, Operation b)
 {
     a.push_back(b);
     return a.size() - 1;
+}
+
+void freeAttributeTemps(vector<Operation> &ops, map<string, variant<string, int64_t>> attributes)
+{
+    for (auto &[key, value] : attributes) 
+    {
+        if (auto *intPtr = get_if<int64_t>(&value)) 
+        {
+            freeTemp(ops, *intPtr);
+        }
+    }
 }
 
 string Substr(BuildContext *ctx, Node *node)
@@ -222,21 +234,48 @@ TypeContext *getType(BuildContext *ctx, Node *node)
     return cur;
 }
 
-map<string, string> getAttributeList(BuildContext *ctx, Node *node)
+pair<map<string, variant<string, int64_t>>, vector<Operation>> getAttributeList(BuildContext *ctx, Node *node, bool support_expression)
 {
-    map<string, string> attrs;
+    map<string, variant<string, int64_t>> attrs;
+    vector<Operation> ops;
     int64_t attrId = 0;
     assert_type(node, "attribute_list");
     while (node->nonTerm(attrId))
     {
-        Node *key = node->nonTerm(attrId + 0);
-        Node *value = node->nonTerm(attrId + 1);
-        assert_type(key, "identifer_or_number");
-        assert_type(value, "identifer_or_number");
-        attrs[Substr(ctx, key)] = Substr(ctx, value);
-        attrId += 2;
+        Node *attr = node->nonTerm(attrId);
+        switch_var(attr)
+        {
+            case 0: 
+            {
+                if (!support_expression)
+                {
+                    logError(ctx->filename, ctx->code, attr->start, attr->end, "Can't use expression as attribute here.");
+                    break;
+                }
+                // key expression pair - build expression, store temp_id as string [8 bytes]
+                Node *key = attr->nonTerm(0);
+                Node *value = attr->nonTerm(1);
+                assert_type(key, "identifer");
+                assert_type(value, "expression");
+                auto [expOps, tmp_id] = buildExpression(ctx, value);
+                append(ops, expOps);
+                attrs[Substr(ctx, key)] = tmp_id;
+                break;
+            }
+            case 1:
+            {
+                // simple key value pair
+                Node *key = attr->nonTerm(0);
+                Node *value = attr->nonTerm(1);
+                assert_type(key, "identifer");
+                assert_type(value, "identifer_or_number");
+                attrs[Substr(ctx, key)] = Substr(ctx, value);
+                break;
+            }
+        }
+        attrId++;
     }
-    return attrs;
+    return {attrs, ops};
 }
 
 pair<int64_t, TypeContext *> GetFieldOffset(BuildContext *ctx, TypeContext *type, int64_t field)
@@ -394,7 +433,9 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                 {
                     return {{}, -1};
                 }
-                map<string, string> attributes = getAttributeList(ctx, newOp->nonTerm(1));
+                
+                auto [attributes, attrCode] = getAttributeList(ctx, newOp->nonTerm(1), true);
+                append(ops, attrCode);
 
                 vector<int> args;
                 for (auto &ch : newOp->nonTerm(2)->childs)
@@ -424,6 +465,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                         }
                         int64_t resultPos = newTemp(ctx, type);
                         append(ops, {OP_NEW_CLASS, {resultPos}, attributes, node->start, node->end});
+                        freeAttributeTemps(ops, attributes);
                         return {ops, resultPos};
                     }
                     case TYPE_ARRAY:
@@ -435,6 +477,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                         }
                         int64_t resultPos = newTemp(ctx, type);
                         append(ops, {OP_NEW_ARRAY, {resultPos, args[0]}, attributes, node->start, node->end});
+                        freeAttributeTemps(ops, attributes);
                         return {ops, resultPos};
                     }
                     case TYPE_PIPE:
@@ -446,6 +489,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                         }
                         int64_t resultPos = newTemp(ctx, type);
                         append(ops, {OP_NEW_PIPE, {resultPos}, attributes, node->start, node->end});
+                        freeAttributeTemps(ops, attributes);
                         return {ops, resultPos};
                     }
                     case TYPE_PROMISE:
@@ -457,6 +501,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                         }
                         int64_t resultPos = newTemp(ctx, type);
                         append(ops, {OP_NEW_PROMISE, {resultPos}, attributes, node->start, node->end});
+                        freeAttributeTemps(ops, attributes);
                         return {ops, resultPos};
                     }
                 }
@@ -465,7 +510,8 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             else
             {
                 // this is new string
-                map<string, string> attributes = getAttributeList(ctx, newOp->nonTerm(1));
+                auto [attributes, attrCode] = getAttributeList(ctx, newOp->nonTerm(1), true);
+                append(ops, attrCode);
                 // get type
                 TypeContext *type = getType(ctx, newOp->nonTerm(0));
                 if (type == NULL)
@@ -525,6 +571,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
                 int64_t vid = GetStringId(ctx, content);
                 int64_t resultPos = newTemp(ctx, type);
                 append(ops, {OP_NEW_STRING, {resultPos, vid}, attributes, newOp->start, newOp->end});
+                freeAttributeTemps(ops, attributes);
                 return {ops, resultPos};
             }
         }
@@ -586,7 +633,8 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
         {
             Node *argList = node->nonTerm(0);
             string name = Substr(ctx, node->nonTerm(1));
-            map<string, string> attributes = getAttributeList(ctx, node->nonTerm(2));
+            auto [attributes, attrCode] = getAttributeList(ctx, node->nonTerm(2), true);
+            append(ops, attrCode);
             Node *outList = node->nonTerm(3);
 
             /* build all arguments */
@@ -716,6 +764,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
 
             /* create operation */
             append(ops, {OP_CALL, args, attributes, node->start, node->end});
+            freeAttributeTemps(ops, attributes);
 
             /* free all inputs */
             // for (auto &i : freeList)
@@ -829,7 +878,8 @@ pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *no
             auto [code, position] = buildIndexOperation(ctx, node->nonTerm(0));
             HANDLE_NOT_NULL(position, node->nonTerm(0));
             TypeContext *type = ctx->variables[position];
-            map<string, string> attributes = getAttributeList(ctx, node->nonTerm(1));
+            auto [attributes, attrCode] = getAttributeList(ctx, node->nonTerm(1), true);
+            append(ops, attrCode);
             if (type->type != TYPE_CLASS)
             {
                 logError(ctx->filename, ctx->code, node->nonTerm(0)->start, node->nonTerm(0)->end, "infix form of query must be used with classes, but used with: %s", printType(type).c_str());
@@ -862,6 +912,7 @@ pair<vector<Operation>, int64_t> buildQueryOperation(BuildContext *ctx, Node *no
             int64_t tmp = newTemp(ctx, fldType);
             append(ops, code);
             append(ops, {OP_QUERY_CLASS, {tmp, position, offset, (int64_t)fldType}, attributes, node->start, node->end});
+            freeAttributeTemps(ops, attributes);
             return {ops, tmp};
         }
     }
@@ -1482,7 +1533,8 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                 auto [code, position] = buildIndexOperation(ctx, x->nonTerm(0));
                 HANDLE_NOT_NULL(position, x->nonTerm(0));
                 TypeContext *type = ctx->variables[position];
-                map<string, string> attributes = getAttributeList(ctx, x->nonTerm(1));
+                auto [attributes, attrCode] = getAttributeList(ctx, x->nonTerm(1), true);
+                append(ops, attrCode);
                 if (type->type != TYPE_CLASS)
                 {
                     logError(ctx->filename, ctx->code, x->nonTerm(0)->start, x->nonTerm(0)->end, "infix form of query must be used with classes, but used with %s", printType(type).c_str());
@@ -1520,6 +1572,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
 
                 append(ops, code);
                 append(ops, {OP_PUSH_CLASS, {position, offset, (int64_t)fldType, dataPos}, attributes, x->start, x->end});
+                freeAttributeTemps(ops, attributes);
                 freeTemp(ops, position);
                 break;
             }
@@ -1746,7 +1799,7 @@ void addWorkerDefinition(BuildContext *ctx, Node *node, bool with_code)
     }
     wk->code_block_end = node->end;
 
-    wk->attributes = getAttributeList(ctx, node->nonTerm(0));
+    tie(wk->attributes, ignore) = getAttributeList(ctx, node->nonTerm(0), false);
 
     /* read arguments */
     wk->inputs = readWorkerArgList(ctx, node->nonTerm(1));
@@ -1968,11 +2021,20 @@ void applyNamesTranslition(OperationBlock *op, const map<int64_t, int64_t> &tran
             break;
     }
 
+    for (auto &[k, v] : op->attributes)
+    {
+        if (int64_t *x = get_if<int64_t>(&v))
+        {
+            T(*x);
+        }
+    }
+
     #undef T
 }
 
 vector<int64_t> getWritedVariables(OperationBlock *op)
 {
+    vector<int64_t> result;
     switch (op->type)
     {
         // 2nd
@@ -2034,33 +2096,34 @@ vector<int64_t> getWritedVariables(OperationBlock *op)
 
 vector<int64_t> getUsedVariables(OperationBlock *op)
 {
+    vector<int64_t> result;
     switch (op->type)
     {
         // 2nd
         case OP_LOAD_INPUT:
         case OP_LOAD_OUTPUT:
-            return {op->data[1]};
+            result = {op->data[1]}; break;
 
         // 1, last
         case OP_PUSH_VAR:
         case OP_PUSH_CLASS:
-            return {op->data[0], op->data.back()};
+            result = {op->data[0], op->data.back()}; break;
 
         // 1, 2
         case OP_QUERY_VAR:
         case OP_QUERY_CLASS:
-            return {op->data[0], op->data[1]};
+            result = {op->data[0], op->data[1]}; break;
 
         // 1, 2 and last
         case OP_PUSH_ARRAY:
         case OP_QUERY_INDEX:
-            return {op->data[0], op->data[1], op->data.back()};
+            result = {op->data[0], op->data[1], op->data.back()}; break;
 
         // all except first
         case OP_CALL:
         {
             auto t = op->data | views::drop(1);
-            return vector<int64_t>(t.begin(), t.end());
+            result = vector<int64_t>(t.begin(), t.end()); break;
         }
 
         // first arg
@@ -2071,7 +2134,7 @@ vector<int64_t> getUsedVariables(OperationBlock *op)
         case OP_NEW_STRING:
         case OP_NEW_INT:
         case OP_NEW_FLOAT:
-            return {op->data[0]};
+            result = {op->data[0]}; break;
 
         // all args
         case OP_FREE_TEMP:
@@ -2105,12 +2168,23 @@ vector<int64_t> getUsedVariables(OperationBlock *op)
         case OP_LE:
         case OP_GT:
         case OP_GE:
-            return op->data;
+            result = op->data; break;
     }
+
+    for (auto &[k, v] : op->attributes)
+    {
+        if (int64_t *x = get_if<int64_t>(&v))
+        {
+            result.push_back(*x);
+        }
+    }
+
+    return result;
 }
 
 vector<int64_t> getReadVariables(OperationBlock *op)
 {
+    vector<int64_t> result;
     switch (op->type)
     {
         // none
@@ -2124,30 +2198,30 @@ vector<int64_t> getReadVariables(OperationBlock *op)
         case OP_NEW_STRING:
         case OP_NEW_PIPE:
         case OP_NEW_PROMISE:
-            return {};
+            result = {}; break;
 
         // first and last
         case OP_PUSH_PIPE:
         case OP_PUSH_PROMISE:
         case OP_PUSH_CLASS:
-            return {op->data[0], op->data.back()};
+            result = {op->data[0], op->data.back()}; break;
 
         // last
         case OP_PUSH_VAR:
-            return {op->data.back()};
+            result = {op->data.back()}; break;
 
         // 2
         case OP_QUERY_VAR:
         case OP_QUERY_CLASS:
-            return {op->data[1]};
+            result = {op->data[1]}; break;
 
         // 1, 2 and last
         case OP_PUSH_ARRAY:
-            return {op->data[0], op->data[1], op->data.back()};
+            result = {op->data[0], op->data[1], op->data.back()}; break;
 
         // 2 and last
         case OP_QUERY_INDEX:
-            return {op->data[1], op->data.back()};
+            result = {op->data[1], op->data.back()}; break;
 
 
         // first arg
@@ -2155,7 +2229,7 @@ vector<int64_t> getReadVariables(OperationBlock *op)
         case OP_JNZ:
         case OP_STORE:
         case OP_STORE_INPUT:
-            return {op->data[0]};
+            result = {op->data[0]}; break;
 
 
         // all except first
@@ -2186,9 +2260,19 @@ vector<int64_t> getReadVariables(OperationBlock *op)
         case OP_GE:
         {
             auto t = op->data | views::drop(1);
-            return vector<int64_t>(t.begin(), t.end());
+            result = vector<int64_t>(t.begin(), t.end()); break;
         }
     }
+
+    for (auto &[k, v] : op->attributes)
+    {
+        if (int64_t *x = get_if<int64_t>(&v))
+        {
+            result.push_back(*x);
+        }
+    }
+
+    return result;
 }
 
 set<OperationBlock *> dump_used;
@@ -2277,7 +2361,14 @@ void dumpIRR(WorkerDeclarationContext *fn, OperationBlock *x)
         printf(" { ");
         for (auto &[k, v] : x->attributes)
         {
-            printf("%s=%s ", k.c_str(), v.c_str());
+            visit(overload{
+                [&](const string &str){
+                    printf("%s=%s ", k.c_str(), str.c_str());
+                },
+                [&](const int64_t &val){
+                    printf("%s=%lld [type=%s] ", k.c_str(), val, printType(fn->content->variables[val]).c_str());
+                }
+            }, v);
         }
         printf("}");
     }

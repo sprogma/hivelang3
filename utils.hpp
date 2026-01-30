@@ -2,8 +2,15 @@
 #define UTILS_HPP
 
 
+#include <variant>
+
+
+using namespace std;
+
+
 template <auto... Vals>
-struct is_one_functor {
+struct is_one_functor 
+{
     constexpr bool operator()(auto x) const noexcept 
     {
         return ((x == Vals) || ...);
@@ -12,5 +19,19 @@ struct is_one_functor {
 template <auto... Vals>
 inline constexpr auto is_one = is_one_functor<Vals...>{};
 
+template<class... Fs> struct overload : Fs... { using Fs::operator()...; };
+template<class... Fs> overload(Fs...) -> overload<Fs...>;
 
+template<typename T, class... Types>
+inline bool operator==(const T& t, const variant<Types...>& v) 
+{
+    const T* c = get_if<T>(&v);
+    return c && *c == t;
+}
+
+template<typename T, class... Types>
+inline bool operator==(const variant<Types...>& v, const T& t) 
+{
+    return t == v;
+}
 #endif

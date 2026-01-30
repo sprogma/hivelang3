@@ -8,9 +8,11 @@
 #include "runtime.h"
 #include "remote.h"
 
+SRWLOCK ServerIdGetLock = SRWLOCK_INIT;
 
 _Atomic int64_t next_local_id = 0;
 int64_t server_port = -1;
+_Atomic int64_t thisServerId = -1;
 HANDLE hIOCP;
 
 
@@ -121,12 +123,17 @@ void DumpConnections()
 
 
 void SendPageAllocationConfirm(struct hive_connection *con, BYTE *broadcast_id);
+void SendIDConfirm(struct hive_connection *con, BYTE *broadcast_id);
 void ConfirmConnection(struct hive_connection *con, int64_t local_id, int64_t port);
 int64_t RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t except_this_local_id);
+int64_t RedirectBroadcastIDQuery(int64_t want_id, BYTE *broadcast_id, int64_t except_this_local_id);
 void RequestObjectPathBroadcast(int64_t object, int64_t except_this_local_id);
 void AnswerRequestObjectPath(int64_t object, int64_t distance);
 void AnswerQueryObject(struct hive_connection *con, void *shifted_buffer, int64_t object_id, int64_t offset, int64_t size);
 void AnswerPushObject(struct hive_connection *con, int64_t object_id, int64_t offset, int64_t size);
+void RequestPathToIDBroadcast(int64_t global_id, int64_t except_this_local_id);
+void AnswerRequestPathToID(int64_t global_id, int64_t distance);
+
 
 void ConfirmPage(int64_t page_id)
 {
@@ -135,6 +142,16 @@ void ConfirmPage(int64_t page_id)
     AcquireSRWLockExclusive(&pages_lock);
     pages[pages_len++] = (struct memory_page){page_id, 0, 0};
     ReleaseSRWLockExclusive(&pages_lock);
+}
+
+void ConfirmID(int64_t confirmed_id)
+{
+    if (thisServerId == -1)
+    {
+        print("Server id=%lld confirmed\n", confirmed_id);
+        thisServerId = confirmed_id;
+        ReleaseSRWLockExclusive(&ServerIdGetLock);
+    }
 }
 
 
@@ -266,19 +283,24 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
 #define API_REQUEST_CONNECTION 0x00
 #define API_REQUEST_MEM_PAGE 0x02
 #define API_QUERY_OBJECT 0x04
+#define API_QUERY_PIPE 0x24
 #define API_PUSH_OBJECT 0x06
+#define API_PUSH_PIPE 0x26
 #define API_REQUEST_PATH 0x08
 #define API_CALL_WORKER 0x10
-
 #define API_GET_HIVE_STATE 0x12
+#define API_REQUEST_ID 0xFE
+#define API_REQUEST_PATH_TO_ID 0xFC
 
 #define API_ANSWER_REQUEST_CONNECTION (API_REQUEST_CONNECTION | 0x1)
 #define API_ANSWER_REQUEST_MEM_PAGE (API_REQUEST_MEM_PAGE | 0x1)
 #define API_ANSWER_QUERY_OBJECT (API_QUERY_OBJECT | 0x1)
+#define API_ANSWER_QUERY_PIPE (API_QUERY_PIPE | 0x1)
 #define API_ANSWER_PUSH_OBJECT (API_PUSH_OBJECT | 0x1)
+#define API_ANSWER_PUSH_PIPE (API_PUSH_PIPE | 0x1)
 #define API_ANSWER_REQUEST_PATH (API_REQUEST_PATH | 0x1)
-
-#define BROADCAST_ID_LENGTH 27
+#define API_ANSWER_REQUEST_ID (API_REQUEST_ID | 0x1)
+#define API_ANSWER_REQUEST_PATH_TO_ID (API_REQUEST_PATH_TO_ID | 0x1)
 
 /* known calls */
 /*
@@ -303,15 +325,17 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
             5 byte: memory page
             27 byte: broadcast ID
         
-        API_QUERY_OBJECT
+        API_QUERY_OBJECT | API_QUERY_PIPE
             8 byte: object_id
             8 byte: offset
             8 byte: size
+            27 byte: query ID [if API_QUERY_PIPE]
 
-        API_PUSH_OBJECT
+        API_PUSH_OBJECT | API_PUSH_PIPE
             8 byte: object_id
             8 byte: offset
             8 byte: size
+            27 byte: push ID [if API_PUSH_PIPE]
             ----
             raw bytes
 
@@ -321,6 +345,7 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
 
         API_CALL_WORKER
             8 byte: worker_id
+            8 byte: global_id_parameter
             ----
             raw bytes
 
@@ -328,7 +353,14 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
             8 byte: wait_list_len
             8 byte: queue_len
             8 byte: idle_time [in microseconds]
-            
+
+        API_REQUEST_ID:
+            8 byte: proposed id
+            27 byte: broadcast ID
+
+        API_REQUEST_PATH_TO_ID:
+            8 byte: global_id
+            27 byte: broadcast ID
 
     api ANSWERS:
 
@@ -338,21 +370,30 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
         API_ANSWER_REQUEST_MEM_PAGE
             27 byte: broadcast ID
 
-        API_ANSWER_QUERY_OBJECT
+        API_ANSWER_QUERY_OBJECT | API_ANSWER_QUERY_PIPE
             8 byte: object_id
             8 byte: offset
             8 byte: size
+            27 byte: query ID [if API_ANSWER_QUERY_PIPE]
             ----
             raw bytes
 
-        API_ANSWER_PUSH_OBJECT
+        API_ANSWER_PUSH_OBJECT | API_ANSWER_PUSH_PIPE
             8 byte: object_id
             8 byte: offset
             8 byte: size
+            27 byte: push ID [if API_ANSWER_PUSH_PIPE]
 
         API_ANSWER_REQUEST_PATH
             8 byte: object_id
             8 byte: result_distance
+
+        API_ANSWER_REQUEST_ID:
+            27 byte: broadcast ID
+            
+        API_ANSWER_REQUEST_PATH_TO_ID:
+            8 byte: global_id
+            8 byte: distance
 */
 
 
@@ -398,6 +439,108 @@ static int64_t HandleApiCall(struct hive_connection *con)
             ReleaseSRWLockExclusive(&connections_lock);
             return 0;
         }
+        case API_REQUEST_ID:
+        {
+            int64_t want_id = *(int64_t *)ctx->res_buffer;
+            BYTE *broadcast_id = ctx->res_buffer + 8;
+            log("API_REQUEST_ID page=%lld [prefix=%llx]\n", want_id, *(int64_t *)broadcast_id);
+            // check - is id used [or we want to use this id]
+            if (thisServerId == want_id)
+            {
+                log("Refuse id\n");
+                return 1;
+            }
+            
+            AcquireSRWLockExclusive(&known_id_broadcasts.lock);            
+            for (int64_t i = 0; i < known_id_broadcasts.alloc; ++i)
+            {
+                struct hashtable_node *cur = known_id_broadcasts.table[i];
+                while (cur != NULL)
+                {
+                    if (!equal_bytes(cur->bytes, broadcast_id, BROADCAST_ID_LENGTH) &&
+                        ((struct id_request *)cur->id)->id == want_id)
+                    {
+                        // refuse
+                        log("Refuse id\n");
+                        ReleaseSRWLockExclusive(&known_id_broadcasts.lock);
+                        return 1;
+                    }
+                    cur = cur->next;
+                }
+            }
+            // check - if we already answering this broadcast
+            struct id_request *broadcast = (struct id_request *)GetHashtableNoLock(&known_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 0);
+            if (broadcast == NULL)
+            {
+                // create local broadcast entry
+                broadcast = myMalloc(sizeof(*broadcast));
+                broadcast->id = want_id;
+                broadcast->local_redirect_id = con->local_id;
+                broadcast->answered = 0;
+                broadcast->requested = 0;
+                SetHashtableNoLock(&known_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, (int64_t)broadcast);
+
+                // redirect queries
+                broadcast->requested = RedirectBroadcastIDQuery(want_id, broadcast_id, con->local_id);
+            }
+            else
+            {
+                if (broadcast->local_redirect_id != con->local_id)
+                {
+                    /* simply answer yes */
+                    log("Confirmed becouse local_id differs\n");
+                    SendIDConfirm(con, broadcast_id);
+                }
+            }
+
+            int64_t answered = broadcast->answered;
+            int64_t requested = broadcast->requested;
+            ReleaseSRWLockExclusive(&known_id_broadcasts.lock);
+
+            // is broadcast accepted by all neibours?
+            if (answered == requested)
+            {
+                SendIDConfirm(con, broadcast_id);
+                return 1;
+            }
+
+            // else - waiting for more acceptions
+            return 1;
+        }
+        case API_ANSWER_REQUEST_ID:
+        {
+            BYTE *broadcast_id = ctx->res_buffer;
+            // get broadcast
+            log("Get broadcast answer [prefix=%llx]\n", *(int64_t *)broadcast_id);
+            AcquireSRWLockShared(&known_id_broadcasts.lock);
+            struct id_request *broadcast = (struct id_request *)GetHashtableNoLock(&known_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 0);
+            if (broadcast != NULL)
+            {
+                int64_t new_count = ++broadcast->answered;
+                if (new_count == broadcast->requested) // answer query
+                {
+                    log("Broadcast confirmed\n");
+                    if (broadcast->local_redirect_id == -1)
+                    {
+                        // request confirmed
+                        // all is ok - start working server
+                        ConfirmID(broadcast->id);
+                    }
+                    else
+                    {
+                        AcquireSRWLockShared(&connections_lock);
+                        struct hive_connection *ansCon = GetConnectionById(broadcast->local_redirect_id, NULL);
+                        ReleaseSRWLockShared(&connections_lock);
+                        if (ansCon)
+                        {
+                            SendIDConfirm(ansCon, broadcast_id);
+                        }
+                    }
+                }
+            }
+            ReleaseSRWLockShared(&known_id_broadcasts.lock);
+            return 1;
+        }
         case API_REQUEST_MEM_PAGE:
         {
             int64_t page_id;
@@ -420,6 +563,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
             ReleaseSRWLockShared(&pages_lock);
 
             // check - if any other broadcast waiting for this page
+            // TODO: change to check only this server created broadcasts, to not refuse if same page trying to allocate twice from one server
             // TODO: maybe use Shared access here, and only if page isn't requested - use exclusive?
             AcquireSRWLockExclusive(&known_page_broadcasts.lock);
             
@@ -715,12 +859,69 @@ static int64_t HandleApiCall(struct hive_connection *con)
             ReleaseSRWLockExclusive(&known_objects.lock);
             return 1;
         }
+        case API_REQUEST_PATH_TO_ID:
+        {
+            int64_t global_id = *(int64_t *)(ctx->res_buffer);
+            BYTE *broadcast_id = ctx->res_buffer + 8;
+            /* if object is our - send answers */
+            if (global_id == thisServerId)
+            {
+                AnswerRequestPathToID(global_id, 1);
+                return 1;
+            }
+            /* else - if broadcast is new, redirect it */
+            AcquireSRWLockExclusive(&known_path_id_broadcasts.lock);
+            if (GetHashtableNoLock(&known_path_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 0) == 0)
+            {
+                RequestPathToIDBroadcast(global_id, con->local_id);
+                SetHashtableNoLock(&known_path_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 1);
+            }
+            ReleaseSRWLockExclusive(&known_path_id_broadcasts.lock);
+            return 1;
+        }
+        case API_ANSWER_REQUEST_PATH_TO_ID:
+        {
+            int64_t global_id = *(int64_t *)(ctx->res_buffer);
+            int64_t distance = *(int64_t *)(ctx->res_buffer + 8);
+            /* get object - if it is local - don't update anything, and don't send answers */
+            if (global_id == thisServerId)
+            {
+                return 1;
+            }
+            /* update known objects base */
+            AcquireSRWLockExclusive(&known_hives.lock);
+            struct known_hive *obj = (void *)GetHashtableNoLock(&known_hives, (BYTE *)&global_id, 8, 0);
+            if (obj != NULL && obj->distance > distance)
+            {
+                log("UPDATE ID PATH 1 TO %lld [distance=%lld, local_id=%lld]\n", global_id, distance, con->local_id);
+                obj->local_id = con->local_id;
+                obj->distance = distance;
+                SetHashtableNoLock(&known_hives, (BYTE *)&global_id, 8, (int64_t)obj);
+                ReleaseSRWLockExclusive(&known_hives.lock);
+                AnswerRequestPathToID(global_id, distance + 1);
+                return 1;
+            }
+            else if (obj == NULL)
+            {
+                log("UPDATE ID PATH 2 TO %lld [distance=%lld, local_id=%lld]\n", global_id, distance, con->local_id);
+                obj = myMalloc(sizeof(*obj));
+                obj->local_id = con->local_id;
+                obj->distance = distance + 1;
+                SetHashtableNoLock(&known_hives, (BYTE *)&global_id, 8, (int64_t)obj);
+                ReleaseSRWLockExclusive(&known_hives.lock);
+                AnswerRequestPathToID(global_id, distance + 1);
+                return 1;
+            }
+            ReleaseSRWLockExclusive(&known_hives.lock);
+            return 1;
+        }
         case API_CALL_WORKER:
         {
-            int64_t worker_id = *(int64_t *)ctx->res_buffer;
-            BYTE *data = ctx->res_buffer + 8;
-            log("Get remote start worker %lld from local_id=%lld\n", worker_id, con->local_id);
-            StartNewWorker(worker_id, data, con->local_id);
+            int64_t worker_id = *(int64_t *)(ctx->res_buffer+0);
+            int64_t global_id = *(int64_t *)(ctx->res_buffer+8);
+            BYTE *data = ctx->res_buffer + 16;
+            log("Get remote start worker %lld from local_id=%lld on %lld\n", worker_id, con->local_id, global_id);
+            StartNewWorker(worker_id, global_id, data);
             return 1;
         }
         case API_GET_HIVE_STATE:
@@ -868,6 +1069,16 @@ void SendPageAllocationConfirm(struct hive_connection *con, BYTE *broadcast_id)
     ReleaseSRWLockExclusive(&con->lock);
 }
 
+void SendIDConfirm(struct hive_connection *con, BYTE *broadcast_id)
+{
+    log("Send confirmation of page allocation to local_id=%lld\n", con->local_id);
+    BYTE message[8+27] = {API_ANSWER_REQUEST_ID, BROADCAST_ID_LENGTH, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    memcpy(message + 8, broadcast_id, BROADCAST_ID_LENGTH);
+    AcquireSRWLockExclusive(&con->lock);
+    send(con->outgoing, (char *)message, sizeof(message), 0);
+    ReleaseSRWLockExclusive(&con->lock);
+}
+
 
 int64_t RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t except_this_local_id)
 {
@@ -876,12 +1087,34 @@ int64_t RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t exce
     memcpy(message + 8,  &page_id, 5);
     memcpy(message + 8+5, broadcast_id, BROADCAST_ID_LENGTH);
     int64_t send_cnt = 0;
-    DumpConnections();
     for (int64_t i = 0; i < connections_len; ++i)
     {
         if (connections[i]->ctx != NULL && connections[i]->local_id != except_this_local_id)
         {
-            log("Redirecting query to local_id=%lld\n", connections[i]->local_id);
+            log("Redirecting page query to local_id=%lld\n", connections[i]->local_id);
+            AcquireSRWLockExclusive(&connections[i]->lock);
+            send(connections[i]->outgoing, (char *)message, sizeof(message), 0);
+            ReleaseSRWLockExclusive(&connections[i]->lock);
+            send_cnt++;
+        }
+    }
+    ReleaseSRWLockShared(&connections_lock);
+    return send_cnt;
+}
+
+
+int64_t RedirectBroadcastIDQuery(int64_t want_id, BYTE *broadcast_id, int64_t except_this_local_id)
+{
+    AcquireSRWLockShared(&connections_lock);
+    BYTE message[8+8+27] = {API_REQUEST_ID, 8+27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    memcpy(message + 8,  &want_id, 8);
+    memcpy(message + 8+8, broadcast_id, BROADCAST_ID_LENGTH);
+    int64_t send_cnt = 0;
+    for (int64_t i = 0; i < connections_len; ++i)
+    {
+        if (connections[i]->ctx != NULL && connections[i]->local_id != except_this_local_id)
+        {
+            log("Redirecting id query to local_id=%lld\n", connections[i]->local_id);
             AcquireSRWLockExclusive(&connections[i]->lock);
             send(connections[i]->outgoing, (char *)message, sizeof(message), 0);
             ReleaseSRWLockExclusive(&connections[i]->lock);
@@ -1049,6 +1282,35 @@ void RequestMemoryPage(int64_t page_id)
     }
 }
 
+void RequestServerId(int64_t new_id)
+{
+    print("Trying to get server id %lld\n", new_id);
+
+    // create random seed
+    BYTE broadcast_id[BROADCAST_ID_LENGTH];
+    BCryptGenRandom(NULL, broadcast_id, BROADCAST_ID_LENGTH, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    
+    AcquireSRWLockExclusive(&known_id_broadcasts.lock);
+
+    struct id_request *broadcast = myMalloc(sizeof(*broadcast));
+    broadcast->id = new_id;
+    broadcast->local_redirect_id = -1; // this hive
+    broadcast->answered = 0;
+    broadcast->requested = 0;
+    SetHashtableNoLock(&known_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, (int64_t)broadcast);
+
+    log("Created broadcast with prefix=%llx\n", *(int64_t *)broadcast_id);
+
+    // redirect queries
+    broadcast->requested = RedirectBroadcastIDQuery(new_id, broadcast_id, -1);
+    int64_t requested = broadcast->requested;
+    ReleaseSRWLockExclusive(&known_id_broadcasts.lock);
+    if (requested == 0)
+    {
+        ConfirmID(new_id);
+    }
+}
+
 
 void AnswerPushObject(struct hive_connection *con, int64_t object_id, int64_t offset, int64_t size)
 {    
@@ -1135,6 +1397,65 @@ void RequestObjectPathBroadcast(int64_t object, int64_t except_this_local_id)
 }
 
 
+
+void AnswerRequestPathToID(int64_t global_id, int64_t distance)
+{
+    BYTE message[8+16] = {API_ANSWER_REQUEST_PATH, 16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    memcpy(message + 8, &global_id, 8);
+    memcpy(message + 16, &distance, 8);
+    AcquireSRWLockShared(&connections_lock);
+    for (int64_t i = 0; i < connections_len; ++i)
+    {
+        if (connections[i]->ctx != NULL)
+        {
+            log("send broadcast answer id path to local_id=%lld\n", connections[i]->local_id);
+            AcquireSRWLockExclusive(&connections[i]->lock);
+            send(connections[i]->outgoing, (char *)message, sizeof(message), 0);
+            ReleaseSRWLockExclusive(&connections[i]->lock);
+        }
+    }
+    ReleaseSRWLockShared(&connections_lock);
+}
+
+
+void RequestPathToIDBroadcast(int64_t global_id, int64_t except_this_local_id)
+{
+    // update known_object structure
+    AcquireSRWLockExclusive(&known_hives.lock);
+    struct known_object *obj = (void *)GetHashtableNoLock(&known_hives, (BYTE *)&global_id, 8, 0);
+    if (obj == NULL)
+    {
+        obj = myMalloc(sizeof(*obj));
+        obj->distance = INFINITY_DISTANCE;
+        obj->local_id = -1;
+    }
+    else
+    {
+        obj->distance = INFINITY_DISTANCE;
+    }
+    ReleaseSRWLockExclusive(&known_hives.lock);
+
+    BYTE broadcast_id[BROADCAST_ID_LENGTH];
+    BCryptGenRandom(NULL, broadcast_id, BROADCAST_ID_LENGTH, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+
+    BYTE message[8+8+27] = {API_REQUEST_PATH, 8+27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    memcpy(message + 8,  &global_id, 8);
+    memcpy(message + 8+8, broadcast_id, BROADCAST_ID_LENGTH);
+    AcquireSRWLockShared(&connections_lock);
+    for (int64_t i = 0; i < connections_len; ++i)
+    {
+        if (connections[i]->ctx != NULL && connections[i]->local_id != except_this_local_id)
+        {
+            log("send broadcast path request to local_id=%lld\n", connections[i]->local_id);
+            AcquireSRWLockExclusive(&connections[i]->lock);
+            send(connections[i]->outgoing, (char *)message, sizeof(message), 0);
+            ReleaseSRWLockExclusive(&connections[i]->lock);
+        }
+    }
+    ReleaseSRWLockShared(&connections_lock);
+}
+
+
 void RequestObjectGet(int64_t object, int64_t offset, int64_t size)
 {
     // find object in object table
@@ -1197,14 +1518,15 @@ void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *dat
     ReleaseSRWLockExclusive(&connection->lock);
 }
 
-void StartNewWorkerRemote(struct hive_connection *con, int64_t worker_id, void *inputTable)
+void StartNewWorkerRemote(struct hive_connection *con, int64_t worker_id, int64_t global_id, void *inputTable)
 {
     con->queue_len++;
     log("Starting new REMOTE worker %lld [input table %p] [on local_id=%lld]\n", worker_id, inputTable, con->local_id);
-    BYTE header[8] = {API_CALL_WORKER, 8 + Workers[worker_id].inputSize, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    BYTE header[8] = {API_CALL_WORKER, 16 + Workers[worker_id].inputSize, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     AcquireSRWLockExclusive(&con->lock);
     send(con->outgoing, (char *) header, sizeof(header), 0);
     send(con->outgoing, (char *)&worker_id, 8, 0);
+    send(con->outgoing, (char *)&global_id, 8, 0);
     send(con->outgoing, (char *) inputTable, Workers[worker_id].inputSize, 0);
     ReleaseSRWLockExclusive(&con->lock);
 }
@@ -1346,8 +1668,21 @@ void start_remote_subsystem()
         myScanS(cmd);
     }
 
+    AcquireSRWLockExclusive(&ServerIdGetLock);
+
+    /* try to get ID */
+    while (!TryAcquireSRWLockExclusive(&ServerIdGetLock))
+    {
+        int64_t id = 0;
+        BCryptGenRandom(NULL, (BYTE *)&id, 8, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+        id |= 0x8000000000000000LL;
+        RequestServerId(id);
+        Sleep(50);
+    }
+
     Sleep(1000);
     DumpConnections();
+
     
     DWORD paId;
     HANDLE hpa = CreateThread(NULL, 0, PagesAllocator, &port, 0, &paId);
@@ -1359,4 +1694,4 @@ void start_remote_subsystem()
 }
 
 // TODO: clean_remote_subsystem()
-    // WSACleanup();
+// WSACleanup();

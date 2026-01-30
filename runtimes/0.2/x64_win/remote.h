@@ -5,6 +5,8 @@
     #define _WIN32_WINNT _WIN32_WINNT_VISTA
 #endif
 
+#define BROADCAST_ID_LENGTH 27
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include "windows.h"
@@ -64,6 +66,14 @@ struct memory_page_request
     int32_t requested;
 };
 
+struct id_request
+{
+    int64_t id;
+    int64_t local_redirect_id;
+    _Atomic int32_t answered;
+    int32_t requested;
+};
+
 #define QUERY_HASHING_BYTES 24
 struct linked_node
 {
@@ -92,6 +102,11 @@ struct known_object
     int64_t local_id;
     int64_t distance;
 };
+struct known_hive
+{
+    int64_t local_id;
+    int64_t distance;
+};
 
 struct hashtable_node
 {
@@ -110,7 +125,6 @@ struct hashtable
     int64_t alloc;
 };
 
-
 // TODO: remove 1024 as constant
 extern SRWLOCK connections_lock;
 extern struct hive_connection *connections[];
@@ -120,13 +134,12 @@ extern SRWLOCK pages_lock;
 extern struct memory_page pages[];
 extern int64_t pages_len;
 
-extern struct hashtable known_hives;
+extern struct hashtable known_id_broadcasts;
 extern struct hashtable known_page_broadcasts;
 extern struct hashtable known_path_broadcasts;
-
+extern struct hashtable known_path_id_broadcasts;
 
 int64_t equal_bytes(BYTE *a, BYTE *b, int64_t len);
-
 
 int64_t GetHashtable(struct hashtable *h, BYTE *address, int64_t address_length, int64_t default_value);
 int64_t GetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_length, int64_t default_value);
@@ -135,7 +148,7 @@ void SetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_leng
 
 void RequestObjectGet(int64_t object, int64_t offset, int64_t size);
 void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data);
-void StartNewWorkerRemote(struct hive_connection *con, int64_t worker_id, void *inputTable);
+void StartNewWorkerRemote(struct hive_connection *con, int64_t worker_id, int64_t global_id, void *inputTable);
 void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const void *source);
 
 
@@ -197,6 +210,7 @@ extern struct hashtable known_objects;
 extern struct hashtable local_objects;
 extern struct hashtable query_requests;
 extern struct hashtable push_requests;
+extern struct hashtable known_hives; // global_id -> local_id
 
 
 // ------------- other -----------

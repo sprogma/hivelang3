@@ -10,13 +10,15 @@
 #include "windows.h"
 
 #include "runtime_lib.h"
-#include "runtime_lib.h"
+#include "remote.h"
 
 
 extern int fastPushObject(void);
 extern int fastQueryObject(void);
 extern int fastNewObject(void);
 extern int fastCallObject(void);
+extern int fastPushPipe(void);
+extern int fastQueryPipe(void);
 
 extern int ExecuteWorker(void *, int64_t, void *, BYTE *);
 
@@ -62,6 +64,7 @@ struct waiting_push
     int64_t offset;
     int64_t size;
     void *data;
+    BYTE id[BROADCAST_ID_LENGTH];
     int64_t repeat_timeout;
 };
 
@@ -72,10 +75,12 @@ struct waiting_query
     void *destination;
     int64_t offset;
     int64_t size;
+    BYTE id[BROADCAST_ID_LENGTH];
     int64_t repeat_timeout;
 };
 
-struct waiting_pages {
+struct waiting_pages 
+{
     struct waiting_cause;
     int64_t obj_type;
     int64_t size;
@@ -142,6 +147,15 @@ struct __attribute__((packed)) object
     BYTE data[];
 };
 
+struct __attribute__((packed)) object_pipe
+{
+    SRWLOCK lock;
+    int64_t length;
+    int64_t position;
+    int8_t _[7];
+    struct object; // data is circular buffer, of length 'length' and position stored in 'position' field
+};
+
 struct __attribute__((packed)) object_array
 {
     int64_t length;
@@ -177,10 +191,10 @@ struct defined_array
 struct thread_data
 {
     int64_t number;
-    struct jmpbuf ShedulerBuffer;
     int64_t runningId;
     int64_t completedTasks;
     int64_t prevPrint;
+    struct jmpbuf ShedulerBuffer;
 };
 extern DWORD dwTlsIndex;
 
@@ -201,18 +215,32 @@ extern struct defined_array *defined_arrays;
 
 
 
+/*
+    call object global_id:
 
+        0 -> any machine
+        1 -> local machine
+        2 -> remote machine
+        
+        if first bit set - then this is global id, and we need to run on it
+*/
+
+#define IS_CALL_PARAM_GLOBAL_ID(x) ((x) & 0x8000000000000000LL)
 
 
 
 __attribute__((sysv_abi)) 
 int64_t QueryObject(void *destination, int64_t object, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
+__attribute__((sysv_abi))
+int64_t QueryPipe(void *destination, int64_t object_id, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
 
 void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue);
 int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue);
 
 __attribute__((sysv_abi))
 void PushObject(int64_t object, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
+__attribute__((sysv_abi))
+void PushPipe(int64_t object, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
 
 void UpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);
 
@@ -223,7 +251,7 @@ int64_t GetNewObjectId(int64_t *result);
 void NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id);
 
 void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value);
-void StartNewWorker(int64_t workerId, BYTE *inputTable, int64_t except_this_local_id);
+void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable);
 void PauseWorker(void *returnAddress, void *rbpValue, struct waiting_cause *waiting_data);
 
 #endif
