@@ -1,15 +1,16 @@
 // this file was generated using grammar_gen.ps1
 
-let prefix = "<RULE:1872495711>"
+let prefix = "<RULE:751204425>"
 
-let float = prefix + "float"
-let quotedstring = prefix + "quotedstring"
-let Sn = prefix + "Sn"
-let integer = prefix + "integer"
-let identifer = prefix + "identifer"
 let identifer_or_number = prefix + "identifer_or_number"
+let integer = prefix + "integer"
+let float = prefix + "float"
+let Sn = prefix + "Sn"
+let identifer = prefix + "identifer"
+let quotedstring = prefix + "quotedstring"
 let S = prefix + "S"
 let Global = prefix + "Global"
+let _using = prefix + "_using"
 let _record = prefix + "_record"
 let _union = prefix + "_union"
 let _class = prefix + "_class"
@@ -44,6 +45,8 @@ let prefix_op = prefix + "prefix_op"
 let QueryOperation = prefix + "QueryOperation"
 let IndexOperation = prefix + "IndexOperation"
 let SimpleTerm = prefix + "SimpleTerm"
+let function_call = prefix + "function_call"
+let function_name = prefix + "function_name"
 let new_operator = prefix + "new_operator"
     
 open System.IO
@@ -66,11 +69,15 @@ let grammar =
     [
         rule "Global" [
             v [S] [] []
+            v [_using] [] []
             v [_record] [] []
             v [_union] [] []
             v [_class] [] []
             v [worker] [] []
             v [worker_decl] [] []
+        ]
+        rule "_using" [
+            v ["@"; identifer] [] []
         ]
         rule "_record" [
             v [Sn; "struct"; S; identifer; Sn; "{"] [var_declaration; Sn; ";"] [Sn; "}"]
@@ -83,8 +90,12 @@ let grammar =
         ]
         rule "var_type" [
             v [Sn; identifer] [var_type_moditifer] []
+            v [Sn; identifer; "@"; identifer] [var_type_moditifer] []
         ]
-        rule "var_type_moditifer" [ // array indexes are fixed, not change this rule
+        rule "var_type_moditifer" [
+            v [Sn; "[]"; Sn; "@"; identifer] [] []
+            v [Sn; "|"; Sn; "@"; identifer] [] []
+            v [Sn; "?"; Sn; "@"; identifer] [] []
             v [Sn; "[]"] [] []
             v [Sn; "|"] [] []
             v [Sn; "?"] [] []
@@ -217,8 +228,16 @@ let grammar =
             v [Sn; integer] [] []
             v [Sn; float] [] []
             v [Sn; identifer] ["."; identifer] []
-            v [Sn; "("; call_arg_list; Sn; ")"; Sn; identifer; attribute_list; Sn; "("; call_result_list; Sn; ")"] [] []
+            v [Sn; function_call] [] []
             p [Sn; "("; expression; Sn; ")"] [] []
+        ]
+        rule "function_call" [
+            v [Sn; "("; call_arg_list; Sn; ")"; function_name; attribute_list; Sn; "("; call_result_list; Sn; ")"] [] []
+            v [Sn; "("; call_arg_list; Sn; ")"; function_name; attribute_list; Sn; "("; call_result_list; Sn; ")"] [] []
+        ]
+        rule "function_name" [
+            v [Sn; identifer; "@"; identifer] [] []
+            v [Sn; identifer] [] []
         ]
         rule "new_operator" [
             v [Sn; "new"; S; var_type; attribute_list; Sn; "("; call_arg_list; Sn; ")"] [] []
@@ -232,7 +251,7 @@ let keyToIndexMap inputMap =
     |> Seq.mapi (fun i (k, _) -> (k, i + 20))
     |> Map.ofSeq
 
-let indexMap = keyToIndexMap grammar  |> Map.add "float" 6  |> Map.add "quotedstring" 7  |> Map.add "Sn" 2  |> Map.add "integer" 5  |> Map.add "identifer" 3  |> Map.add "identifer_or_number" 4  |> Map.add "S" 1
+let indexMap = keyToIndexMap grammar  |> Map.add "identifer_or_number" 4  |> Map.add "integer" 5  |> Map.add "float" 6  |> Map.add "Sn" 2  |> Map.add "identifer" 3  |> Map.add "quotedstring" 7  |> Map.add "S" 1
 
 let printTerm = function 
     | Terminal s -> sprintf "\"%s\"" s 

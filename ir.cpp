@@ -13,6 +13,7 @@
 using namespace std;
 
 #include "optimization/optimizer.hpp"
+#include "codegen/codegen.hpp"
 #include "logger.hpp"
 #include "ast.hpp"
 #include "ir.hpp"
@@ -62,6 +63,16 @@ void freeAttributeTemps(vector<Operation> &ops, map<string, variant<string, int6
     }
 }
 
+bool validateProviderWithError(BuildContext *ctx, Node *node, const string &name)
+{
+    if (validateProvider(name))
+    {
+        return true;
+    }
+    logError(ctx->filename, ctx->code, node->start, node->end, "unknown provider: %s", name.c_str());
+    return false;
+}
+
 string Substr(BuildContext *ctx, Node *node)
 {
     return string(ctx->code + node->start, node->end - node->start);
@@ -71,13 +82,13 @@ char *printTypeR(char *text, TypeContext *t)
 {
     switch (t->type)
     {
-        case TYPE_UNION: return text + sprintf(text, "union"); break;
-        case TYPE_RECORD: return text + sprintf(text, "record"); break;
-        case TYPE_CLASS: return text + sprintf(text, "class"); break;
-        case TYPE_PIPE: text += sprintf(text, "pipe of "); return printTypeR(text, t->_vector.base); break;
-        case TYPE_ARRAY: text += sprintf(text, "array of "); return printTypeR(text, t->_vector.base); break;
-        case TYPE_PROMISE: text += sprintf(text, "promise of "); return printTypeR(text, t->_vector.base); break;
-        case TYPE_SCALAR: return text + sprintf(text, "scalar [%d, size=%lld]", t->_scalar.kind, t->size); break;
+        case TYPE_UNION: return text + sprintf(text, "union@%s", t->provider.c_str()); break;
+        case TYPE_RECORD: return text + sprintf(text, "record@%s", t->provider.c_str()); break;
+        case TYPE_CLASS: return text + sprintf(text, "class@%s", t->provider.c_str()); break;
+        case TYPE_PIPE: text += sprintf(text, "pipe@%s of ", t->provider.c_str()); return printTypeR(text, t->_vector.base); break;
+        case TYPE_ARRAY: text += sprintf(text, "array@%s of ", t->provider.c_str()); return printTypeR(text, t->_vector.base); break;
+        case TYPE_PROMISE: text += sprintf(text, "promise@%s of ", t->provider.c_str()); return printTypeR(text, t->_vector.base); break;
+        case TYPE_SCALAR: return text + sprintf(text, "scalar@%s [%d, size=%lld]", t->provider.c_str(), t->_scalar.kind, t->size); break;
     }
 }
 
@@ -101,6 +112,7 @@ bool handleNotNull(BuildContext *ctx, int64_t tmp, Node *node)
     return false;
 }
 
+// from t2 to t1
 bool is_convertable(TypeContext *t1, TypeContext *t2)
 {
     if (t1 == t2)
@@ -131,6 +143,7 @@ bool is_convertable(TypeContext *t1, TypeContext *t2)
     return false;
 }
 
+// from t2 to t1
 bool is_castable(TypeContext *t1, TypeContext *t2)
 {
     if (t1 == t2)
@@ -145,6 +158,24 @@ bool is_castable(TypeContext *t1, TypeContext *t2)
     {
         // TODO: make something more clever
         return true; // all classes can be castable too
+    }
+    if (t1->type == t2->type && t1->size == t2->size)
+    {
+        // TODO: move check to providers instead of confirming all
+        switch (t1->type)
+        {
+            case TYPE_CLASS:
+            case TYPE_UNION:
+            case TYPE_RECORD:
+                return t1->_struct.fields == t2->_struct.fields &&
+                       t1->_struct.names == t2->_struct.names;
+            case TYPE_SCALAR:
+                return t1->_scalar.kind == t2->_scalar.kind;
+            case TYPE_ARRAY:
+            case TYPE_PIPE:
+            case TYPE_PROMISE:
+                return t1->_vector.base == t2->_vector.base;
+        }
     }
     return false;
 }
@@ -183,31 +214,69 @@ WorkerDeclarationContext *getWorkerByName(BuildContext *ctx, string name)
     return NULL;
 }
 
-TypeContext *getDerivative(BuildContext *ctx, TypeContext *type, TypeContextType derivative)
+TypeContext *getDerivative(BuildContext *ctx, TypeContext *type, TypeContextType derivative, const string &provider)
 {
     for (auto &val : ctx->types)
     {
-        if (val->type == derivative && val->_vector.base == type)
+        if (val->type == derivative && val->_vector.base == type && val->provider == provider)
         {
             return val;
         }
     }
-    ctx->types.push_back(new TypeContext(8, derivative, {._vector={type}}));
+    ctx->types.push_back(new TypeContext(8, derivative, provider, {._vector={type}}));
     return ctx->types.back();
 }
 
-TypeContext *getBaseType(BuildContext *ctx, string name)
+TypeContext *getBaseType(BuildContext *ctx, const string &name, const string &provider="")
 {
-    return ctx->typeTable[name];
+    if (ctx->typeTable.contains({name, provider}))
+    {
+        TypeContext *type = ctx->typeTable[{name, provider}];
+        if (IS_LINK_TYPE(type->type) && provider == "")
+        {
+            logError(ctx->filename, ctx->code, 0, 0, "Used link type without provider defined. [used %s]\n", name.c_str());
+        }
+        if (!IS_LINK_TYPE(type->type) && provider != "")
+        {
+            logError(ctx->filename, ctx->code, 0, 0, "Used scalar type [or struct] with provider defined, and this was found in type table. [used %s]\n", name.c_str());
+        }
+        return type;
+    }
+    if (ctx->typeTable.contains({name, ""}))
+    {
+        TypeContext *oldType = ctx->typeTable[{name, ""}], *newType;
+        switch (oldType->type)
+        {
+            case TYPE_CLASS:
+                newType = new TypeContext(oldType->size, oldType->type, provider, {._struct=oldType->_struct});
+                break;
+            case TYPE_SCALAR:
+            case TYPE_UNION:
+            case TYPE_RECORD:
+                return oldType;
+            case TYPE_ARRAY:
+            case TYPE_PIPE:
+            case TYPE_PROMISE:
+                __builtin_unreachable();
+        }
+        newType->provider = provider;
+        ctx->typeTable[{name, provider}] = newType;
+        if (IS_LINK_TYPE(newType->type) && provider == "")
+        {
+            logError(ctx->filename, ctx->code, 0, 0, "Used link type without provider defined. [used %s]\n", name.c_str());
+        }
+        return newType;
+    }
+    return NULL;
 }
 
 TypeContext *getIntegerType(BuildContext *ctx, int64_t x)
 {
     // TODO: how can i do this?
-    // if (x >= INT8_MIN && x <= INT8_MAX) return getBaseType(ctx, "i8");
-    // if (x >= 0 && (uint64_t)x <= UINT8_MAX) return getBaseType(ctx, "u8");
-    // if (x >= INT16_MIN && x <= INT16_MAX) return getBaseType(ctx, "i16");
-    // if (x >= 0 && (uint64_t)x <= UINT16_MAX) return getBaseType(ctx, "u16");
+    // if (x >= INT8_MIN && x <= INT8_MAX) return getBaseType(ctx, "i8", provider);
+    // if (x >= 0 && (uint64_t)x <= UINT8_MAX) return getBaseType(ctx, "u8", provider);
+    // if (x >= INT16_MIN && x <= INT16_MAX) return getBaseType(ctx, "i16", provider);
+    // if (x >= 0 && (uint64_t)x <= UINT16_MAX) return getBaseType(ctx, "u16", provider);
     if (x >= INT32_MIN && x <= INT32_MAX)  return getBaseType(ctx, "i32");
     if (x >= 0 && (uint64_t)x <= UINT32_MAX) return getBaseType(ctx, "u32");
     return getBaseType(ctx, "i64");
@@ -218,17 +287,24 @@ TypeContext *getType(BuildContext *ctx, Node *node)
     assert_type(node, "var_type");
     /* find base type */
     string baseName = Substr(ctx, node->nonTerm(0));
-    if (!ctx->typeTable.contains(baseName))
+    TypeContext *cur = getBaseType(ctx, baseName, (node->variant == 1 ? Substr(ctx, node->nonTerm(1)) : ctx->provider));
+    if (!cur)
     {
         logError(ctx->filename, ctx->code, node->start, node->end, "Unknown base type: %s\n", baseName.c_str());
         return NULL;
     }
-    TypeContext *cur = ctx->typeTable[baseName];
     for (auto &child : node->childs)
     {
         if (is(child, "var_type_moditifer"))
         {
-            cur = getDerivative(ctx, cur, vector<TypeContextType>{TYPE_ARRAY, TYPE_PIPE, TYPE_PROMISE}[child->variant]);
+            if (child->variant < 3)
+            {
+                cur = getDerivative(ctx, cur, vector<TypeContextType>{TYPE_ARRAY, TYPE_PIPE, TYPE_PROMISE}[child->variant % 3], Substr(ctx, child->nonTerm(0)));
+            }
+            else
+            {
+                cur = getDerivative(ctx, cur, vector<TypeContextType>{TYPE_ARRAY, TYPE_PIPE, TYPE_PROMISE}[child->variant % 3], ctx->provider);
+            }
         }
     }
     return cur;
@@ -369,8 +445,8 @@ void processStructure(BuildContext *ctx, TypeContextType type, Node *node)
     {
         printf("Field %s -> type %p\n", k.data(), fields[v]);
     }
-    ctx->types.push_back(new TypeContext(total_size, type, {._struct={fields, names}}));
-    ctx->typeTable[name] = ctx->types.back();
+    ctx->types.push_back(new TypeContext(total_size, type, "", {._struct={fields, names}}));
+    ctx->typeTable[{name, ""}] = ctx->types.back();
 }
 
 vector<pair<string, TypeContext *>> readWorkerArgList(BuildContext *ctx, Node *node)
@@ -593,8 +669,8 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
         case 2: // float
         {
             char *end;
-            double value = strtod(Substr(ctx, node->nonTerm(0)).c_str(), &end);
-            int64_t intValue = *(int64_t *)&value;
+            double fltValue = strtod(Substr(ctx, node->nonTerm(0)).c_str(), &end);
+            int64_t intValue = *(int64_t *)&fltValue;
             int64_t tmp = newTemp(ctx, getBaseType(ctx, "f64"));
             append(ops, {OP_NEW_FLOAT, {tmp, intValue}, {}, node->start, node->end});
             return {ops, tmp};
@@ -631,8 +707,11 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
         }
         case 4: // fn call...
         {
+            node = node->nonTerm(0);
             Node *argList = node->nonTerm(0);
-            string name = Substr(ctx, node->nonTerm(1));
+            Node *nameNode = node->nonTerm(1);
+            string name = Substr(ctx, nameNode->nonTerm(0));
+            string provider = (nameNode->variant == 0 ? Substr(ctx, nameNode->nonTerm(1)) : ctx->provider);
             auto [attributes, attrCode] = getAttributeList(ctx, node->nonTerm(2), true);
             append(ops, attrCode);
             Node *outList = node->nonTerm(3);
@@ -763,6 +842,7 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             }
 
             /* create operation */
+            attributes["provider"] = provider;
             append(ops, {OP_CALL, args, attributes, node->start, node->end});
             freeAttributeTemps(ops, attributes);
 
@@ -964,7 +1044,7 @@ pair<vector<Operation>, int64_t> buildPrefixOperation(BuildContext *ctx, Node *n
                 }
                 case 3: // ~
                 {  
-                    int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
+                    int64_t tmp = newTemp(ctx, ctx->variables[pos]);
                     append(ops, {OP_BNOT, {tmp, pos}, {}, node->start, node->end}); 
                     freeTemp(ops, pos);
                     return {ops, tmp};
@@ -1164,6 +1244,12 @@ pair<vector<Operation>, int64_t> buildCompareOperation(BuildContext *ctx, Node *
         auto [t2, pos2] = buildAddOperation(ctx, node->nonTerm(id + 1));
         HANDLE_NOT_NULL(pos2, node->nonTerm(id + 1));
 
+        if (ctx->variables[pos]->provider != ctx->variables[pos2]->provider)
+        {
+            logError(ctx->filename, ctx->code, node->nonTerm(id + 0)->start, node->nonTerm(id + 0)->end, "Can't implictly compare %s and %s [providers differs]", printType(ctx->variables[pos]).c_str(), printType(ctx->variables[pos2]).c_str());
+            return {{}, -1};
+        }
+
         int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
 
         append(ops, t);
@@ -1211,6 +1297,13 @@ pair<vector<Operation>, int64_t> buildLogicOperation(BuildContext *ctx, Node *no
     {
         auto [t2, pos2] = buildCompareOperation(ctx, node->nonTerm(id + 1));
         HANDLE_NOT_NULL(pos2, node->nonTerm(id + 1));
+        
+        if (ctx->variables[pos]->provider != ctx->variables[pos2]->provider)
+        {
+            logError(ctx->filename, ctx->code, node->nonTerm(id + 0)->start, node->nonTerm(id + 0)->end, "Can't implictly compare %s and %s [providers differs]", printType(ctx->variables[pos]).c_str(), printType(ctx->variables[pos2]).c_str());
+            return {{}, -1};
+        }
+        
         int64_t tmp = newTemp(ctx, getBaseType(ctx, "i32"));
         switch_var(node->nonTerm(id + 0))
         {
@@ -1311,7 +1404,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                         }
                         else
                         {
-                            logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(type).c_str(), printType(dataType).c_str());
+                            logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(dataType).c_str(), printType(type).c_str());
                         }
                     }
                     else
@@ -1331,7 +1424,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                                 }
                                 else
                                 {
-                                    logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(type).c_str(), printType(dataType).c_str());
+                                    logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(dataType).c_str(), printType(type).c_str());
                                     break;
                                 }
                             }
@@ -1351,12 +1444,12 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                                 }
                                 else
                                 {
-                                    logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(type).c_str(), printType(dataType).c_str());
+                                    logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(dataType).c_str(), printType(type).c_str());
                                     break;
                                 }
                             }
                         }
-                        logError(ctx->filename, ctx->code, x->start, x->end, "this types are uncastable - push is wrong: %s to %s", printType(type).c_str(), printType(dataType).c_str());
+                        logError(ctx->filename, ctx->code, x->start, x->end, "this types are uncastable - push is wrong: %s to %s", printType(dataType).c_str(), printType(type).c_str());
                     }
                     break;
                 }
@@ -1437,7 +1530,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                 }
                 else
                 {
-                    logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(fldType).c_str(), printType(dataType).c_str());
+                    logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(dataType).c_str(), printType(fldType).c_str());
                 }
             }
             else
@@ -1458,7 +1551,7 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                         }
                         else
                         {
-                            logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(fldType).c_str(), printType(dataType).c_str());
+                            logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(dataType).c_str(), printType(fldType).c_str());
                             break;
                         }
                     }
@@ -1479,12 +1572,12 @@ pair<vector<Operation>, int64_t> buildSetOperation(BuildContext *ctx, Node *node
                         }
                         else
                         {
-                            logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(fldType).c_str(), printType(dataType).c_str());
+                            logError(ctx->filename, ctx->code, x->start, x->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(dataType).c_str(), printType(fldType).c_str());
                             break;
                         }
                     }
                 }
-                logError(ctx->filename, ctx->code, x->start, x->end, "this types are uncastable - push is wrong: %s to %s", printType(fldType).c_str(), printType(dataType).c_str());
+                logError(ctx->filename, ctx->code, x->start, x->end, "this types are uncastable - push is wrong: %s to %s", printType(dataType).c_str(), printType(fldType).c_str());
             }
             break;
         }
@@ -1823,20 +1916,20 @@ BuildContext *initializateContext(const char *filename, char *source, map<string
 
     /* add builtin types */
 
-    ctx->typeTable["i8"] = new TypeContext(1, TYPE_SCALAR, {._scalar={SCALAR_I8}});
-    ctx->typeTable["i16"] = new TypeContext(2, TYPE_SCALAR, {._scalar={SCALAR_I16}});
-    ctx->typeTable["i32"] = new TypeContext(4, TYPE_SCALAR, {._scalar={SCALAR_I32}});
-    ctx->typeTable["i64"] = new TypeContext(8, TYPE_SCALAR, {._scalar={SCALAR_I64}});
+    ctx->typeTable[{"i8", ""}] = new TypeContext(1, TYPE_SCALAR, "", {._scalar={SCALAR_I8}});
+    ctx->typeTable[{"i16", ""}] = new TypeContext(2, TYPE_SCALAR, "", {._scalar={SCALAR_I16}});
+    ctx->typeTable[{"i32", ""}] = new TypeContext(4, TYPE_SCALAR, "", {._scalar={SCALAR_I32}});
+    ctx->typeTable[{"i64", ""}] = new TypeContext(8, TYPE_SCALAR, "", {._scalar={SCALAR_I64}});
 
-    ctx->typeTable["u8"] = new TypeContext(1, TYPE_SCALAR, {._scalar={SCALAR_U8}});
-    ctx->typeTable["u16"] = new TypeContext(2, TYPE_SCALAR, {._scalar={SCALAR_U16}});
-    ctx->typeTable["u32"] = new TypeContext(4, TYPE_SCALAR, {._scalar={SCALAR_U32}});
-    ctx->typeTable["u64"] = new TypeContext(8, TYPE_SCALAR, {._scalar={SCALAR_U64}});
+    ctx->typeTable[{"u8", ""}] = new TypeContext(1, TYPE_SCALAR, "", {._scalar={SCALAR_U8}});
+    ctx->typeTable[{"u16", ""}] = new TypeContext(2, TYPE_SCALAR, "", {._scalar={SCALAR_U16}});
+    ctx->typeTable[{"u32", ""}] = new TypeContext(4, TYPE_SCALAR, "", {._scalar={SCALAR_U32}});
+    ctx->typeTable[{"u64", ""}] = new TypeContext(8, TYPE_SCALAR, "", {._scalar={SCALAR_U64}});
 
-    ctx->typeTable["f32"] = new TypeContext(4, TYPE_SCALAR, {._scalar={SCALAR_F32}});
-    ctx->typeTable["f64"] = new TypeContext(8, TYPE_SCALAR, {._scalar={SCALAR_F64}});
+    ctx->typeTable[{"f32", ""}] = new TypeContext(4, TYPE_SCALAR, "", {._scalar={SCALAR_F32}});
+    ctx->typeTable[{"f64", ""}] = new TypeContext(8, TYPE_SCALAR, "", {._scalar={SCALAR_F64}});
     
-    ctx->typeTable["object"] = new TypeContext(8, TYPE_CLASS, {._struct={}});
+    ctx->typeTable[{"object", ""}] = new TypeContext(8, TYPE_CLASS, "", {._struct={}});
 
     for (auto &[k, v] : ctx->typeTable)
     {
@@ -1880,6 +1973,14 @@ pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<No
         {
             /* skip empty node */
         }
+        else if (is(node->childs[0], "_using"))
+        {
+            string provider = Substr(ctx, node->childs[0]->nonTerm(0));
+            if (validateProviderWithError(ctx, node, provider))
+            {
+                ctx->provider = provider;
+            }
+        }
         else if (is(node->childs[0], "_record"))
         {
             processStructure(ctx, TYPE_RECORD, node->childs[0]);
@@ -1905,11 +2006,20 @@ pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<No
             logError(filename, source, node->childs[0]->start, "Unknown global node type: <%s>\n", node->childs[0]->rule->name);
         }
     }
+    ctx->provider = "";
     for (auto &node : nodes)
     {
         assert_type(node, "Global");
         assert(node->childs.size() == 1);
 
+        if (is(node->childs[0], "_using"))
+        {
+            string provider = Substr(ctx, node->childs[0]->nonTerm(0));
+            if (validateProviderWithError(ctx, node, provider))
+            {
+                ctx->provider = provider;
+            }
+        }
         if (is(node->childs[0], "worker"))
         {
             Node *code = node->childs[0]->nonTerm(4);

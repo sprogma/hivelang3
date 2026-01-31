@@ -1,10 +1,14 @@
 rule "Global" [
     v [S] [] []
+    v [_using] [] []
     v [_record] [] []
     v [_union] [] []
     v [_class] [] []
     v [worker] [] []
     v [worker_decl] [] []
+]
+rule "_using" [
+    v ["@"; identifer] [] []
 ]
 rule "_record" [
     v [Sn; "struct"; S; identifer; Sn; "{"] [var_declaration; Sn; ";"] [Sn; "}"]
@@ -17,8 +21,12 @@ rule "_class" [
 ]
 rule "var_type" [
     v [Sn; identifer] [var_type_moditifer] []
+    v [Sn; identifer; "@"; identifer] [var_type_moditifer] []
 ]
-rule "var_type_moditifer" [ // array indexes are fixed, not change this rule
+rule "var_type_moditifer" [
+    v [Sn; "[]"; Sn; "@"; identifer] [] []
+    v [Sn; "|"; Sn; "@"; identifer] [] []
+    v [Sn; "?"; Sn; "@"; identifer] [] []
     v [Sn; "[]"] [] []
     v [Sn; "|"] [] []
     v [Sn; "?"] [] []
@@ -151,8 +159,16 @@ rule "SimpleTerm" [
     v [Sn; integer] [] []
     v [Sn; float] [] []
     v [Sn; identifer] ["."; identifer] []
-    v [Sn; "("; call_arg_list; Sn; ")"; Sn; identifer; attribute_list; Sn; "("; call_result_list; Sn; ")"] [] []
+    v [Sn; function_call] [] []
     p [Sn; "("; expression; Sn; ")"] [] []
+]
+rule "function_call" [
+    v [Sn; "("; call_arg_list; Sn; ")"; function_name; attribute_list; Sn; "("; call_result_list; Sn; ")"] [] []
+    v [Sn; "("; call_arg_list; Sn; ")"; function_name; attribute_list; Sn; "("; call_result_list; Sn; ")"] [] []
+]
+rule "function_name" [
+    v [Sn; identifer; "@"; identifer] [] []
+    v [Sn; identifer] [] []
 ]
 rule "new_operator" [
     v [Sn; "new"; S; var_type; attribute_list; Sn; "("; call_arg_list; Sn; ")"] [] []

@@ -882,10 +882,10 @@ private:
 public:
     map<int64_t, int64_t> resultWorkerPositions;
     
-    void Build(BuildResult *input, const char *resultFileName) override 
+    pair<BYTE *, BYTE *> Build(BuildResult *input, BYTE *header, BYTE *body, int64_t bodyOffset) override 
     {
         ir = input;
-        printf("Building into %s\n", resultFileName);
+        printf("Building for x64\n");
 
         /* init build context */
         nextLabelId = 0;
@@ -897,13 +897,13 @@ public:
 
         /* build each worker */
         for (auto &[fn, id] : ir->workers) { idToWorker[id] = fn; }
-        for (auto &[fn, id] : ir->workers) { BuildFn(fn, id); }
+        for (auto &[fn, id] : ir->workers) { if (fn->used_providers.contains("x64")){BuildFn(fn, id);} }
 
         // add terminating zero
         printf("Code addressTable.\n");
         if (!assemblyEnd)
         {
-            return;
+            return {NULL, NULL};
         }
 
         for (BYTE *x = assemblyCode; x < assemblyEnd; ++x)
@@ -912,7 +912,7 @@ public:
         }
         printf("\n");
 
-        ExportToFile(resultFileName);
+        return ExportToFile(header, body, bodyOffset);
     }
 
 private:
@@ -1867,98 +1867,80 @@ private:
         }
     }
 
-    void ExportToFile(const char *filename)
+    pair<BYTE *, BYTE *> ExportToFile(BYTE *header, BYTE *body, int64_t bodyOffset)
     {
-        FILE *f = fopen(filename, "wb");
-
-        BYTE *buf = (BYTE *)malloc(1024 * 1024);
-        BYTE *buf_start = buf;
-        
-        /* generate prefix */
-        *buf++ = 'H'; *buf++ = 'I'; *buf++ = 'V'; *buf++ = 'E';
-        
-        *(uint64_t *)buf = 1; // version 0.1
-        buf += 8;
-        
-        /* generate header */
-        *(uint64_t *)buf = 0xBEBEBEBEBEBEBEBE; // version 0.1
-        buf += 8;
-
         /* add relocations */
         for (auto &[id, value] : runtimeApiHeader)
         {
-            *buf++ = id;
-            *(uint64_t *)buf = value.size();
-            buf += 8;
+            *header++ = id;
+            *(uint64_t *)header = value.size();
+            header += 8;
             for (auto &pos : value)
             {
-                *(uint64_t *)buf = pos.position;
-                buf += 8;
+                *(uint64_t *)header = (pos.position + bodyOffset);
+                header += 8;
             }
         }
-
         /* add dll import data */
         {
             for (auto &[id, data] : dllImportHeader)
             {
                 printf("Export dllimport data for worker %lld\n", id);
-                *buf++ = HEADER_ENTRY_DLL_IMPORT;
+                *header++ = HEADER_ENTRY_DLL_IMPORT;
                 /* export id */
-                *(uint64_t *)buf = id;
-                buf += 8;
+                *(uint64_t *)header = id;
+                header += 8;
                 /* export library name */
-                *(uint64_t *)buf = data.library.size();
-                buf += 8;
-                memcpy(buf, data.library.c_str(), data.library.size());
-                buf += data.library.size();
+                *(uint64_t *)header = data.library.size();
+                header += 8;
+                memcpy(header, data.library.c_str(), data.library.size());
+                header += data.library.size();
                 /* export function name */
-                *(uint64_t *)buf = data.entry.size();
-                buf += 8;
-                memcpy(buf, data.entry.c_str(), data.entry.size());
-                buf += data.entry.size();
+                *(uint64_t *)header = data.entry.size();
+                header += 8;
+                memcpy(header, data.entry.c_str(), data.entry.size());
+                header += data.entry.size();
                 /* export output size [base from promise] */
-                *(uint64_t *)buf = data.output;
-                buf += 8;
+                *(uint64_t *)header = data.output;
+                header += 8;
                 /* export inputs count */
-                *(uint64_t *)buf = data.inputs.size();
-                buf += 8;
+                *(uint64_t *)header = data.inputs.size();
+                header += 8;
                 /* export inputs */
                 for (auto &size : data.inputs)
                 {
-                    *(uint64_t *)buf = size;
-                    buf += 8;
+                    *(uint64_t *)header = size;
+                    header += 8;
                 }
             }
         }
-
         /* add workers positions */
         {
-            *buf++ = 16;
-            *(uint64_t *)buf = resultWorkerPositions.size();
-            buf += 8;
+            *header++ = 16;
+            *(uint64_t *)header = resultWorkerPositions.size();
+            header += 8;
             for (auto &[id, pos] : resultWorkerPositions)
             {
                 printf("Export worker %lld with offset %016llx\n", id, pos);
                 /* export id */
-                *(uint64_t *)buf = id;
-                buf += 8;
+                *(uint64_t *)header = id;
+                header += 8;
                 /* export position */
-                *(uint64_t *)buf = pos;
-                buf += 8;
+                *(uint64_t *)header = pos;
+                header += 8;
                 /* export input table size */
-                *(uint64_t *)buf = GetWorkerInputTableSize(id);
-                buf += 8;
+                *(uint64_t *)header = GetWorkerInputTableSize(id);
+                header += 8;
             }
         }
-
         /* add string table */
         {
-            *buf++ = 17;
+            *header++ = 17;
             // insert strings count
-            *(int64_t *)buf = ir->strings.size();
-            buf += 8;
+            *(int64_t *)header = ir->strings.size();
+            header += 8;
             // insert encoding [0x0=RAW]
-            *buf++ = 0x0;
+            *header++ = 0x0;
             // push data using encoding:
             int64_t total_size = 0;
             for (auto &k : ir->strings)
@@ -1966,46 +1948,37 @@ private:
                 total_size += k.size();
                 total_size += (8-(total_size)%8)%8;
             }
-            *(int64_t *)buf = total_size;
-            buf += 8;
+            *(int64_t *)header = total_size;
+            header += 8;
             // table [offset+size] + raw strings
             int64_t of = 0;
             for (auto &k : ir->strings)
             {
-                *(int64_t *)buf = of;
-                buf += 8;
-                *(int64_t *)buf = k.size();
-                buf += 8;
+                *(int64_t *)header = of;
+                header += 8;
+                *(int64_t *)header = k.size();
+                header += 8;
                 of += k.size();
                 of += (8-(of)%8)%8;
             }
-            BYTE *begin = buf;
+            BYTE *begin = header;
             for (auto &k : ir->strings)
             {
-                memcpy(buf, k.data(), k.size());
-                buf += k.size();
-                buf += (8-(buf-begin)%8)%8;
+                memcpy(header, k.data(), k.size());
+                header += k.size();
+                header += (8-(header-begin)%8)%8;
             }
             printf("Exported %lld strings used in sum %lld bytes\n", ir->strings.size(), of);
         }
         
-
-        /* fill header size */
-        *(uint64_t *)(buf_start + 12) = buf - buf_start;
-        
-
-        int64_t totalBytes = buf - buf_start + assemblyEnd - assemblyCode;
-        fwrite(buf_start, 1, buf - buf_start, f);
-        fwrite(assemblyCode, 1, assemblyEnd - assemblyCode, f);
-
-        fclose(f);
-
-        printf("%lld bytes written\n", totalBytes);
+        memcpy(body, assemblyCode, assemblyEnd - assemblyCode);
+        body += assemblyEnd - assemblyCode;
+        return {body, header};
     }
 };
 
 
-CodeAssembler *new_x64_win_Assembler()
+CodeAssembler *new_x64_Assembler()
 {
     return new WinX64Assembler();
 }

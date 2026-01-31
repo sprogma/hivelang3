@@ -158,13 +158,43 @@ int main(int argc, char **argv)
     {
         dumpIR(fn);
     }
+
+    /* generate workers for each provider */
+    FILE *o = fopen("res.bin", "wb");
+
+    BYTE *header = (BYTE *)malloc(1024 * 1024);
+    BYTE *header_start = header;
+    BYTE *body = (BYTE *)malloc(1024 * 1024);
+    BYTE *body_start = body;
+
+    *(uint64_t *)header = 3; // version 0.3
+    header += 8;
+    /* generate header */
+    *(uint64_t *)header = 0xBEBEBEBEBEBEBEBE;
+    header += 8;
+    /* generate prefix */
+    *header++ = 'H'; *header++ = 'I'; *header++ = 'V'; *header++ = 'E';
     
-    printf("Generating code for x64-win\n");
+    for (auto &name : newCode->used_providers)
+    {
+        if (name == "x64")
+        {
+            CodeAssembler *assembler = new_x64_Assembler();
+            tie(header, body) = assembler->Build(newCode, header, body, body - body_start);
+        }
+    }
 
-    CodeAssembler *assembler = new_x64_win_Assembler();
+    /* fill header size */
+    *(uint64_t *)(header_start + 12) = header - header_start;
 
-    assembler->Build(newCode, "res.bin");
 
+    int64_t totalBytes = (header - header_start) + (body - body_start);
+    fwrite(header_start, 1, header - header_start, o);
+    fwrite(body, 1, body - body_start, o);
+
+    fclose(o);
+
+    printf("%lld bytes written\n", totalBytes);
     printf("res.exe file generated\n");
 
     free(code);

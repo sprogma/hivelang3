@@ -51,6 +51,7 @@ struct TypeContext
 {
     int64_t size;
     TypeContextType type;
+    string provider;
     union
     {
         struct
@@ -86,6 +87,8 @@ struct TypeContext
         }
     }
 };
+
+inline constexpr auto IS_LINK_TYPE = is_one<TYPE_CLASS, TYPE_ARRAY, TYPE_PIPE, TYPE_PROMISE>;
 
 enum OperationType
 {
@@ -173,6 +176,8 @@ struct WorkerDeclarationContext
 
     int64_t code_start, code_end, code_block_end;
 
+    set<string> used_providers;
+
     ~WorkerDeclarationContext()
     {
         delete content;
@@ -191,6 +196,8 @@ struct BuildResult
     vector<vector<BYTE>> strings;
     int64_t nextWorkerId;
 
+    set<string> used_providers;
+
     ~BuildResult()
     {
         for (auto i : workers)
@@ -208,7 +215,7 @@ struct BuildContext
     
     const char *filename;
     char *code;
-    map<string, TypeContext *> typeTable;
+    map<pair<string, string>, TypeContext *> typeTable;
     vector<TypeContext *> types;
     map<string, int64_t> names;
     map<int64_t, TypeContext *> variables;
@@ -216,6 +223,8 @@ struct BuildContext
     int64_t nextVarId;
     int64_t nextTempId;
     BuildResult *result;
+
+    string provider;
     
     ~BuildContext() {
         for (auto &p : typeTable) delete p.second;
