@@ -93,207 +93,39 @@ macro LeaveCCode {
     pop r8
 }
 
-; rcx=size
-; rdx=offset
-; rdi=object
-; rsi=source/value
-fastPushObject:
-    ; TODO: add support of remote objects
 
-    if defined debugPrint
-    
-        EnterCCode
-
-        mov r12, rcx
-        mov r13, rdx
-        mov r14, rdi
-        mov r15, rsi
-        
-        lea rcx, [format_strA]
-        mov rdx, r14
-        mov r8, r13
-        call myPrintf
-        
-        lea rcx, [format_strB]
-        mov rdx, r15
-        mov r8, r12
-        call myPrintf
-
-        mov rcx, r12
-        mov rdx, r13
-        mov rdi, r14
-        mov rsi, r15
-        
-        LeaveCCode
-
-    end if
-
-    ; TODO: add fast arrays and their workaround here
-    ; extract return address
-    
-    ; save context
+macro CWrapper endpoint {
     StoreContext context
-    
     mov rax, [rsp]
     EnterCCode
-
-    sub rsp, 32 ; more shadow bytes for 2 registers
-
-    ; run C code
-
     mov r8, rax
     mov r9, rbp
-    call PushObject
-
-    add rsp, 32
-
-    LeaveCCode
-    ret
-
-
-; rcx=size
-; rdx=offset
-; rdi=object
-; rsi=source/value
-fastPushPipe:
-    ; save context
-    StoreContext context
-    
-    mov rax, [rsp]
-    EnterCCode
-
-    sub rsp, 32 ; more shadow bytes for 2 registers - unused
-
-    mov r8, rax
-    mov r9, rbp
-    call PushPipe
-
-    add rsp, 32
-
-    LeaveCCode
-    ret
-
-; reverse to fastPushObject
-; rsi=object
-; rdi=dest/value
-; rcx=size
-; rdx=offset
-fastQueryObject:    
-    ; TODO: add support of remote objects
-    
-    if defined debugPrint
-
-        EnterCCode
-
-        mov r12, rcx
-        mov r13, rdx
-        mov r14, rdi
-        mov r15, rsi
-        
-        lea rcx, [format_strC]
-        mov rdx, r14
-        mov r8, r15
-        call myPrintf
-        
-        lea rcx, [format_strD]
-        mov rdx, r13
-        mov r8, r12
-        call myPrintf
-
-        mov rcx, r12
-        mov rdx, r13
-        mov rdi, r14
-        mov rsi, r15
-        
-        LeaveCCode
-
-    end if
-
-    ; extract return address
-
-    ; save context
-    StoreContext context
-    
-    mov rax, [rsp]
-    EnterCCode
-
-    sub rsp, 32 ; more shadow bytes for 2 registers - unused
-
-    ; run C code
-    
-    mov r8, rax
-    mov r9, rbp
-    call QueryObject
+    call endpoint
     mov rdi, rax
-    
-    add rsp, 32
-    
     LeaveCCode
     ret
-    
-; reverse to fastPushObject
-; rsi=object
-; rdi=dest/value
-; rcx=size
-; rdx=offset
-fastQueryPipe:
-    ; save context
-    StoreContext context
-    
-    mov rax, [rsp]
-    EnterCCode
+}
 
-    sub rsp, 32 ; more shadow bytes for 2 registers - unused
-
-    ; run C code
-    
-    mov r8, rax
-    mov r9, rbp
-    call QueryPipe
-    mov rdi, rax
-    
-    add rsp, 32
-    
-    LeaveCCode
-    ret
-
-
-
-; for now, only enter c code and call new object - no fast version
-; so
-; rdi=type
-; rsi=size
-; rdx=param
-; result is in rax
-fastNewObject:
-    mov rcx, [rsp]
-    
-    StoreContext context
-    
-    EnterCCode
-
-    mov r8, rbp
-    
-    call NewObject
-
-    mov rdi, rax
-    
-    LeaveCCode
-
-    ret
-
-; rdx=workerId rsi=callTable rdi=parameter
-fastCallObject:
-    EnterCCode
-
-    mov rcx, rsi
-    mov r8, rdi
-
-    call CallObject
-
-    LeaveCCode
-    
-    ret
+; arguments:
+; fn(rdi, rsi, rdx, rcx, returnAddress, rbpValue)
+x64_fastPushObject:
+    CWrapper x64PushObject
+x64_fastQueryObject:
+    CWrapper x64QueryObject
+x64_fastNewObject:
+    CWrapper x64NewObject
+x64_fastCallObject:
+    CWrapper x64CallObject
+x64_fastPushPipe:
+    CWrapper x64PushPipe
+x64_fastQueryPipe:
+    CWrapper x64QueryPipe
+gpu_fastNewObject:
+    CWrapper gpuNewObject
+gpu_fastCallObject:
+    CWrapper gpuCallObject
+any_fastCastProvider:
+    CWrapper anyCastProvider
 
 ; c style function ExecuteWorker(void *address, int64_t rdi_value, void *rbp_value, void *context)
 ExecuteWorker:

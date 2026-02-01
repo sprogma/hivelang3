@@ -229,23 +229,13 @@ extern struct defined_array *defined_arrays;
 
 
 
-__attribute__((sysv_abi)) 
-int64_t QueryObject(void *destination, int64_t object, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
-__attribute__((sysv_abi))
-int64_t QueryPipe(void *destination, int64_t object_id, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
 
 void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue);
 int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue);
 
-__attribute__((sysv_abi))
-void PushObject(int64_t object, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
-__attribute__((sysv_abi))
-void PushPipe(int64_t object, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
 
 void UpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);
 
-__attribute__((sysv_abi))
-int64_t NewObject(int64_t type, int64_t size, int64_t param, void *returnAddress, void *rbpValue);
 
 int64_t GetNewObjectId(int64_t *result);
 void NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id);

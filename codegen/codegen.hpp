@@ -27,6 +27,19 @@ static inline bool AllowInlining(const string& name)
     return name == "x64";
 }
 
+static inline int64_t ProviderId(const string &name)
+{
+    if (name == "x64")
+    {
+        return 0;
+    }
+    if (name == "gpu")
+    {
+        return 1;
+    }
+    return -1;
+}
+
 
 enum header_id_action
 {
@@ -35,7 +48,7 @@ enum header_id_action
     ACTION_PUSH_PIPE,
     ACTION_QUERY_PIPE,
     ACTION_NEW_OBJECT,
-    ACTION_CAST_OBJECT,
+    ACTION_CAST_PROVIDER,
     ACTION_CALL_WORKER,
     HEADER_DLL_IMPORT,
     HEADER_X64_WORKERS,
@@ -59,7 +72,7 @@ static inline int8_t GetHeaderId(enum header_id_action action, const string &pro
             return (provider == "x64" ? 9 : 29);
         case ACTION_CALL_WORKER:
             return (provider == "x64" ? 3 : 23);
-        case ACTION_CAST_OBJECT:
+        case ACTION_CAST_PROVIDER:
             return 10;
         case HEADER_DLL_IMPORT:
             return 4;

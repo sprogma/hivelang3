@@ -207,7 +207,7 @@ void SheduleWorker(struct thread_data *lc_data)
         lc_data->prevPrint = now;
         lc_data->completedTasks = 0;
     }
-    
+
     // call next worker
     if (queue_len > 0)
     {
@@ -217,29 +217,29 @@ void SheduleWorker(struct thread_data *lc_data)
         --queue_len;
         struct queued_worker *copy = queue[queue_len];
         ReleaseSRWLockExclusive(&queue_lock);
-        log("Continue worker %lld from %p [rdi=%llx] [context=%p] [rbp=%p]\n", 
+        log("Continue worker %lld from %p [rdi=%llx] [context=%p] [rbp=%p]\n",
                 copy->id, copy->ptr, copy->rdiValue, copy->context, copy->rbpValue);
 
         lc_data->runningId = copy->id;
         if (Workers[copy->id].isDllCall)
         {
             // TODO: lock interrupts mutex
-            
+
             // prepare data
             struct dll_call_data *data = Workers[copy->id].ptr;
-            
+
             void *args = (void *)copy->rdiValue;
             int64_t result_promise_id = 0;
-            
+
             // TODO: remove 16 args limit [use alloca?]
             int64_t call_data[32] = {}, *cd;
             void *output = NULL;
             cd = call_data;
 
-            if (data->output_size != -1 && 
-                data->output_size != 1 && 
-                data->output_size != 2 && 
-                data->output_size != 4 && 
+            if (data->output_size != -1 &&
+                data->output_size != 1 &&
+                data->output_size != 2 &&
+                data->output_size != 4 &&
                 data->output_size != 8)
             {
                 *cd++ = (int64_t)output;
@@ -248,7 +248,7 @@ void SheduleWorker(struct thread_data *lc_data)
             {
                 output = __builtin_alloca(data->output_size);
             }
-            
+
             for (int64_t i = 0; i < data->sizes_len; ++i)
             {
                 switch (data->sizes[i])
@@ -329,8 +329,8 @@ void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
         {
             int64_t t = rnd % connections_len;
             log("Want run remote, but: %lld %lld [con=%p]\n", connections[t]->wait_list_len, connections[t]->queue_len, connections[t]);
-            if (connections[t]->outgoing != INVALID_SOCKET && 
-                ((connections[t]->wait_list_len < 50 && connections[t]->queue_len < 30) || 
+            if (connections[t]->outgoing != INVALID_SOCKET &&
+                ((connections[t]->wait_list_len < 50 && connections[t]->queue_len < 30) ||
                   connections[t]->queue_len == 0))
             {
                 StartNewWorkerRemote(connections[t], workerId, (IS_CALL_PARAM_GLOBAL_ID(global_id) ? global_id : 0), inputTable);
@@ -347,7 +347,7 @@ void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
     int64_t tableSize = Workers[workerId].inputSize;
     void *data = myMalloc(1024 + 2048);
     memcpy(data + 1024 - tableSize, inputTable, tableSize);
-    
+
     struct queued_worker *t = myMalloc(sizeof(*t));
     t->id = workerId;
     t->ptr = Workers[workerId].ptr;
@@ -399,7 +399,7 @@ enum relocation_type
 
     version
         i64 // = main_version * 1000 + low_version
-    
+
     header:
         i64 address of code
 
@@ -434,10 +434,43 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
     }
     memcpy(mem, file + codePosition, fileLength - codePosition);
     if (res_len) { *res_len = fileLength - codePosition; }
+
+
     /* read header */
     BYTE *pos = file + 20;
     while (pos < codePosition + file)
     {
+        ////// Possible header types:
+        //<<--Quote-->> from:../../../codegen/codegen.hpp:.*GetHeaderId.*\n?\{(?>[^{}]+|(?<o>\{)|(?<-o>\}))+(?(o)(?!))\}
+        // static inline int8_t GetHeaderId(enum header_id_action action, const string &provider="")
+        // {
+        //     switch (action)
+        //     {
+        //         case ACTION_NEW_OBJECT:
+        //             return (provider == "x64" ? 2 : 22);
+        //         case ACTION_PUSH_OBJECT:
+        //             return (provider == "x64" ? 0 : 20);
+        //         case ACTION_QUERY_OBJECT:
+        //             return (provider == "x64" ? 1 : 21);
+        //         case ACTION_PUSH_PIPE:
+        //             return (provider == "x64" ? 8 : 28);
+        //         case ACTION_QUERY_PIPE:
+        //             return (provider == "x64" ? 9 : 29);
+        //         case ACTION_CALL_WORKER:
+        //             return (provider == "x64" ? 3 : 23);
+        //         case ACTION_CAST_PROVIDER:
+        //             return 10;
+        //         case HEADER_DLL_IMPORT:
+        //             return 4;
+        //         case HEADER_X64_WORKERS:
+        //             return 16;
+        //         case HEADER_GPU_WORKERS:
+        //             return 18;
+        //         case HEADER_STRINGS_TABLE:
+        //             return 17;
+        //     }
+        // }
+        //<<--QuoteEnd-->>
         BYTE type = *pos++;
         switch (type)
         {
@@ -516,13 +549,13 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
 
                 HINSTANCE lib = LoadLibraryA(lib_name);
                 data->loaded_function = GetProcAddress(lib, entry);
-                
+
                 data->output_size = output_size;
                 data->sizes_len = sizes_len;
                 data->sizes = sizes;
                 data->call_stack_usage = 32 + 16 * (sizes_len < 4 ? 0 : (sizes_len - 4 + 1) / 2);
                 Workers[id] = (struct worker_info){1, data, totalSize};
-                
+
                 // log data
                 log("worker %lld is dll call of library %s %s -> result function is %p\n", id, lib_name, entry, data->loaded_function);
                 log("stack usage: %lld\n", data->call_stack_usage);
@@ -559,7 +592,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                 pos += 8;
                 // read data encoding
                 int8_t encoding = *pos++;
-                
+
                 defined_arrays = myMalloc(sizeof(*defined_arrays) * size);
                 switch (encoding)
                 {
@@ -624,10 +657,10 @@ int wmain(void)
 {
     ////////////////////////// loading stage
     init_lib();
-    
-    dwTlsIndex = TlsAlloc();    
 
-    
+    dwTlsIndex = TlsAlloc();
+
+
     HANDLE hFile = CreateFile(
         L"../../../res.bin",
         GENERIC_READ,
@@ -658,7 +691,7 @@ int wmain(void)
     );
 
     CloseHandle(hFile);
-    
+
     // load worker
     int64_t res_len = 0;
     void *res = LoadWorker(buf, len, &res_len);
@@ -667,7 +700,7 @@ int wmain(void)
         log("Error: at loading file\n");
         return 1;
     }
-    
+
     // print it
     for (int i = 0; i < res_len; ++i)
     {
@@ -678,10 +711,10 @@ int wmain(void)
 
 
     ////////////////////////// running stage
-    
+
     InitInternalStructures();
     start_remote_subsystem();
-    
+
     // run first worker with comand line arguments as i64 array
 
     int64_t inputLen = 0, connectingToMain = 0;
@@ -729,8 +762,8 @@ int wmain(void)
             print("Error: allocated array isn't local\n");
         }
         memcpy(obj, input, 8 * inputLen);
-        
-        
+
+
         while (resCodeId == 0)
         {
             resCodeId = NewObject(2, 4, 4, NULL, NULL);
@@ -746,21 +779,21 @@ int wmain(void)
 
         myFree(tbl);
     }
-        
+
     print("Running...\n");
 
     const int NUM_THREADS = 1;
 
     // TODO: make better program end determination
     (void)connectingToMain;
-    
+
     HANDLE hThreads[NUM_THREADS];
     DWORD threadId;
 
-    for (int64_t i = 0; i < NUM_THREADS; ++i) 
+    for (int64_t i = 0; i < NUM_THREADS; ++i)
     {
         hThreads[i] = CreateThread(NULL, 0, ShedulerInstance, (void *)i, 0, &threadId);
-        if (hThreads[i] == NULL) 
+        if (hThreads[i] == NULL)
         {
             print("Failed to create thread %lld\n", i);
             return 1;
@@ -783,9 +816,9 @@ int wmain(void)
             }
         }
     }
-    
-    TlsFree(dwTlsIndex);    
-    
+
+    TlsFree(dwTlsIndex);
+
     print("Program finished\n");
     struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);
     if (p == NULL)
@@ -803,7 +836,7 @@ int wmain(void)
             print("Press Ctrl+C to end\n");
             while (1){};
             #endif
-            
+
             ExitProcess(*(int *)p->data);
         }
         else
@@ -816,6 +849,6 @@ int wmain(void)
     print("Press Ctrl+C to end\n");
     while (1){};
     #endif
-    
+
     ExitProcess(1);
 }
