@@ -3,6 +3,7 @@
 #include <vector>
 #include <map>
 
+#include "../codegen/codegen.hpp"
 #include "../utils.hpp"
 #include "../ir.hpp"
 
@@ -87,6 +88,7 @@ public:
             if (fn->content == NULL) continue;
             for (int64_t i = 0; i < (int64_t)fn->content->code.size(); ++i)
             {
+                OperationBlock *node = fn->content->code[i];
                 if (fn->content->code[i]->type != OP_CALL) 
                 { continue; }
                 
@@ -105,7 +107,10 @@ public:
 
                 bool optimize = cost[wk] < agression || (calls[wk] == 1 && cost[wk] < agression * one_call_multipler);
                 
-                if (optimize && !wk->attributes.contains("noinline"))
+                if (optimize && 
+                    !wk->attributes.contains("noinline") && 
+                    !node->attributes.contains("noinline") &&
+                    AllowInlining(get<string>(node->attributes["provider"])))
                 {
                     cost[fn] += cost[wk];
                     

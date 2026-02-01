@@ -885,8 +885,6 @@ public:
     pair<BYTE *, BYTE *> Build(BuildResult *input, BYTE *header, BYTE *body, int64_t bodyOffset) override 
     {
         ir = input;
-        printf("Building for x64\n");
-
         /* init build context */
         nextLabelId = 0;
         addressTable.clear();
@@ -933,15 +931,8 @@ private:
     };
 
     // header key, value
-    #define HEADER_ENTRY_PUSH_OBJECT 0
-    #define HEADER_ENTRY_PUSH_PIPE 8
-    #define HEADER_ENTRY_QUERY_OBJECT 1
-    #define HEADER_ENTRY_QUERY_PIPE 9
-    #define HEADER_ENTRY_NEW_OBJECT 2
-    #define HEADER_ENTRY_CALL_OBJECT 3
     map<BYTE, vector<api_call_entry>> runtimeApiHeader;
     
-    #define HEADER_ENTRY_DLL_IMPORT 4
     // worker id -> vector of input sizes + output size
     struct dll_import_entry
     {
@@ -1367,12 +1358,27 @@ private:
                 }
                 else { InsertInteger(op, {7, 8}, 0); } // default run attribute
                 printRC(op, ASM_ADD_RC, {6, 8}, -callTableSize);
-                runtimeApiHeader[HEADER_ENTRY_CALL_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                runtimeApiHeader[GetHeaderId(ACTION_CALL_WORKER, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 break;
             }
                 
             case OP_CAST: 
-                InsertMove(op, op->data[0], op->data[1]);
+                // if provider is same [x64] - move, else - request cast from provider
+                if ((varType(op->data[0])->provider == "x64" && varType(op->data[1])->provider == "x64") ||
+                    (varType(op->data[0])->provider == "" && varType(op->data[0])->provider == ""))
+                {
+                    InsertMove(op, op->data[0], op->data[1]);
+                }
+                else
+                {
+                    // rdi=destination
+                    // rsi=object
+                    InsertInteger(op, {7, 8}, 0x05);
+                    InsertInteger(op, {6, 8}, op->data[1]);
+                    runtimeApiHeader[GetHeaderId(ACTION_CAST_OBJECT)].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    InsertMove(op, Register(op->data[0]), {7, 8}, false);
+                    break;
+                }
                 break;
                 
             case OP_MOV: 
@@ -1395,7 +1401,7 @@ private:
                 InsertInteger(op, {7, 8}, 0x05);
                 InsertInteger(op, {6, 8}, op->data[1]);
                 InsertInteger(op, {2, 8}, varType(op->data[0])->_vector.base->size);
-                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                runtimeApiHeader[GetHeaderId(ACTION_NEW_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 break;
             }
@@ -1408,7 +1414,7 @@ private:
                 ExternTo64Bit(op, Register(op->data[1]), isSigned(op->data[1]));
                 printRRC(op, ASM_IMUL_RRC, {6, 8}, Register(op->data[1], 8), varType(op->data[0])->_vector.base->size);
                 InsertInteger(op, {2, 8}, varType(op->data[0])->_vector.base->size);
-                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                runtimeApiHeader[GetHeaderId(ACTION_NEW_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 break;
             }
@@ -1420,7 +1426,7 @@ private:
                 InsertInteger(op, {7, 8}, 0x02);
                 InsertInteger(op, {6, 8}, varType(op->data[0])->_vector.base->size);
                 InsertMove(op, {2, 8}, {6, 8}, false);
-                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                runtimeApiHeader[GetHeaderId(ACTION_NEW_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 break;
             }
@@ -1433,7 +1439,7 @@ private:
                 InsertInteger(op, {7, 8}, 0x04);
                 InsertInteger(op, {6, 8}, cls_size);
                 InsertMove(op, {2, 8}, {6, 8}, false);
-                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                runtimeApiHeader[GetHeaderId(ACTION_NEW_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 break;
             }
@@ -1445,7 +1451,7 @@ private:
                 InsertInteger(op, {7, 8}, 0x01);
                 InsertInteger(op, {6, 8}, varType(op->data[0])->_vector.base->size);
                 InsertMove(op, {2, 8}, {6, 8}, false);
-                runtimeApiHeader[HEADER_ENTRY_NEW_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                runtimeApiHeader[GetHeaderId(ACTION_NEW_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 break;
             }
@@ -1470,7 +1476,7 @@ private:
                     if (op->data[2] != 0) { printRC(op, ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertMove(op, {7, 8}, Register(op->data[0]), false);
                     InsertMove(op, {6, 8}, Register(op->data[4]), false);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_PUSH_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 else
                 {
@@ -1480,7 +1486,7 @@ private:
                     if (op->data[2] != 0) { printRC(op, ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertMove(op, {7, 8}, Register(op->data[0]), false);
                     InsertInteger(op, {6, 8}, memTable[op->data[4]]);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_PUSH_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1495,7 +1501,7 @@ private:
                     InsertInteger(op, {2, 8}, 0);
                     InsertMove(op, {7, 8}, Register(op->data[0]), false);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_PUSH_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 else
                 {
@@ -1503,7 +1509,7 @@ private:
                     InsertInteger(op, {2, 8}, 0);
                     InsertMove(op, {7, 8}, Register(op->data[0]), false);
                     InsertInteger(op, {6, 8}, memTable[op->data[1]]);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_PUSH_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1518,7 +1524,7 @@ private:
                     InsertInteger(op, {2, 8}, 0);
                     InsertMove(op, {7, 8}, Register(op->data[0]), false);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_PIPE].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_PUSH_PIPE, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 else
                 {
@@ -1526,7 +1532,7 @@ private:
                     InsertInteger(op, {2, 8}, 0);
                     InsertMove(op, {7, 8}, Register(op->data[0]), false);
                     InsertInteger(op, {6, 8}, memTable[op->data[1]]);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_PIPE].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_PUSH_PIPE, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1541,7 +1547,7 @@ private:
                     InsertInteger(op, {2, 8}, op->data[1]);
                     InsertMove(op, {7, 8}, Register(op->data[0]), false);
                     InsertMove(op, {6, 8}, Register(op->data[3]), false);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_PUSH_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 else
                 {
@@ -1549,7 +1555,7 @@ private:
                     InsertInteger(op, {2, 8}, op->data[1]);
                     InsertMove(op, {7, 8}, Register(op->data[0]), false);
                     InsertInteger(op, {6, 8}, memTable[op->data[4]]);
-                    runtimeApiHeader[HEADER_ENTRY_PUSH_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_PUSH_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1575,7 +1581,7 @@ private:
                     printRRC(op, ASM_IMUL_RRC, {2, 8}, Register(op->data[4], 8), varType(op->data[1])->_vector.base->size);
                     if (op->data[2] != 0) { printRC(op, ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_QUERY_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                     InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1586,7 +1592,7 @@ private:
                     if (op->data[2] != 0) { printRC(op, ASM_ADD_RC, {2, 8}, op->data[2]); }
                     InsertInteger(op, {7, 8}, memTable[op->data[0]]);
                     InsertMove(op, {6, 8}, Register(op->data[4]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_QUERY_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1600,7 +1606,7 @@ private:
                     InsertInteger(op, {1, 8}, -varSize(op->data[0]));
                     InsertInteger(op, {2, 8}, -16);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_QUERY_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                     InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1609,7 +1615,7 @@ private:
                     InsertInteger(op, {2, 8}, -16);
                     InsertInteger(op, {7, 8}, memTable[op->data[0]]);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_QUERY_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1623,7 +1629,7 @@ private:
                     InsertInteger(op, {1, 8}, -varSize(op->data[0]));
                     InsertInteger(op, {2, 8}, 0);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_QUERY_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                     InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1632,7 +1638,7 @@ private:
                     InsertInteger(op, {2, 8}, 0);
                     InsertInteger(op, {7, 8}, memTable[op->data[0]]);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_QUERY_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1646,7 +1652,7 @@ private:
                     InsertInteger(op, {1, 8}, -varSize(op->data[0]));
                     InsertInteger(op, {2, 8}, op->data[2]);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_QUERY_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                     InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1655,7 +1661,7 @@ private:
                     InsertInteger(op, {2, 8}, op->data[2]);
                     InsertInteger(op, {7, 8}, memTable[op->data[0]]);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_OBJECT].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_QUERY_OBJECT, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1669,7 +1675,7 @@ private:
                     InsertInteger(op, {1, 8}, -varSize(op->data[0]));
                     InsertInteger(op, {2, 8}, 0);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_PIPE].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_QUERY_PIPE, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                     InsertMove(op, Register(op->data[0]), {7, 8}, false);
                 }
                 else
@@ -1678,7 +1684,7 @@ private:
                     InsertInteger(op, {2, 8}, 0);
                     InsertInteger(op, {7, 8}, memTable[op->data[0]]);
                     InsertMove(op, {6, 8}, Register(op->data[1]), false);
-                    runtimeApiHeader[HEADER_ENTRY_QUERY_PIPE].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                    runtimeApiHeader[GetHeaderId(ACTION_QUERY_PIPE, get<string>(op->attributes["provider"]))].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                 }
                 break;
             }
@@ -1886,7 +1892,7 @@ private:
             for (auto &[id, data] : dllImportHeader)
             {
                 printf("Export dllimport data for worker %lld\n", id);
-                *header++ = HEADER_ENTRY_DLL_IMPORT;
+                *header++ = GetHeaderId(HEADER_DLL_IMPORT);
                 /* export id */
                 *(uint64_t *)header = id;
                 header += 8;
@@ -1914,9 +1920,9 @@ private:
                 }
             }
         }
-        /* add workers positions */
+        /* add x64 workers positions */
         {
-            *header++ = 16;
+            *header++ = GetHeaderId(HEADER_X64_WORKERS);
             *(uint64_t *)header = resultWorkerPositions.size();
             header += 8;
             for (auto &[id, pos] : resultWorkerPositions)
@@ -1935,7 +1941,7 @@ private:
         }
         /* add string table */
         {
-            *header++ = 17;
+            *header++ = GetHeaderId(HEADER_STRINGS_TABLE);
             // insert strings count
             *(int64_t *)header = ir->strings.size();
             header += 8;
@@ -1973,7 +1979,7 @@ private:
         
         memcpy(body, assemblyCode, assemblyEnd - assemblyCode);
         body += assemblyEnd - assemblyCode;
-        return {body, header};
+        return {header, body};
     }
 };
 

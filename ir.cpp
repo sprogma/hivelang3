@@ -843,6 +843,8 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
 
             /* create operation */
             attributes["provider"] = provider;
+            fn->used_providers.insert(provider);
+            ctx->result->used_providers.insert(provider);
             append(ops, {OP_CALL, args, attributes, node->start, node->end});
             freeAttributeTemps(ops, attributes);
 
@@ -1900,6 +1902,12 @@ void addWorkerDefinition(BuildContext *ctx, Node *node, bool with_code)
 
     wk->name = Substr(ctx, node->nonTerm(2));
 
+    if (wk->attributes.contains("entry"))
+    {
+        wk->used_providers.insert(ctx->entryProvider);
+        ctx->result->used_providers.insert(ctx->entryProvider);
+    }
+
     printf("Worker %s declaration generated\n", wk->name.data());
 
     ctx->result->workers[wk] = ctx->result->nextWorkerId++;
@@ -1955,7 +1963,7 @@ Node *compressNode(Node *x)
 }
 
 
-pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<Node *>nodes, map<string, string> configs)
+pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<Node *>nodes, map<string, string> configs, string entryProvider)
 {
     /* compress AST tree */
     for (auto &node : nodes)
@@ -1964,6 +1972,7 @@ pair<BuildResult *, bool> buildAst(const char *filename, char *source, vector<No
         dumpAst(node);
     }
     BuildContext *ctx = initializateContext(filename, source, configs);
+    ctx->entryProvider = entryProvider;
     for (auto &node : nodes)
     {
         assert_type(node, "Global");

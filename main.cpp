@@ -122,7 +122,7 @@ int main(int argc, char **argv)
     printf("Convering...\n");
     /* convert to intermediate language */
 
-    auto [Code, error2] = buildAst(filename, code, nodes, configs);
+    auto [Code, error2] = buildAst(filename, code, nodes, configs, "x64");
 
     if (error2)
     {
@@ -167,20 +167,32 @@ int main(int argc, char **argv)
     BYTE *body = (BYTE *)malloc(1024 * 1024);
     BYTE *body_start = body;
 
+    /* generate prefix */
+    *header++ = 'H'; *header++ = 'I'; *header++ = 'V'; *header++ = 'E';
+    
     *(uint64_t *)header = 3; // version 0.3
     header += 8;
     /* generate header */
     *(uint64_t *)header = 0xBEBEBEBEBEBEBEBE;
     header += 8;
-    /* generate prefix */
-    *header++ = 'H'; *header++ = 'I'; *header++ = 'V'; *header++ = 'E';
     
     for (auto &name : newCode->used_providers)
     {
+        printf("Building for <%s>\n", name.c_str());
         if (name == "x64")
         {
             CodeAssembler *assembler = new_x64_Assembler();
             tie(header, body) = assembler->Build(newCode, header, body, body - body_start);
+        }
+        else if (name == "gpu")
+        {
+            CodeAssembler *assembler = new_gpu_Assembler();
+            tie(header, body) = assembler->Build(newCode, header, body, body - body_start);
+        }
+        else
+        {
+            printf("Error: UNKNOWN PROVIDER: %s\n", name.c_str());
+            return 1;
         }
     }
 
@@ -190,7 +202,7 @@ int main(int argc, char **argv)
 
     int64_t totalBytes = (header - header_start) + (body - body_start);
     fwrite(header_start, 1, header - header_start, o);
-    fwrite(body, 1, body - body_start, o);
+    fwrite(body_start, 1, body - body_start, o);
 
     fclose(o);
 
