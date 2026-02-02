@@ -24,10 +24,9 @@
 // // rsi=call table
 // // rdx=worker id
 // case OP_CAST:
-// // rdi=destination
-// // rsi=object
-// // rdx=toID
-// // rcx=fromID
+// // rdi=object
+// // rsi=toID
+// // rdx=fromID
 // case OP_NEW_INT:
 // case OP_NEW_FLOAT:
 // case OP_NEW_STRING:
@@ -104,7 +103,6 @@ void    x64CallObject   (int64_t moditifer,   BYTE *args,        int64_t workerI
 __attribute__((sysv_abi))
 void    gpuCallObject   (int64_t moditifer,   BYTE *args,        int64_t workerId,  int64_t _,     void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
-int64_t anyCastProvider (int64_t idA,         int64_t idB,       int64_t typeA,     int64_t typeB, void *returnAddress, void *rbpValue);
-
+int64_t anyCastProvider (void *obj,           int64_t to,        int64_t from,      int64_t _,     void *returnAddress, void *rbpValue);
 
 #endif

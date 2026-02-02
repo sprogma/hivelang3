@@ -1334,7 +1334,7 @@ private:
                 // rdi="on" parameter
                 // rsi=call table
                 // rdx=worker id
-                InsertInteger(op, {2, 8}, op->data[0]);
+                InsertInteger(op, {2, 8}, GetExportWorkerId(ir, op->data[0], get<string>(op->attributes["provider"])));
                 InsertMove(op, {6, 8}, {5, 8}, false);
                 if (op->attributes.contains("on"))
                 {
@@ -1370,14 +1370,12 @@ private:
                 }
                 else
                 {
-                    // rdi=destination
-                    // rsi=object
-                    // rdx=toID
-                    // rcx=fromID
-                    InsertInteger(op, {7, 8}, 0x05);
-                    InsertInteger(op, {6, 8}, op->data[1]);
-                    InsertInteger(op, {2, 8}, ProviderId(varType(op->data[0])->provider));
-                    InsertInteger(op, {1, 8}, ProviderId(varType(op->data[1])->provider));
+                    // rdi=object
+                    // rsi=toID
+                    // rdx=fromID
+                    InsertInteger(op, {7, 8}, op->data[1]);
+                    InsertInteger(op, {6, 8}, ProviderId(varType(op->data[0])->provider));
+                    InsertInteger(op, {2, 8}, ProviderId(varType(op->data[1])->provider));
                     runtimeApiHeader[GetHeaderId(ACTION_CAST_PROVIDER)].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                     InsertMove(op, Register(op->data[0]), {7, 8}, false);
                     break;
@@ -1930,12 +1928,12 @@ private:
             header += 8;
             for (auto &[id, pos] : resultWorkerPositions)
             {
-                printf("Export worker %lld with offset %016llx\n", id, pos);
+                printf("Export worker %lld with offset %016llx\n", GetExportWorkerId(ir, id, "x64"), pos + bodyOffset);
                 /* export id */
-                *(uint64_t *)header = id;
+                *(uint64_t *)header = GetExportWorkerId(ir, id, "x64");
                 header += 8;
                 /* export position */
-                *(uint64_t *)header = pos;
+                *(uint64_t *)header = pos + bodyOffset;
                 header += 8;
                 /* export input table size */
                 *(uint64_t *)header = GetWorkerInputTableSize(id);

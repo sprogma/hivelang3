@@ -9,12 +9,28 @@
 #include "windows.h"
 
 #include "runtime_lib.h"
+#include "runtime_api.h"
 #include "remote.h"
 #include "runtime.h"
+
+#include "providers.h"
+
+#include "x64/x64.h"
+#include "gpu/gpu.h"
 
 struct defined_array *defined_arrays;
 
 struct worker_info Workers[100] = {};
+struct hive_provider_info Providers[] = {
+    {
+        .ExecuteWorker=x64ExecuteWorker,
+        .UpdateWaitingWorker=x64UpdateWaitingWorker,
+    },
+    {
+        .ExecuteWorker=gpuExecuteWorker,
+        .UpdateWaitingWorker=gpuUpdateWaitingWorker,
+    }
+};
 
 DWORD dwTlsIndex;
 
@@ -26,6 +42,49 @@ SRWLOCK queue_lock = SRWLOCK_INIT;
 struct queued_worker *queue[10000];
 _Atomic int64_t queue_len = 0;
 
+void RegisterObjectWithId(int64_t id, void *object)
+{
+    SetHashtable(&local_objects, (BYTE *)&id, 8, (int64_t)object);
+}
+
+int64_t GetNewObjectId(int64_t *result)
+{
+    int64_t remote_id = 0, set = 0;
+    AcquireSRWLockShared(&pages_lock);
+    for (int64_t i = 0; i < pages_len; ++i)
+    {
+        if (pages[i].next_allocated_id < OBJECTS_PER_PAGE)
+        {
+            int64_t t = pages[i].next_allocated_id++;
+            if (t < OBJECTS_PER_PAGE)
+            {
+                remote_id = (pages[i].id << 24) | t;
+                set = 1;
+                break;
+            }
+        }
+    }
+    ReleaseSRWLockShared(&pages_lock);
+
+    *result = remote_id;
+    return set;
+}
+
+void universalUpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source)
+{
+    struct object *objj = (void *)((int64_t)obj - DATA_OFFSET(*objj));
+    switch (objj->provider)
+    {
+        case PROVIDER_X64: x64UpdateLocalPush(obj, offset, size, source); break;
+    }
+}
+
+void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue)
+{
+    (void)object_id;
+    (void)offset;
+    memcpy((size < 0 ? rdiValue : destination), result_data, myAbs(size));
+}
 
 void PrintObject(struct object *object_ptr)
 {
@@ -33,7 +92,7 @@ void PrintObject(struct object *object_ptr)
     switch (ptr[-1])
     {
         case OBJECT_PROMISE:
-            log("Promise(set=%02x, first4bytes=", ptr[-2]);
+            log("Promise(set=%02x, first4bytes=", ptr[-3]);
             for (int i = 0; i < 4; ++i)
                 log("%02x ", ptr[i]);
             log(")\n");
@@ -72,7 +131,7 @@ void WaitListWorker(struct waiting_worker *t)
     wait_list[wait_list_len++] = t;
     int64_t c = (t->waiting_data->type == WAITING_QUERY ? ((struct waiting_query *)t->waiting_data)->offset : ((struct waiting_push *)t->waiting_data)->offset);
     int64_t d = (t->waiting_data->type == WAITING_QUERY ? ((struct waiting_query *)t->waiting_data)->object_id : ((struct waiting_push *)t->waiting_data)->object_id);
-    log("Worker add to wait list [id=%lld next=%p offset=%lld object=%lld]\n", t->id, t->ptr, c, d);
+    log("Worker add to wait list [id=%lld data=%p offset=%lld object=%lld]\n", t->id, t->data, c, d);
     ReleaseSRWLockExclusive(&wait_list_lock);
 }
 
@@ -80,7 +139,7 @@ void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
 {
     struct queued_worker *t = myMalloc(sizeof(*t));
     t->id = w->id;
-    t->ptr = w->ptr;
+    t->data = w->data;
     t->rbpValue = w->rbpValue;
     t->rdiValue = rdi_value;
     memcpy(t->context, w->context, sizeof(t->context));
@@ -91,7 +150,7 @@ void EnqueueWorker(struct queued_worker *t)
 {
     AcquireSRWLockExclusive(&queue_lock);
     queue[queue_len++] = t;
-    log("Worker enqueued [id=%lld, next=%p]\n", t->id, t->ptr);
+    log("Worker enqueued [id=%lld, data=%p]\n", t->id, t->data);
     ReleaseSRWLockExclusive(&queue_lock);
 }
 
@@ -107,81 +166,14 @@ void UpdateWaitingWorkers()
     for (int i = 0; i < wait_list_len; ++i)
     {
         struct waiting_worker *w = wait_list[i];
-        log("waiting type %lld\n", (int64_t)w->waiting_data->type);
-        switch (w->waiting_data->type)
+        int64_t rdiValue = 0;
+        if (Providers[Workers[w->id].provider].UpdateWaitingWorker(w, ticks, &rdiValue))
         {
-            case WAITING_PUSH:
-            {
-                struct waiting_push *cause = (struct waiting_push *)w->waiting_data;
-                struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&cause->object_id, 8, 0);
-                if (obj == 0)
-                {
-                    // remote object, repeat request, with timeout
-                    log("waiting for remote push %lld/%lld\n", ticks, cause->repeat_timeout);
-                    if (ticks > cause->repeat_timeout)
-                    {
-                        RequestObjectSet(cause->object_id, cause->offset, myAbs(cause->size), cause->data);
-                        cause->repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT);
-                    }
-                    break;
-                }
-                else
-                {
-                    log("ERROR: waiting for push to local\n");
-                    break;
-                }
-                break;
-            }
-            case WAITING_QUERY:
-            {
-                struct waiting_query *cause = (struct waiting_query *)w->waiting_data;
-                struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&cause->object_id, 8, 0);
-                if (obj == 0)
-                {
-                    // remote object, repeat request, with timeout
-                    log("waiting for remote query %lld/%lld\n", ticks, cause->repeat_timeout);
-                    if (ticks > cause->repeat_timeout)
-                    {
-                        RequestObjectGet(cause->object_id, cause->offset, myAbs(cause->size));
-                        cause->repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT);
-                    }
-                    break;
-                }
-                else
-                {
-                    log("waiting for local %lld\n", cause->object_id);
-                    int64_t rdiValue;
-                    if (QueryLocalObject(cause->destination, obj, cause->offset, cause->size, &rdiValue))
-                    {
-                        EnqueueWorkerFromWaitList(w, rdiValue);
-                        myFree(cause);
-                        myFree(w);
-                        wait_list[i] = wait_list[--wait_list_len];
-                        i--;
-                        break;
-                    }
-                    break;
-                }
-                break;
-            }
-            case WAITING_TIMER:
-                print("NOT IMPLEMENTED WAITING_TIMER\n"); break;
-            case WAITING_PAGES:
-            {
-                struct waiting_pages *cause = (struct waiting_pages *)w->waiting_data;
-                int64_t new_id;
-                if (GetNewObjectId(&new_id))
-                {
-                    NewObjectUsingPage(cause->obj_type, cause->size, cause->param, new_id);
-                    EnqueueWorkerFromWaitList(w, new_id);
-                    myFree(cause);
-                    myFree(w);
-                    wait_list[i] = wait_list[--wait_list_len];
-                    i--;
-                    break;
-                }
-                break;
-            }
+            EnqueueWorkerFromWaitList(w, rdiValue);
+            myFree(w);
+            wait_list[i] = wait_list[--wait_list_len];
+            i--;
+            break;
         }
     }
     ReleaseSRWLockExclusive(&wait_list_lock);
@@ -217,99 +209,85 @@ void SheduleWorker(struct thread_data *lc_data)
         --queue_len;
         struct queued_worker *copy = queue[queue_len];
         ReleaseSRWLockExclusive(&queue_lock);
-        log("Continue worker %lld from %p [rdi=%llx] [context=%p] [rbp=%p]\n",
-                copy->id, copy->ptr, copy->rdiValue, copy->context, copy->rbpValue);
-
+        log("Continue worker %lld from data=%p [rdi=%llx] [context=%p] [rbp=%p]\n",
+                copy->id, copy->data, copy->rdiValue, copy->context, copy->rbpValue);
         lc_data->runningId = copy->id;
-        if (Workers[copy->id].isDllCall)
-        {
-            // TODO: lock interrupts mutex
-
-            // prepare data
-            struct dll_call_data *data = Workers[copy->id].ptr;
-
-            void *args = (void *)copy->rdiValue;
-            int64_t result_promise_id = 0;
-
-            // TODO: remove 16 args limit [use alloca?]
-            int64_t call_data[32] = {}, *cd;
-            void *output = NULL;
-            cd = call_data;
-
-            if (data->output_size != -1 &&
-                data->output_size != 1 &&
-                data->output_size != 2 &&
-                data->output_size != 4 &&
-                data->output_size != 8)
-            {
-                *cd++ = (int64_t)output;
-            }
-            else if (data->output_size != -1)
-            {
-                output = __builtin_alloca(data->output_size);
-            }
-
-            for (int64_t i = 0; i < data->sizes_len; ++i)
-            {
-                switch (data->sizes[i])
-                {
-                    case 1:
-                    case 2:
-                    case 4:
-                    case 8:
-                    {
-                        *cd = 0;
-                        memcpy(cd, args, data->sizes[i]);
-                        cd++;
-                        break;
-                    }
-                    default:
-                    {
-                        *cd++ = (int64_t)args;
-                        break;
-                    }
-                }
-                args += data->sizes[i];
-            }
-
-            if (data->output_size != -1)
-            {
-                result_promise_id = *(int64_t*)args;
-                args += 8;
-            }
-
-            log("calling worker %lld\n", lc_data->runningId);
-            for (int64_t i = 0; i < data->sizes_len; ++i)
-            {
-                log("ARG[%lld] = %lld\n", i, call_data[i]);
-            }
-            log("output is %p [->to promise %lld]\n", output, result_promise_id);
-
-            DllCall(copy->ptr, call_data, output);
-
-            log("returned + Error=%lld\n", (int64_t)GetLastError());
-
-            if (output != NULL)
-            {
-                RequestObjectSet(result_promise_id, 0, data->output_size, output);
-            }
-        }
-        else
-        {
-            // log("context=");
-            // for (int64_t i = 0; i < (int64_t)sizeof(copy->context); ++i)
-            // {
-            //     log("%02x ", ((BYTE *)copy->context)[i]);
-            // }
-            // log("\n");
-            ExecuteWorker(
-                copy->ptr,
-                copy->rdiValue,
-                copy->rbpValue,
-                (BYTE *)copy->context
-            );
-        }
+        print("copy(%p)=queue[%lld]=%p\n", copy, queue_len, queue[queue_len]);
+        Providers[Workers[copy->id].provider].ExecuteWorker(copy);
+        // TODO: check if this doesn't break anything, and uncomment this
         // myFree(copy);
+//         {
+//             // TODO: lock interrupts mutex
+// 
+//             // prepare data
+//             struct dll_call_data *data = Workers[copy->id].ptr;
+// 
+//             void *args = (void *)copy->rdiValue;
+//             int64_t result_promise_id = 0;
+// 
+//             // TODO: remove 16 args limit [use alloca?]
+//             int64_t call_data[32] = {}, *cd;
+//             void *output = NULL;
+//             cd = call_data;
+// 
+//             if (data->output_size != -1 &&
+//                 data->output_size != 1 &&
+//                 data->output_size != 2 &&
+//                 data->output_size != 4 &&
+//                 data->output_size != 8)
+//             {
+//                 *cd++ = (int64_t)output;
+//             }
+//             else if (data->output_size != -1)
+//             {
+//                 output = __builtin_alloca(data->output_size);
+//             }
+// 
+//             for (int64_t i = 0; i < data->sizes_len; ++i)
+//             {
+//                 switch (data->sizes[i])
+//                 {
+//                     case 1:
+//                     case 2:
+//                     case 4:
+//                     case 8:
+//                     {
+//                         *cd = 0;
+//                         memcpy(cd, args, data->sizes[i]);
+//                         cd++;
+//                         break;
+//                     }
+//                     default:
+//                     {
+//                         *cd++ = (int64_t)args;
+//                         break;
+//                     }
+//                 }
+//                 args += data->sizes[i];
+//             }
+// 
+//             if (data->output_size != -1)
+//             {
+//                 result_promise_id = *(int64_t*)args;
+//                 args += 8;
+//             }
+// 
+//             log("calling worker %lld\n", lc_data->runningId);
+//             for (int64_t i = 0; i < data->sizes_len; ++i)
+//             {
+//                 log("ARG[%lld] = %lld\n", i, call_data[i]);
+//             }
+//             log("output is %p [->to promise %lld]\n", output, result_promise_id);
+// 
+//             DllCall(copy->ptr, call_data, output);
+// 
+//             log("returned + Error=%lld\n", (int64_t)GetLastError());
+// 
+//             if (output != NULL)
+//             {
+//                 RequestObjectSet(result_promise_id, 0, data->output_size, output);
+//             }
+//         }
     }
     UpdateWaitingWorkers();
 }
@@ -350,29 +328,13 @@ void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
 
     struct queued_worker *t = myMalloc(sizeof(*t));
     t->id = workerId;
-    t->ptr = Workers[workerId].ptr;
+    t->data = Workers[workerId].data;
     t->rdiValue = (int64_t)data + 1024 - tableSize;
     t->rbpValue = (BYTE *)data + 1024;
     memset(t->context, 0, sizeof(t->context));
 
     EnqueueWorker(t);
 }
-
-void CallObject(BYTE *param, int64_t workerId, int64_t moditifer)
-{
-    int64_t tableSize = Workers[workerId].inputSize;
-
-    log("Calling worker %lld [data=%p, mod=%lld]\n", workerId, param, moditifer);
-    log("Table = ");
-    for (int64_t i = 0; i < tableSize; ++i)
-    {
-        log("%02x ", param[i]);
-    }
-    log("\n");
-
-    StartNewWorker(workerId, moditifer, param);
-}
-
 
 
 enum relocation_type
@@ -410,8 +372,8 @@ enum relocation_type
         raw bytes
 
 */
-void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
-{
+void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *ProcessEntryId)
+{    
     /* read prefix */
     if (file[0] != 'H' || file[1] != 'I' || file[2] != 'V' || file[3] != 'E')
     {
@@ -474,16 +436,24 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
         BYTE type = *pos++;
         switch (type)
         {
-            case 0: // PushObject
-            case 1: // QueryObject
-            case 2: // NewObject
-            case 3: // CallObject
-            case 8: // PushPipe
-            case 9: // QueryPipe
+            case 0:
+            case 20:
+            case 1:
+            case 21:
+            case 2:
+            case 22:
+            case 3:
+            case 23:
+            case 8:
+            case 28:
+            case 9:
+            case 29:
+            case 10:
             {
                 // read positions and replace calls
                 int64_t count = *(int64_t *)pos;
                 pos += 8;
+                log("header %lld of size %lld\n", (int64_t)type, count);
                 for (int64_t i = 0; i < count; ++i)
                 {
                     log("set to %lld ", *(int64_t *)pos);
@@ -491,12 +461,22 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                     pos += 8;
                     switch (type)
                     {
-                        case 0: *callPosition = (uint64_t)&fastPushObject; break;
-                        case 1: *callPosition = (uint64_t)&fastQueryObject; break;
-                        case 2: *callPosition = (uint64_t)&fastNewObject; break;
-                        case 3: *callPosition = (uint64_t)&fastCallObject; break;
-                        case 8: *callPosition = (uint64_t)&fastPushPipe; break;
-                        case 9: *callPosition = (uint64_t)&fastQueryPipe; break;
+                        case 0:  *callPosition = (uint64_t)&x64_fastPushObject; break;
+                        // case 20: *callPosition = (uint64_t)&gpu_fastPushObject; break;
+                        case 1:  *callPosition = (uint64_t)&x64_fastQueryObject; break;
+                        // case 21: *callPosition = (uint64_t)&gpu_fastQueryObject; break;
+                        case 2:  *callPosition = (uint64_t)&x64_fastNewObject; break;
+                        case 22: *callPosition = (uint64_t)&gpu_fastNewObject; break;
+                        case 3:  *callPosition = (uint64_t)&x64_fastCallObject; break;
+                        case 23: *callPosition = (uint64_t)&gpu_fastCallObject; break;
+                        case 8:  *callPosition = (uint64_t)&x64_fastPushPipe; break;
+                        // case 28: *callPosition = (uint64_t)&gpu_fastPushPipe; break;
+                        case 9:  *callPosition = (uint64_t)&x64_fastQueryPipe; break;
+                        // case 29: *callPosition = (uint64_t)&gpu_fastQueryPipe; break;
+                        case 10:  *callPosition = (uint64_t)&any_fastCastProvider; break;
+                        default:
+                            print("ERROR: Runtime endpoint %lld doensn't supported for now [gpu push/query]\n");
+                            ExitProcess(1);
                     }
                     log("ptr=%p\n", (void *)*callPosition);
                 }
@@ -565,7 +545,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                     log("argument %lld have size %lld\n", i, sizes[i]);
                 }
                 break;
-            case 16: // Worker positions
+            case 16: // x64 Worker positions
             {
                 int64_t count = *(int64_t *)pos;
                 pos += 8;
@@ -580,8 +560,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                     pos += 8;
                     // set data
                     void *ptr = mem + offset;
-                    Workers[id] = (struct worker_info){0, ptr, tableSize};
-                    log("Worker %lld have been loaded to %p [offset %llx] with input table of size %lld\n", id, ptr, offset, tableSize);
+                    Workers[id] = (struct worker_info){PROVIDER_X64, ptr, tableSize};
+                    log("Worker %lld [x64] have been loaded to %p [offset %llx] with input table of size %lld\n", id, ptr, offset, tableSize);
                 }
                 break;
             }
@@ -623,6 +603,45 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len)
                         return NULL;
                 }
                 break;
+            }
+            case 18: // gpu Worker positions
+            {
+                int64_t count = *(int64_t *)pos;
+                pos += 8;
+                for (int64_t i = 0; i < count; ++i)
+                {
+                    // read id, position and input table size
+                    int64_t id = *(int64_t *)pos;
+                    pos += 8;
+                    int64_t start = *(int64_t *)pos;
+                    pos += 8;
+                    int64_t end = *(int64_t *)pos;
+                    pos += 8;
+                    int64_t tableSize = *(int64_t *)pos;
+                    pos += 8;
+                    int64_t inputMapLength = *(int64_t *)pos;
+                    pos += 8;
+                    BYTE *map = myMalloc(inputMapLength);
+                    for (int64_t j = 0; j < inputMapLength; ++j)
+                    {
+                        map[j] = *pos++;
+                    }
+                    // set data
+                    struct gpu_worker_info *info = myMalloc(sizeof(*info));
+                    info->start = mem + start;
+                    info->end = mem + end;
+                    info->inputMapLength = inputMapLength;
+                    info->inputMap = map;
+                    Workers[id] = (struct worker_info){PROVIDER_GPU, info, tableSize};
+                    log("Worker %lld [GPU] have been loaded to %p [offset %llx:%llx] with input table of size %lld\n", id, info, start, end, tableSize);
+                }
+                break;
+            }
+            case 80: // entry ID
+            {
+                int64_t entryId = *(int64_t *)pos;
+                pos += 8;
+                *ProcessEntryId = entryId;
             }
             default:
                 log("Error: unknown header type %lld\n", (int64_t)type);
@@ -694,7 +713,8 @@ int wmain(void)
 
     // load worker
     int64_t res_len = 0;
-    void *res = LoadWorker(buf, len, &res_len);
+    int64_t entryWorker = 0;
+    void *res = LoadWorker(buf, len, &res_len, &entryWorker);
     if (res == NULL)
     {
         log("Error: at loading file\n");
@@ -718,7 +738,6 @@ int wmain(void)
     // run first worker with comand line arguments as i64 array
 
     int64_t inputLen = 0, connectingToMain = 0;
-    int64_t inputId = 0;
     int64_t resCodeId = 0;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -748,36 +767,9 @@ int wmain(void)
         }
         #endif
 
-        print("waiting startup pages\n");
+        print("Entry worker id=%lld\n", entryWorker);
 
-        while (inputId == 0)
-        {
-            inputId = NewObject(3, 8 * inputLen, 8, NULL, NULL);
-            Sleep(10);
-        }
-
-        struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&inputId, 8, 0);
-        if (obj == 0)
-        {
-            print("Error: allocated array isn't local\n");
-        }
-        memcpy(obj, input, 8 * inputLen);
-
-
-        while (resCodeId == 0)
-        {
-            resCodeId = NewObject(2, 4, 4, NULL, NULL);
-            Sleep(10);
-        }
-
-        BYTE *tbl = myMalloc(16);
-        memcpy(tbl + 0, &inputId, 8);
-        memcpy(tbl + 8, &resCodeId, 8);
-
-        log("resCodeId=%p\n", resCodeId);
-        StartNewWorker(0, 1, tbl);
-
-        myFree(tbl);
+        resCodeId = StartInitialProcess(entryWorker, input, inputLen);
     }
 
     print("Running...\n");

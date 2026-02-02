@@ -71,4 +71,6 @@ if ($StartWatcher)
 if (!$NoInitialUpdate)
 {
     Update-OnChange -BasePath $BasePath -TrackedFiles $TrackedFiles
-}
+}
+
+

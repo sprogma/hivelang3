@@ -12,16 +12,6 @@
 #include "runtime_lib.h"
 #include "remote.h"
 
-
-extern int fastPushObject(void);
-extern int fastQueryObject(void);
-extern int fastNewObject(void);
-extern int fastCallObject(void);
-extern int fastPushPipe(void);
-extern int fastQueryPipe(void);
-
-extern int ExecuteWorker(void *, int64_t, void *, BYTE *);
-
 // ! DON'T MOVE FIELDS [only in both this file and runtime.asm]
 struct dll_call_data
 {
@@ -97,8 +87,8 @@ struct waiting_worker
 {
     // worker id
     int64_t id;
-    // return address
-    void *ptr;
+    // worker data [continue address on x64]
+    void *data;
     // object awaiting data
     struct waiting_cause *waiting_data;
     // registers
@@ -110,8 +100,8 @@ struct waiting_worker
 struct queued_worker
 {
     int64_t id;
-    // return address
-    void *ptr;
+    // worker data [continue address on x64]
+    void *data;
     // object awaiting data
     int64_t rdiValue;
     // registers
@@ -143,6 +133,7 @@ typedef uint8_t BYTE;
 
 struct __attribute__((packed)) object
 {
+    int8_t provider;   // [-2]
     int8_t type;       // [-1]
     BYTE data[];
 };
@@ -152,14 +143,14 @@ struct __attribute__((packed)) object_pipe
     SRWLOCK lock;
     int64_t length;
     int64_t position;
-    int8_t _[7];
+    int8_t _[6];
     struct object; // data is circular buffer, of length 'length' and position stored in 'position' field
 };
 
 struct __attribute__((packed)) object_array
 {
     int64_t length;
-    int8_t _[7];
+    int8_t _[6];
     struct object;
 };
 
@@ -176,11 +167,17 @@ struct __attribute__((packed)) object_object
 
 struct worker_info
 {
-    int64_t isDllCall;
-    void *ptr;
+    int64_t provider;
+    void *data;
     int64_t inputSize;
 };
 extern struct worker_info Workers[];
+struct hive_provider_info
+{
+    void (*ExecuteWorker)(struct queued_worker *);
+    int64_t (*UpdateWaitingWorker)(struct waiting_worker *, int64_t, int64_t *);
+};
+extern struct hive_provider_info Providers[];
 
 struct defined_array
 {
@@ -229,19 +226,20 @@ extern struct defined_array *defined_arrays;
 
 
 
-
-void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue);
-int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue);
-
-
-void UpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);
-
-
+void RegisterObjectWithId(int64_t id, void *object);
 int64_t GetNewObjectId(int64_t *result);
-void NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id);
+void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue);
+
+
+// void NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id);
+// void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue);
+// int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue);
+// void UpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);
+
 
 void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value);
 void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable);
-void PauseWorker(void *returnAddress, void *rbpValue, struct waiting_cause *waiting_data);
+
+int64_t StartInitialProcess(int64_t entryWorker, int64_t *cmdArgs, int64_t cmdArgsLen);
 
 #endif

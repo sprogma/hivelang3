@@ -1,38 +1,33 @@
 format MS64 COFF
 
+public x64_fastPushObject
+public x64_fastQueryObject
+public x64_fastNewObject
+public x64_fastCallObject
+public x64_fastPushPipe
+public x64_fastQueryPipe
+public gpu_fastNewObject
+public gpu_fastCallObject
+public any_fastCastProvider
 
-public fastPushObject
-public fastNewObject
-public fastCallObject
-public fastQueryObject
-public fastPushPipe
-public fastQueryPipe
-
-public ExecuteWorker
-public DllCall
+public x64AsmExecuteWorker
 public context
 
+public DllCall
 
 section '.data' readable writable align 64
-
 ; ! important that invoke data is strictly before runtime data, becouse it will be used as (rbp-XX)
-invoke_data db 512 dup 0
-runtime_data db 512 dup 0
 context db 512 dup 0
 
-
-
-format_strA du 'PushObject %p+%lld ', 0
-format_strB du '<- %p of size %lld', 0xA, 0
-format_strC du 'QueryObject %p <- %p', 0
-format_strD du '+%lld of size %lld', 0xA, 0
-    
-extrn PushObject
-extrn NewObject
-extrn QueryObject
-extrn CallObject
-extrn QueryPipe
-extrn PushPipe
+extrn x64QueryObject
+extrn x64QueryPipe
+extrn x64PushObject
+extrn x64PushPipe
+extrn x64NewObject
+extrn gpuNewObject
+extrn x64CallObject
+extrn gpuCallObject
+extrn anyCastProvider
 extrn myPrintf
 
 section '.text' code readable executable
@@ -128,7 +123,7 @@ any_fastCastProvider:
     CWrapper anyCastProvider
 
 ; c style function ExecuteWorker(void *address, int64_t rdi_value, void *rbp_value, void *context)
-ExecuteWorker:
+x64AsmExecuteWorker:
     push r12
     push r13
     push r14

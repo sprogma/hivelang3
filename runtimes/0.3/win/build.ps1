@@ -13,14 +13,14 @@ else
 $dbgLF = , "-Wl,/debug"
 $rlsLF = ,"-flto", "-fuse-ld=lld"
 $rlsFF = ,"-fno-unwind-tables", "-fno-asynchronous-unwind-tables"
-$files = (ls *.c)
+$files = (ls -r *.c)
 $jobs = @()
 $jobs += Start-ThreadJob {   
     fasm runtime.asm obj/asm.o
     $z = @()
     $Speed = $null # "-O3"
     $using:files | % {
-        $o = $_.Name-replace"\.c$",".o"
+        $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
         $o = "obj/$o"
         $z += $o
         & $using:CC $_ -c -o $o $Speed -g -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS $using:rlsFF || Write-Host "Error in compilation"
@@ -31,8 +31,8 @@ $jobs += Start-ThreadJob {
     fasm runtime_dbg.asm obj/asm_dbg.o
     $z = @()
     $using:files | % {
-        $o = $_.Name-replace"\.c$","_dbg.o"
-        $o = "obj/$o"
+        $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
+        $o = "obj/dbg_$o"
         $z += $o
         & $using:CC $_ -c -o $o -g -D_DEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS  || Write-Host "Error in compilation" # -fsanitize=address
     }

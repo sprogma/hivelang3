@@ -195,6 +195,7 @@ struct BuildResult
     map<string, int64_t> names;
     vector<vector<BYTE>> strings;
     int64_t nextWorkerId;
+    map<pair<int64_t, string>, int64_t> exportWorkerId;
 
     set<string> used_providers;
 

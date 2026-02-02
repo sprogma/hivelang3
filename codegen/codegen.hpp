@@ -17,6 +17,8 @@ public:
 CodeAssembler *new_x64_Assembler();
 CodeAssembler *new_gpu_Assembler();
 
+int64_t GetExportWorkerId(BuildResult *ctx, int64_t wkId, const string &provider);
+
 static inline bool validateProvider(const string& name)
 {
     return name == "x64" || name == "gpu";

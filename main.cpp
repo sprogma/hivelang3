@@ -175,6 +175,24 @@ int main(int argc, char **argv)
     /* generate header */
     *(uint64_t *)header = 0xBEBEBEBEBEBEBEBE;
     header += 8;
+
+    /* push entry id */
+    *header++ = 80;
+    int64_t entryId = -1;
+    for (auto &[wk, id] : newCode->workers)
+    {
+        if (wk->attributes.contains("entry"))
+        {
+            entryId = GetExportWorkerId(newCode, id, "x64");
+        }
+    }
+    if (entryId == -1)
+    {
+        printf("Error: no entry worker\n");
+        return 1;
+    }
+    *(uint64_t *)header = entryId;
+    header += 8;
     
     for (auto &name : newCode->used_providers)
     {

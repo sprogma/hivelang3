@@ -6,7 +6,7 @@
 {
     i64[]@gpu tmp;
     tmp <- `i64[]@gpu`input;
-    ?(tmp, 0, ?tmp, 0)double@gpu(*);
+    ?(tmp, 0, ?input, 0)double@gpu(*);
     input <- `i64[]`tmp;
     res <- `i32`(input[0] + input[1] + input[2]);
 }
@@ -16,7 +16,7 @@
 [GPUxVariable:index]
 [GPUxBase:xstart]
 [GPUxSize:xend]
-(i64[] tmp, i64 xstart, i64 xend, i64 index)double(i32? await)
+(i64[] tmp, i64 xstart, i64 xend, i64 index)double(i32?@x64 await)
 {
     tmp[index] <- tmp[index] * 2;
 }

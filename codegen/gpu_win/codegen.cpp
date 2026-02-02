@@ -161,6 +161,9 @@ private:
         current = wk;
 
         dumpIR(wk);
+
+        // generate code
+        int64_t start = assemblyEnd - assemblyCode;
         
         print("__kernel void krnl(");
         
@@ -246,8 +249,6 @@ private:
             printType(NULL, type);print(" var_%lld;", id);
         }
         
-        // generate code
-        int64_t start = assemblyEnd - assemblyCode;
         
         addressTable.clear();
         orderTable.clear();
@@ -337,6 +338,8 @@ private:
             // unsupported for now
             case OP_STORE_INPUT: 
             case OP_CALL:
+                logError(ir->filename, ir->code, op->code_start, op->code_end, "calls are unsupported in gpu provider");
+                break;
             // nothing to do
             case OP_FREE_TEMP: break;
             
@@ -476,15 +479,15 @@ private:
             header += 8;
             for (auto &[id, pos] : resultWorkerPositions)
             {
-                printf("Export worker %lld with offset %016llx\n", id, pos.first);
+                printf("Export worker %lld with offset %016llx\n", GetExportWorkerId(ir, id, "gpu"), pos.first + bodyOffset);
                 /* export id */
-                *(uint64_t *)header = id;
+                *(uint64_t *)header = GetExportWorkerId(ir, id, "gpu");
                 header += 8;
                 /* export position */
-                *(uint64_t *)header = pos.first;
+                *(uint64_t *)header = pos.first + bodyOffset;
                 header += 8;
                 /* export end */
-                *(uint64_t *)header = pos.second;
+                *(uint64_t *)header = pos.second + bodyOffset;
                 header += 8;
                 /* export input table size */
                 *(uint64_t *)header = GetWorkerInputTableSize(id);

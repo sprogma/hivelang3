@@ -7,6 +7,7 @@
 #include "runtime_lib.h"
 #include "runtime.h"
 #include "remote.h"
+#include "providers.h"
 
 SRWLOCK ServerIdGetLock = SRWLOCK_INIT;
 
@@ -756,7 +757,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
             if (obj != NULL)
             {
                 log("local-pushed\n");
-                UpdateLocalPush(obj, offset, size, data);
+                universalUpdateLocalPush(obj, offset, size, data);
                 AnswerPushObject(con, object_id, offset, size);
                 UpdateWaitingPush(object_id, offset, size);
                 return 1;
@@ -1488,7 +1489,7 @@ void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *dat
     if (loc != NULL)
     {
         log("local object - answer\n");
-        UpdateLocalPush(loc, offset, size, data);
+        universalUpdateLocalPush(loc, offset, size, data);
         /* update all local waiting processes */
         UpdateWaitingPush(object_id, offset, size);
     }
