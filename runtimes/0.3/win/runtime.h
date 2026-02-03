@@ -9,6 +9,7 @@
 #include <ws2tcpip.h>
 #include "windows.h"
 
+#include "state.h"
 #include "runtime_lib.h"
 #include "remote.h"
 
@@ -34,55 +35,6 @@ struct jmpbuf {BYTE _[80];};
 [[noreturn]] extern void longjmpUN(struct jmpbuf *, int64_t val);
 extern int64_t setjmpUN(struct jmpbuf *);
 
-enum waiting_cause_type : int8_t
-{
-    WAITING_PUSH,
-    WAITING_QUERY,
-    WAITING_PAGES,
-    WAITING_TIMER,
-};
-
-struct waiting_cause
-{
-    enum waiting_cause_type type;
-};
-
-struct waiting_push
-{
-    struct waiting_cause;
-    int64_t object_id; 
-    int64_t offset;
-    int64_t size;
-    void *data;
-    BYTE id[BROADCAST_ID_LENGTH];
-    int64_t repeat_timeout;
-};
-
-struct waiting_query
-{
-    struct waiting_cause;
-    int64_t object_id; 
-    void *destination;
-    int64_t offset;
-    int64_t size;
-    BYTE id[BROADCAST_ID_LENGTH];
-    int64_t repeat_timeout;
-};
-
-struct waiting_pages 
-{
-    struct waiting_cause;
-    int64_t obj_type;
-    int64_t size;
-    int64_t param;
-};
-
-struct waiting_timer 
-{
-    struct waiting_cause;
-    int64_t endTicks; // use with QueryPerformanceCounter
-};
-
 struct waiting_worker
 {
     // worker id
@@ -90,7 +42,8 @@ struct waiting_worker
     // worker data [continue address on x64]
     void *data;
     // object awaiting data
-    struct waiting_cause *waiting_data;
+    int64_t state;
+    void *state_data;
     // registers
     void *rbpValue;
     int64_t context[9];
@@ -176,6 +129,7 @@ struct hive_provider_info
 {
     void (*ExecuteWorker)(struct queued_worker *);
     int64_t (*UpdateWaitingWorker)(struct waiting_worker *, int64_t, int64_t *);
+    void (*NewObjectUsingPage)(int64_t type, int64_t size, int64_t param, int64_t remote_id);
 };
 extern struct hive_provider_info Providers[];
 

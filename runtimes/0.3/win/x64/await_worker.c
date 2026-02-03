@@ -9,7 +9,7 @@
 #include "../runtime.h"
 #include "x64.h"
 
-void x64PauseWorker(void *returnAddress, void *rbpValue, struct waiting_cause *waiting_data)
+void x64PauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
 {
     /* save context and select next worker */
     struct waiting_worker *t = myMalloc(sizeof(*t));
@@ -19,17 +19,17 @@ void x64PauseWorker(void *returnAddress, void *rbpValue, struct waiting_cause *w
     memcpy(t->context, context, sizeof(t->context));
     t->id = lc_data->runningId;
     t->data = returnAddress;
+    t->state = state;
+    t->state_data = state_data;
     t->rbpValue = rbpValue;
-    t->waiting_data = waiting_data;
 
-    log("Paused worker %lld [cause %lld]\n", lc_data->runningId, (int64_t)waiting_data->type);
+    log("Paused worker %lld [cause %lld]\n", lc_data->runningId, (int64_t)state);
 
     WaitListWorker(t);
 }
 
 int64_t x64UpdateWaitingWorker(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue)
 {
-    log("waiting type %lld\n", (int64_t)w->waiting_data->type);
     switch (w->waiting_data->type)
     {
         case WAITING_PUSH:
@@ -61,7 +61,7 @@ int64_t x64UpdateWaitingWorker(struct waiting_worker *w, int64_t ticks, int64_t 
             if (obj == 0)
             {
                 // remote object, repeat request, with timeout
-                log("waiting for remote query %lld/%lld\n", ticks, cause->repeat_timeout);
+                log("waiting for remote query of %lld [%lld/%lld]\n", cause->object_id, ticks, cause->repeat_timeout);
                 if (ticks > cause->repeat_timeout)
                 {
                     RequestObjectGet(cause->object_id, cause->offset, myAbs(cause->size));
@@ -90,7 +90,7 @@ int64_t x64UpdateWaitingWorker(struct waiting_worker *w, int64_t ticks, int64_t 
             int64_t new_id;
             if (GetNewObjectId(&new_id))
             {
-                x64NewObjectUsingPage(cause->obj_type, cause->size, cause->param, new_id);
+                Providers[cause->provider].NewObjectUsingPage(cause->obj_type, cause->size, cause->param, new_id);
                 *rdiValue = new_id;
                 myFree(cause);
                 return 1;

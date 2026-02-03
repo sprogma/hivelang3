@@ -3,6 +3,7 @@
 
 
 #include "inttypes.h"
+#include "runtime.h"
 
 
 //<<--Quote-->> from:../../../codegen/codegen.hpp:.*ProviderId.*\n?\{(?>[^{}]+|(?<o>\{)|(?<-o>\}))+(?(o)(?!))\}
@@ -27,6 +28,7 @@ enum
 };
 
 
+void universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data);
 void universalUpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);
 
 

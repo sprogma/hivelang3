@@ -11,9 +11,11 @@ typedef uint8_t BYTE;
 #ifdef FREESTANDING
 [[nodiscard]] void *myMalloc(int64_t size);
 void myFree(void *mem);
+[[nodiscard]] void *myRealloc(void *mem, int64_t size);
 #else
 #define myMalloc(x) calloc(1, (x))
 #define myFree(x) free(x)
+#define myRealloc(x, y) realloc(x, y)
 #endif
 
 void myPrintf(const wchar_t *format_string, ...);

@@ -13,6 +13,7 @@
 #include "remote.h"
 #include "runtime.h"
 
+#include "gpu_subsystem.h"
 #include "providers.h"
 
 #include "x64/x64.h"
@@ -24,11 +25,11 @@ struct worker_info Workers[100] = {};
 struct hive_provider_info Providers[] = {
     {
         .ExecuteWorker=x64ExecuteWorker,
-        .UpdateWaitingWorker=x64UpdateWaitingWorker,
+        .NewObjectUsingPage=x64NewObjectUsingPage,
     },
     {
         .ExecuteWorker=gpuExecuteWorker,
-        .UpdateWaitingWorker=gpuUpdateWaitingWorker,
+        .NewObjectUsingPage=gpuNewObjectUsingPage,
     }
 };
 
@@ -68,6 +69,21 @@ int64_t GetNewObjectId(int64_t *result)
 
     *result = remote_id;
     return set;
+}
+
+
+void universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
+{
+    struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+    switch (Workers[lc_data->runningId].provider)
+    {
+        case PROVIDER_X64:
+            x64PauseWorker(returnAddress, rbpValue, state, state_data);
+            break;
+        case PROVIDER_GPU:
+            print("Error: gpu worker doen't support universal pause\n");
+            ExitProcess(1);
+    }
 }
 
 void universalUpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source)
@@ -129,9 +145,7 @@ void WaitListWorker(struct waiting_worker *t)
 {
     AcquireSRWLockExclusive(&wait_list_lock);
     wait_list[wait_list_len++] = t;
-    int64_t c = (t->waiting_data->type == WAITING_QUERY ? ((struct waiting_query *)t->waiting_data)->offset : ((struct waiting_push *)t->waiting_data)->offset);
-    int64_t d = (t->waiting_data->type == WAITING_QUERY ? ((struct waiting_query *)t->waiting_data)->object_id : ((struct waiting_push *)t->waiting_data)->object_id);
-    log("Worker add to wait list [id=%lld data=%p offset=%lld object=%lld]\n", t->id, t->data, c, d);
+    log("Worker add to wait list [id=%lld data=%p]\n", t->id, t->data);
     ReleaseSRWLockExclusive(&wait_list_lock);
 }
 
@@ -166,8 +180,18 @@ void UpdateWaitingWorkers()
     for (int i = 0; i < wait_list_len; ++i)
     {
         struct waiting_worker *w = wait_list[i];
+        int64_t res = 0;
         int64_t rdiValue = 0;
-        if (Providers[Workers[w->id].provider].UpdateWaitingWorker(w, ticks, &rdiValue))
+        switch (w->state)
+        {
+            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@reg\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$_.Group|%{"            case $($_.a):"};"                res=$($_.Name)(w, ticks, &rdiValue); break;"})-join"`n"
+            case WK_STATE_PUSH_OBJECT_WAIT_X64:
+                res=x64NewObjectMachine(w, ticks, &rdiValue); break;
+            case WK_STATE_PUSH_OBJECT_WAIT_X64:
+                res=x64PushObjectWorker(w, ticks, &rdiValue); break;
+            //<<--QuoteEnd-->>
+        }
+        if (res)
         {
             EnqueueWorkerFromWaitList(w, rdiValue);
             myFree(w);
@@ -642,6 +666,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                 int64_t entryId = *(int64_t *)pos;
                 pos += 8;
                 *ProcessEntryId = entryId;
+                break;
             }
             default:
                 log("Error: unknown header type %lld\n", (int64_t)type);
@@ -652,16 +677,42 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
 }
 
 
-DWORD ShedulerInstance(void *param)
+struct sheduler_instance_info
 {
+    int64_t number;
+    int64_t resCodeId;
+};
+
+
+DWORD ShedulerInstance(void *vparam)
+{
+    struct sheduler_instance_info *param = vparam;
     struct thread_data *lc_data = myMalloc(sizeof(*lc_data));
+    int64_t resCodeId = param->resCodeId;
     TlsSetValue(dwTlsIndex, lc_data);
-    lc_data->number = (int64_t)param;
+    lc_data->number = (int64_t)param->number;
     lc_data->completedTasks = 0;
     lc_data->prevPrint = 0;
     while (1)
     {
         SheduleWorker(lc_data);
+
+        // if resCodeId is ready - print it and return
+        struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);
+        if (p != NULL)
+        {
+            p = (void *)((BYTE *)p - DATA_OFFSET(*p));
+            if (p->ready)
+            {
+                print("ShedulerInstance completed\n");
+                return 0;
+            }
+            print("promise not set\n");
+        }
+        else
+        {
+            print("promise not found\n");
+        }
     }
     myFree(lc_data);
     return 0;
@@ -676,6 +727,11 @@ int wmain(void)
 {
     ////////////////////////// loading stage
     init_lib();
+    if (init_gpu_subsystem())
+    {
+        print("Gpu sussystem initialization failed\n");
+        return 1;
+    }
 
     dwTlsIndex = TlsAlloc();
 
@@ -738,9 +794,16 @@ int wmain(void)
     // run first worker with comand line arguments as i64 array
 
     int64_t inputLen = 0, connectingToMain = 0;
-    int64_t resCodeId = 0;
+    int64_t resCodeId = 0, hangAfterEnd = 0;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argc > 1 && argv[1][0] == 'h')
+    {
+        hangAfterEnd = 1;
+        // 'shift'
+        argv++;
+        argc--;
+    }
     if (argc > 1 && argv[1][0] == 'n')
     {
         connectingToMain = 1;
@@ -770,6 +833,8 @@ int wmain(void)
         print("Entry worker id=%lld\n", entryWorker);
 
         resCodeId = StartInitialProcess(entryWorker, input, inputLen);
+
+        print("result promise %p %lld\n", resCodeId);
     }
 
     print("Running...\n");
@@ -784,7 +849,10 @@ int wmain(void)
 
     for (int64_t i = 0; i < NUM_THREADS; ++i)
     {
-        hThreads[i] = CreateThread(NULL, 0, ShedulerInstance, (void *)i, 0, &threadId);
+        struct sheduler_instance_info *info = myMalloc(sizeof(*info));
+        info->number = i;
+        info->resCodeId = resCodeId;
+        hThreads[i] = CreateThread(NULL, 0, ShedulerInstance, info, 0, &threadId);
         if (hThreads[i] == NULL)
         {
             print("Failed to create thread %lld\n", i);
@@ -792,26 +860,13 @@ int wmain(void)
         }
     }
 
-    while (1)
-    {
-        DWORD waitResult = WaitForMultipleObjects(NUM_THREADS, hThreads, TRUE, 50); // INFINITE
-        (void)waitResult;
-
-        // if resCodeId is ready - print it and return
-        struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);
-        if (p != NULL)
-        {
-            p = (void *)((BYTE *)p - DATA_OFFSET(*p));
-            if (p->ready)
-            {
-                break;
-            }
-        }
-    }
+    DWORD waitResult = WaitForMultipleObjects(NUM_THREADS, hThreads, TRUE, INFINITE);
+    (void)waitResult;
+    
+    print("Program finished\n");
 
     TlsFree(dwTlsIndex);
 
-    print("Program finished\n");
     struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);
     if (p == NULL)
     {
@@ -824,10 +879,11 @@ int wmain(void)
         {
             print("Program exited with code %llx\n", *(int *)p->data);
 
-            #ifndef NDEBUG
-            print("Press Ctrl+C to end\n");
-            while (1){};
-            #endif
+            if (hangAfterEnd)
+            {
+                print("Press Ctrl+C to end\n");
+                while (1){};
+            }
 
             ExitProcess(*(int *)p->data);
         }
@@ -837,10 +893,11 @@ int wmain(void)
         }
     }
 
-    #ifndef NDEBUG
-    print("Press Ctrl+C to end\n");
-    while (1){};
-    #endif
+    if (hangAfterEnd)
+    {
+        print("Press Ctrl+C to end\n");
+        while (1){};
+    }
 
     ExitProcess(1);
 }

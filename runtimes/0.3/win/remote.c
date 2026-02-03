@@ -1492,6 +1492,8 @@ void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *dat
         universalUpdateLocalPush(loc, offset, size, data);
         /* update all local waiting processes */
         UpdateWaitingPush(object_id, offset, size);
+        // it was found
+        return;
     }
     // find object in object table
     struct known_object *obj = (void *)GetHashtable(&known_objects, (BYTE *)&object_id, 8, 0);
@@ -1592,7 +1594,7 @@ static DWORD PagesAllocator(void *param)
             int64_t page_id = 0;
             BCryptGenRandom(NULL, (BYTE *)&page_id, 5, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
             #endif
-            RequestMemoryPage(page_id);
+            RequestMemoryPage(page_id | 0x8000000000000000ULL);
         }
         
         Sleep(300);

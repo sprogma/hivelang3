@@ -1373,7 +1373,7 @@ private:
                     // rdi=object
                     // rsi=toID
                     // rdx=fromID
-                    InsertInteger(op, {7, 8}, op->data[1]);
+                    InsertMove(op, {7, 8}, Register(op->data[1]), false);
                     InsertInteger(op, {6, 8}, ProviderId(varType(op->data[0])->provider));
                     InsertInteger(op, {2, 8}, ProviderId(varType(op->data[1])->provider));
                     runtimeApiHeader[GetHeaderId(ACTION_CAST_PROVIDER)].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});

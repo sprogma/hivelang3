@@ -22,8 +22,9 @@ struct gpu_worker_info
 
 
 void gpuExecuteWorker(struct queued_worker *obj);
-void gpuPauseWorker(void *returnAddress, void *rbpValue, struct waiting_cause *waiting_data);
+void gpuPauseWorker(struct waiting_cause *waiting_data);
 int64_t gpuUpdateWaitingWorker(struct waiting_worker *wk, int64_t ticks, int64_t *rdiValue);
+void gpuNewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id);
 
 
 #endif

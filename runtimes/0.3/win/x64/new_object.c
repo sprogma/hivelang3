@@ -7,6 +7,7 @@
 #include "../runtime_lib.h"
 #include "../remote.h"
 #include "../runtime.h"
+#include "../providers.h"
 #include "x64.h"
 
 void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id)
@@ -91,6 +92,25 @@ void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t re
     return;
 }
 
+
+struct wait_pages_info
+{
+    int64_t obj_type;
+    int64_t size;
+    int64_t param;
+};
+//@reg WK_STATE_NEW_OBJECT_WAIT_PAGES_X64 x64NewObjectMachine
+int64_t x64NewObjectMachine(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue)
+{
+    switch (w->state)
+    {
+    
+    case WK_STATE_NEW_OBJECT_WAIT_PAGES_X64:
+        
+            
+    }
+}
+
 // if allocating ARRAY, param must be element size.
 // [it can be used to split big arrays on diffrent hives]
 // if allocating OBJECT, param = 1
@@ -109,13 +129,14 @@ int64_t x64NewObject(int64_t type, int64_t size, int64_t param, int64_t _, void 
             return 0;
         }
         /* wait for new pages */
-        struct waiting_pages *cause = myMalloc(sizeof(*cause));
-        cause->type = WAITING_PAGES,
-        cause->obj_type = type,
-        cause->size = size,
-        cause->param = param,
-        x64PauseWorker(returnAddress, rbpValue, (struct waiting_cause *)cause);
-        
+        struct wait_pages_info *info = myMalloc(sizeof(*info));
+        info->type = WAITING_PAGES,
+        info->provider = PROVIDER_X64,
+        info->obj_type = type,
+        info->size = size,
+        info->param = param,
+        x64PauseWorker(returnAddress, rbpValue, (struct wait_pages_info *)info);
+
         struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
         longjmpUN(&lc_data->ShedulerBuffer, 1);
     }

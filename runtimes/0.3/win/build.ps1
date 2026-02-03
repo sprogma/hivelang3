@@ -1,14 +1,11 @@
 param([string]$CC="clang", [switch]$Sanitize)
 $pseudoRelease = $true
-$FLAGS = ,"-fno-stack-protector", "-DUNICODE", "-D_UNICODE", "-DFREESTANDING", "-municode", "-ffreestanding", "-nostdlib", "-mno-stack-arg-probe", "-fms-extensions", "-Wno-microsoft"
+$FLAGS = "-I.","-fno-stack-protector", "-DUNICODE", "-D_UNICODE", "-DFREESTANDING", "-municode", "-ffreestanding", "-nostdlib", "-mno-stack-arg-probe", "-fms-extensions", "-Wno-microsoft"
+$LF = "-lshell32", "-lkernel32", "-lbcrypt", "-lws2_32", "-lOpenCL", "-Wl,-dynamicbase:no", "-Wl,-entry:entry" 
 if ($Sanitize)
 {
-    $FLAGS = $FLAGS, "-fsanitize=address" | % {$_} | ? {$_-notmatch"nostdlib|freestanding"}
-    $LF = "-lshell32", "-lkernel32", "-lbcrypt", "-lws2_32", "-Wl,-dynamicbase:no" #, "-Wl,-entry:entry" 
-}
-else
-{
-    $LF = "-lshell32", "-lkernel32", "-lbcrypt", "-lws2_32", "-Wl,-dynamicbase:no", "-Wl,-entry:entry" 
+    $FLAGS = ($FLAGS, "-fsanitize=address" | % {$_})-notmatch"nostdlib|freestanding"
+    $LF = $LF-notmatch"entry:entry"
 }
 $dbgLF = , "-Wl,/debug"
 $rlsLF = ,"-flto", "-fuse-ld=lld"

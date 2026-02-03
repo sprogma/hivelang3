@@ -7,6 +7,7 @@
 #include "../runtime_lib.h"
 #include "../remote.h"
 #include "../runtime.h"
+#include "../providers.h"
 #include "gpu.h"
 
 void gpuNewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id)
@@ -89,10 +90,11 @@ int64_t gpuNewObject(int64_t type, int64_t size, int64_t param, int64_t _, void 
         /* wait for new pages */
         struct waiting_pages *cause = myMalloc(sizeof(*cause));
         cause->type = WAITING_PAGES,
+        cause->provider = PROVIDER_GPU,
         cause->obj_type = type,
         cause->size = size,
         cause->param = param,
-        gpuPauseWorker(returnAddress, rbpValue, (struct waiting_cause *)cause);
+        universalPauseWorker(returnAddress, rbpValue, (struct waiting_cause *)cause);
         
         struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
         longjmpUN(&lc_data->ShedulerBuffer, 1);

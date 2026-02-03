@@ -48,6 +48,16 @@ int64_t frequency;
     return mem;
 }
 
+[[nodiscard]] void *myRealloc(void *mem, int64_t size)
+{
+    mem = HeapReAlloc(hHeap, HEAP_ZERO_MEMORY, mem, size);
+    if (mem == NULL)
+    {
+        print("Error: failed to reallocate memory: %lld\n", (int64_t)GetLastError());
+    }
+    return mem;
+}
+
 void myFree(void *mem)
 {
     if (HeapFree(hHeap, 0, mem) == 0)

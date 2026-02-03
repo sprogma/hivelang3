@@ -27,12 +27,17 @@ int64_t anyCastProvider(void *obj, int64_t to, int64_t from, int64_t _, void *re
     print("convert %p [types %lld -> %lld]\n", obj, from, to);
     if (from == PROVIDER_X64 && to == PROVIDER_GPU)
     {
-        // ...
+        // get page        
+        // create new object
+        gpuNewObject(int64_t type, int64_t size, int64_t param, int64_t _, void *returnAddress, void *rbpValue)
+        // fill it with data
         return (int64_t)obj;
     }
-    else if (to == PROVIDER_GPU && from == PROVIDER_X64)
+    else if (from == PROVIDER_GPU && to == PROVIDER_X64)
     {
-        // ...
+        // get page
+        // create new object
+        // fill it with data
         return (int64_t)obj;
     }
     print("ERROR: not supported conversion between providers %lld to %lld\n", from, to);
