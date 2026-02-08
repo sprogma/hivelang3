@@ -47,7 +47,7 @@ private:
     
 public:
     map<int64_t, pair<int64_t, int64_t>> resultWorkerPositions;
-    map<int64_t, vector<BYTE>> resultConfigVariables;
+    map<int64_t, vector<pair<int64_t, BYTE>>> resultConfigVariables;
     
     pair<BYTE *, BYTE *> Build(BuildResult *input, BYTE *header, BYTE *body, int64_t bodyOffset) override 
     {
@@ -150,7 +150,7 @@ private:
     {
         ARGUMENT_INDEX = 0x10,
         ARGUMENT_SIZE = 0x20,
-        ARGUMENT_OFFSET = 0x30,
+        ARGUMENT_OFFSET = 0x30
     };
 
     void BuildFn(WorkerDeclarationContext *wk, int64_t workerId)
@@ -167,12 +167,15 @@ private:
         
         print("__kernel void krnl(");
         
-        vector<BYTE> configVariables(wk->inputs.size(), 0);
+        vector<pair<int64_t, BYTE>> configVariables(wk->inputs.size());
         map<string, int64_t> inputs;
-        int64_t inputId = 0;
+        map<string, int64_t> offsets;
+        int64_t inputId = 0, offset = 0;
         for (auto &[name, type] : wk->inputs)
         {
+            offsets[name] = offset;
             inputs[name] = inputId++;
+            offset += type->size;
         }
         
 
@@ -206,7 +209,12 @@ private:
                         else
                         {
                             int64_t varId = inputs[get<string>(wk->attributes[name])];
-                            configVariables[varId] = basetype | xyz;
+                            if (wk->inputs[varId].second->size != 8 || wk->inputs[varId].second->type != TYPE_SCALAR || wk->inputs[varId].second->_scalar.kind != SCALAR_I64)
+                            {
+                                logError(ir->filename, ir->code, wk->code_start, wk->code_end, "%s attribute variable must be SIGNED 64bit INTEGER", name.c_str());
+                            }
+                            offset = offsets[get<string>(wk->attributes[name])];
+                            configVariables[varId] = {8, basetype | xyz};
                         }
                     }
                     xyz++;
@@ -214,16 +222,19 @@ private:
             }
             
             bool not_first = false;
+            inputId = 0;
             for (auto &[name, type] : wk->inputs)
             {
                 int64_t varId = inputs[name];
-                if (!configVariables[varId])
+                if (!configVariables[varId].second)
                 {
+                    configVariables[inputId] = {type->size, 0};
                     if (not_first) print(",");
                     printType(NULL, type);
                     print(" input_%lld", varId);
                     not_first = true;
                 }
+                inputId++;
             }
             print("){");
             
@@ -280,11 +291,11 @@ private:
     {
         switch (type->type)
         {
-            case TYPE_CLASS:   print("void *"); break;
+            case TYPE_CLASS:   print("void __global *"); break;
             case TYPE_RECORD:  print("struct st_%p", type); break;
             case TYPE_UNION:   print("union st_%p", type); break;
-            case TYPE_ARRAY:   printType(op, type->_vector.base); print("*"); break;
-            case TYPE_PROMISE: printType(op, type->_vector.base); print("*"); break;
+            case TYPE_ARRAY:   printType(op, type->_vector.base); print(" __global *"); break;
+            case TYPE_PROMISE: printType(op, type->_vector.base); print(" __global *"); break;
             case TYPE_PIPE:    if (op){logError(ir->filename, ir->code, op->code_start, op->code_end, "Pipe are unsupported in gpu provider");} break;
             case TYPE_SCALAR: 
             {
@@ -495,8 +506,10 @@ private:
                 /* export config vars count */
                 *(uint64_t *)header = resultConfigVariables[id].size();
                 header += 8;
-                for (BYTE access : resultConfigVariables[id])
+                for (auto [elsize, access] : resultConfigVariables[id])
                 {
+                    *(uint64_t *)header = elsize;
+                    header += 8;
                     *header++ = access;
                 }
             }

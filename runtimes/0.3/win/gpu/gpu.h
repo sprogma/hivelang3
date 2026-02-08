@@ -13,12 +13,20 @@
 #include "../runtime.h"
 
 
+struct gpu_input_table
+{
+    int64_t size;
+    BYTE type;
+};
+
 struct gpu_worker_info
 {
     char *start;
     char *end;
+    SRWLOCK kernel_lock;
+    cl_kernel kernel;
     int64_t inputMapLength;
-    BYTE *inputMap;
+    struct gpu_input_table *inputMap;
 };
 
 struct gpu_object

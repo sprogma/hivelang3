@@ -671,17 +671,33 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                     pos += 8;
                     int64_t inputMapLength = *(int64_t *)pos;
                     pos += 8;
-                    BYTE *map = myMalloc(inputMapLength);
+                    struct gpu_input_table *map = myMalloc(sizeof(*map) * inputMapLength);
                     for (int64_t j = 0; j < inputMapLength; ++j)
                     {
-                        map[j] = *pos++;
+                        map[j].size = *(int64_t *)pos;
+                        pos += 8;
+                        map[j].type = *pos++;
                     }
                     // set data
                     struct gpu_worker_info *info = myMalloc(sizeof(*info));
                     info->start = mem + start;
                     info->end = mem + end;
+                    info->kernel_lock = (SRWLOCK)SRWLOCK_INIT;
                     info->inputMapLength = inputMapLength;
                     info->inputMap = map;
+                    // build kernel
+                    int err;
+                    print("building kernel...\n");
+                    BYTE tmp = *info->end;
+                    *info->end = 0;
+                    print("%s\n", info->start);
+                    *info->end = tmp;
+                    info->kernel = gpuBuildFromText(SL_main_platform, 0, "krnl", info->start, info->end - info->start, &err);
+                    if (err != 0)
+                    {
+                        print("Error: kernel build failed\n");
+                        ExitProcess(1);
+                    }
                     Workers[id] = (struct worker_info){PROVIDER_GPU, info, tableSize};
                     log("Worker %lld [GPU] have been loaded to %p [offset %llx:%llx] with input table of size %lld\n", id, info, start, end, tableSize);
                 }
