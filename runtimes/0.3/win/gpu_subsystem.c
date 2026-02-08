@@ -1,9 +1,6 @@
 #include "gpu_subsystem.h"
 #include "runtime_lib.h"
 
-#define MAX_SL_PLATFORMS 16
-#define MAX_SL_DEVICES 8
-#define MAX_SL_QUEUES 8
 
 cl_platform_id   SL_platforms[MAX_SL_PLATFORMS];
 int              SL_platforms_len;
@@ -12,6 +9,8 @@ int              SL_devices_len[MAX_SL_PLATFORMS];
 cl_context       SL_context;
 cl_command_queue SL_queues[MAX_SL_PLATFORMS][MAX_SL_QUEUES];
 int              SL_queues_len[MAX_SL_PLATFORMS];
+
+int              SL_main_platform;
 
 int SL_best_platform = 0;
 int SL_best_platform_value = 0;
@@ -158,16 +157,16 @@ int init_gpu_subsystem()
             PRINT(CL_DEVICE_VERSION,                                  "\t%lld.%lld.Device Version            : %s\n", (int64_t)i, (int64_t)dev);
             PRINT(CL_DEVICE_PROFILE,                                  "\t%lld.%lld.Profile                   : %s\n", (int64_t)i, (int64_t)dev);
             PRINT(CL_DEVICE_EXTENSIONS,                               "\t%lld.%lld.Extensions                : %s\n", (int64_t)i, (int64_t)dev);
-            PRINV(CL_DEVICE_MAX_COMPUTE_UNITS, unsigned,              "\t%lld.%lld.Max Compute Units         : %llu\n", (int64_t)i, (int64_t)dev);
-            PRINS(CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS, unsigned,       "\t%lld.%lld.Max Item Dimensions       : %llu\n", (int64_t)i, (int64_t)dev);
-            PRINV(CL_DEVICE_MAX_WORK_GROUP_SIZE, size_t,              "\t%lld.%lld.Max Group Size            : %llu\n", (int64_t)i, (int64_t)dev);
-            PRINI(CL_DEVICE_MAX_WORK_ITEM_SIZES, size_t,              "\t\t%lld.%lld.Max Item Sizes[%lld]        : %llu\n", (int64_t)i, (int64_t)dev);
-            PRINV(CL_DEVICE_MAX_CLOCK_FREQUENCY, unsigned,            "\t%lld.%lld.Max Clock Frequency       : %llu\n", (int64_t)i, (int64_t)dev);
-            PRINV(CL_DEVICE_MAX_MEM_ALLOC_SIZE, unsigned long,        "\t%lld.%lld.Max Mem Alloc Size        : %llu\n", (int64_t)i, (int64_t)dev);
-            PRINV(CL_DEVICE_GLOBAL_MEM_CACHELINE_SIZE, unsigned,      "\t%lld.%lld.Global Mem Cacheline Size : %llu\n", (int64_t)i, (int64_t)dev);
-            PRINV(CL_DEVICE_GLOBAL_MEM_CACHE_SIZE, unsigned long,     "\t%lld.%lld.Global Mem Cache Size     : %llu\n", (int64_t)i, (int64_t)dev);
-            PRINV(CL_DEVICE_GLOBAL_MEM_SIZE, unsigned long,           "\t%lld.%lld.Global Mem Size           : %llu\n", (int64_t)i, (int64_t)dev);
-            PRINV(CL_DEVICE_LOCAL_MEM_SIZE, unsigned long,            "\t%lld.%lld.Local Mem Size            : %llu\n", (int64_t)i, (int64_t)dev);
+            PRINV(CL_DEVICE_MAX_COMPUTE_UNITS, unsigned,              "\t%lld.%lld.Max Compute Units         : %lld\n", (int64_t)i, (int64_t)dev);
+            PRINS(CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS, unsigned,       "\t%lld.%lld.Max Item Dimensions       : %lld\n", (int64_t)i, (int64_t)dev);
+            PRINV(CL_DEVICE_MAX_WORK_GROUP_SIZE, size_t,              "\t%lld.%lld.Max Group Size            : %lld\n", (int64_t)i, (int64_t)dev);
+            PRINI(CL_DEVICE_MAX_WORK_ITEM_SIZES, size_t,              "\t\t%lld.%lld.Max Item Sizes[%lld]        : %lld\n", (int64_t)i, (int64_t)dev);
+            PRINV(CL_DEVICE_MAX_CLOCK_FREQUENCY, unsigned,            "\t%lld.%lld.Max Clock Frequency       : %lld\n", (int64_t)i, (int64_t)dev);
+            PRINV(CL_DEVICE_MAX_MEM_ALLOC_SIZE, unsigned long,        "\t%lld.%lld.Max Mem Alloc Size        : %lld\n", (int64_t)i, (int64_t)dev);
+            PRINV(CL_DEVICE_GLOBAL_MEM_CACHELINE_SIZE, unsigned,      "\t%lld.%lld.Global Mem Cacheline Size : %lld\n", (int64_t)i, (int64_t)dev);
+            PRINV(CL_DEVICE_GLOBAL_MEM_CACHE_SIZE, unsigned long,     "\t%lld.%lld.Global Mem Cache Size     : %lld\n", (int64_t)i, (int64_t)dev);
+            PRINV(CL_DEVICE_GLOBAL_MEM_SIZE, unsigned long,           "\t%lld.%lld.Global Mem Size           : %lld\n", (int64_t)i, (int64_t)dev);
+            PRINV(CL_DEVICE_LOCAL_MEM_SIZE, unsigned long,            "\t%lld.%lld.Local Mem Size            : %lld\n", (int64_t)i, (int64_t)dev);
             #undef PRINT
             #undef PRINV
             #undef PRINS
@@ -182,6 +181,7 @@ int init_gpu_subsystem()
 
 
     int platform_id = SL_best_platform;
+    SL_main_platform = platform_id;
 
     print("Init form platform %lld [auto selected]\n", platform_id);
     
@@ -191,14 +191,14 @@ int init_gpu_subsystem()
                                  NULL, // using no function for errors detection
                                  NULL, // and no it's data
                                  &err);
-    if (err) { return err; }
+    if (err) { print("Error at clCreateContext [%lld]\n", err); return err; }
     for (int i = 0; i < SL_devices_len[platform_id]; ++i)
     {
         SL_queues[platform_id][i] = clCreateCommandQueueWithProperties(SL_context,
                                                          SL_devices[platform_id][i],
                                                          NULL,
                                                          &err);
-        if (err) { return err; }
+        if (err) { print("Error at clCreateCommandQueueWithProperties [%lld]\n", err); return err; }
     }
     return 0;
 }

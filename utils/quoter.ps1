@@ -14,18 +14,29 @@ function Update-OnChange
     )
     ls $BasePath -r -File | ? Name -match $TrackedFiles | % {
         $file = $_
+        $numb = 0
         $initialContent = [IO.File]::ReadAllText($file);
         $intermediate = $initialContent -replace  "(\n|^)(( |\t)*(#|//|;))<<--Quote-->> from:(?<file>[^:]*):(?<reg>.*?)\r?\n(.|\n)*?(#|//|;)<<--QuoteEnd-->>", 
                                                  {"$(-join$_.Groups[1..2])<<--Quote:$($_.Groups['file']):$($_.Groups['reg'])"}
         $resultContent = $intermediate -replace   "(\n|^)(( |\t)*(#|//|;))<<--Quote:(?<file>[^:]*):(?<reg>.*?)\r?(?=(\n|$))", 
                                                  {
+                                                  $numb++
+                                                  $eee = $true
                                                   $fl = $_.Groups['file'].Value.Trim()
                                                   $reg=$_.Groups['reg'].Value
                                                   $c=$_.Groups[2].ToString()
                                                   if ([string]::IsNullOrEmpty($fl))
                                                   {
                                                       pushd (split-path $file)
-                                                      $match = $reg | iex
+                                                      try
+                                                      {
+                                                          $match = $reg | iex -ErrorAction Stop
+                                                      }
+                                                      catch
+                                                      {
+                                                          Write-Error "Error in file $file [quote#$numb]"
+                                                          Write-Error $_
+                                                      }
                                                       popd
                                                   }
                                                   else
@@ -36,20 +47,24 @@ function Update-OnChange
                                                           "$(-join$_.Groups[1..2])<<--Quote-->> from:$($_.Groups['file']):$reg`n"+
                                                           "$($_.Groups[2]) Error: Quoted file not found`n"+
                                                           "$($_.Groups[2])<<--QuoteEnd-->>"
+                                                          $eee = $false
                                                       } else {
                                                           $content = [IO.File]::ReadAllText($reqfile)
                                                           $match = [regex]::Matches($content, $reg).Value -replace "(^|\n)", {"$_$c "}
                                                       }
                                                   }
-                                                  if ($match.Count -gt 0) {
-                                                      "$(-join$_.Groups[1..2])<<--Quote-->> from:$($_.Groups['file']):$reg`n"+
-                                                      "$($match-join"`n")`n"+
-                                                      "$($_.Groups[2])<<--QuoteEnd-->>"
-                                                  } else {
-                                                      "$(-join$_.Groups[1..2])<<--Quote-->> from:$($_.Groups['file']):$reg`n"+
-                                                      "$($_.Groups[2]) Error: can't find pattern in file`n"+
-                                                      "$($_.Groups[2])<<--QuoteEnd-->>"
-                                                      Write-Error "Failed to find pattern required from file: $file [pattern=$reg]"
+                                                  if ($eee)
+                                                  {
+                                                      if ($match.Count -gt 0) {
+                                                          "$(-join$_.Groups[1..2])<<--Quote-->> from:$($_.Groups['file']):$reg`n"+
+                                                          "$($match-join"`n")`n"+
+                                                          "$($_.Groups[2])<<--QuoteEnd-->>"
+                                                      } else {
+                                                          "$(-join$_.Groups[1..2])<<--Quote-->> from:$($_.Groups['file']):$reg`n"+
+                                                          "$($_.Groups[2]) Error: can't find pattern in file`n"+
+                                                          "$($_.Groups[2])<<--QuoteEnd-->>"
+                                                          Write-Error "Failed to find pattern required from file: $file [pattern=$reg]"
+                                                      }
                                                   }}
         if ($resultContent -ne $initialContent)
         {

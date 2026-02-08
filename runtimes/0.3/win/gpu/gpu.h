@@ -8,6 +8,7 @@
 
 
 #include "../runtime_lib.h"
+#include "../gpu_subsystem.h"
 #include "../remote.h"
 #include "../runtime.h"
 
@@ -20,11 +21,20 @@ struct gpu_worker_info
     BYTE *inputMap;
 };
 
+struct gpu_object
+{
+    int64_t size;
+    int64_t length; // for arrays
+    cl_mem mem;
+};
+
+
+#define RETURN_STATE_GPU_END ((void *)1)
+
 
 void gpuExecuteWorker(struct queued_worker *obj);
-void gpuPauseWorker(struct waiting_cause *waiting_data);
 int64_t gpuUpdateWaitingWorker(struct waiting_worker *wk, int64_t ticks, int64_t *rdiValue);
-void gpuNewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id);
+void gpuNewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t *remote_id);
 
 
 #endif

@@ -12,6 +12,7 @@
 #include "state.h"
 #include "runtime_lib.h"
 #include "remote.h"
+#include "providers.h"
 
 // ! DON'T MOVE FIELDS [only in both this file and runtime.asm]
 struct dll_call_data
@@ -37,13 +38,13 @@ extern int64_t setjmpUN(struct jmpbuf *);
 
 struct waiting_worker
 {
+    // object waiting data
+    int64_t state;
+    void *state_data;
     // worker id
     int64_t id;
     // worker data [continue address on x64]
     void *data;
-    // object awaiting data
-    int64_t state;
-    void *state_data;
     // registers
     void *rbpValue;
     int64_t context[9];
@@ -86,8 +87,9 @@ typedef uint8_t BYTE;
 
 struct __attribute__((packed)) object
 {
-    int8_t provider;   // [-2]
-    int8_t type;       // [-1]
+    uint64_t data_size : 48;
+    uint64_t provider : 8;   // [-2]
+    uint64_t type : 8;       // [-1]
     BYTE data[];
 };
 
@@ -96,14 +98,12 @@ struct __attribute__((packed)) object_pipe
     SRWLOCK lock;
     int64_t length;
     int64_t position;
-    int8_t _[6];
     struct object; // data is circular buffer, of length 'length' and position stored in 'position' field
 };
 
 struct __attribute__((packed)) object_array
 {
     int64_t length;
-    int8_t _[6];
     struct object;
 };
 
@@ -129,7 +129,7 @@ struct hive_provider_info
 {
     void (*ExecuteWorker)(struct queued_worker *);
     int64_t (*UpdateWaitingWorker)(struct waiting_worker *, int64_t, int64_t *);
-    void (*NewObjectUsingPage)(int64_t type, int64_t size, int64_t param, int64_t remote_id);
+    void (*NewObjectUsingPage)(int64_t type, int64_t size, int64_t param, int64_t *remote_id);
 };
 extern struct hive_provider_info Providers[];
 
@@ -185,7 +185,7 @@ int64_t GetNewObjectId(int64_t *result);
 void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue);
 
 
-// void NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id);
+// void NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t *remote_id);
 // void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue);
 // int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue);
 // void UpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);

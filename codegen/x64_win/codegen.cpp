@@ -965,6 +965,30 @@ private:
         return current->content->variables[name]->size;
     }
 
+    int64_t varTypeID(TypeContext *type)
+    {
+        //<<--Quote-->> from:../../runtimes/0.3/win/runtime.h:(^|(?<=\n)) *#define\s+OBJECT_\w+\s+0x[\da-fA-F]+
+        // #define OBJECT_PIPE           0x01
+        // #define OBJECT_PROMISE        0x02
+        // #define OBJECT_ARRAY          0x03
+        // #define OBJECT_OBJECT         0x04
+        // #define OBJECT_DEFINED_ARRAY  0x05
+        //<<--QuoteEnd-->>
+        switch (type->type)
+        {
+            case TYPE_PIPE:
+                return 0x01;
+            case TYPE_PROMISE:
+                return 0x02;
+            case TYPE_ARRAY:
+                return 0x03;
+            case TYPE_CLASS:
+                return 0x04;
+            default:
+                return 0;
+        }
+    }
+
     int64_t GetInputOffset(int64_t id)
     {
         // sum all sizes from inputs and outputs
@@ -1371,11 +1395,24 @@ private:
                 else
                 {
                     // rdi=object
-                    // rsi=toID
-                    // rdx=fromID
+                    // rsi=toID | (object_type << 8)
+                    // rdx=fromID | (object_type << 8)
+                    // rcx=objectSize
                     InsertMove(op, {7, 8}, Register(op->data[1]), false);
-                    InsertInteger(op, {6, 8}, ProviderId(varType(op->data[0])->provider));
-                    InsertInteger(op, {2, 8}, ProviderId(varType(op->data[1])->provider));
+                    InsertInteger(op, {6, 8}, ProviderId(varType(op->data[0])->provider) | (varTypeID(varType(op->data[0])) << 8));
+                    InsertInteger(op, {2, 8}, ProviderId(varType(op->data[1])->provider) | (varTypeID(varType(op->data[1])) << 8));
+                    int64_t var_size = 0;
+                    switch (varType(op->data[1])->type)
+                    {
+                        case TYPE_PROMISE:
+                        case TYPE_ARRAY:
+                        case TYPE_PIPE:
+                            var_size = varType(op->data[1])->_vector.base->size; break;
+                        case TYPE_CLASS:
+                            var_size = GetClassSize(varType(op->data[1])); break;
+                        default:
+                    }
+                    InsertInteger(op, {1, 8}, var_size);
                     runtimeApiHeader[GetHeaderId(ACTION_CAST_PROVIDER)].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
                     InsertMove(op, Register(op->data[0]), {7, 8}, false);
                     break;

@@ -170,6 +170,12 @@ void EnqueueWorker(struct queued_worker *t)
 
 void UpdateWaitingWorkers()
 {
+    static int xt = 0;
+    if (xt++ > 300)
+    {
+        print("break\n");
+        ExitProcess(1);
+    }
     int64_t ticks;
     QueryPerformanceCounter((void *)&ticks);
     log("wait list: %lld\n", wait_list_len);
@@ -184,11 +190,31 @@ void UpdateWaitingWorkers()
         int64_t rdiValue = 0;
         switch (w->state)
         {
-            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@reg\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$_.Group|%{"            case $($_.a):"};"                res=$($_.Name)(w, ticks, &rdiValue); break;"})-join"`n"
+            // delarations
+            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@reg\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*12)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t *);"}})-join"`n"
+            int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
+            int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
+            int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
+            int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
+            int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
+            int64_t x64NewObjectStates(struct waiting_worker *, int64_t, int64_t *);
+            int64_t x64PushObjectStates(struct waiting_worker *, int64_t, int64_t *);
+            int64_t x64QueryObjectStates(struct waiting_worker *, int64_t, int64_t *);
+            //<<--QuoteEnd-->>
+            // calls
+            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@reg\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"            case $($_.a):"};"                res = $($n.Name)(w, ticks, &rdiValue); break;"})-join"`n"
+            case WK_STATE_GET_OBJECT_SIZE:
+            case WK_STATE_GET_OBJECT_SIZE_RESULT:
+            case WK_STATE_GET_OBJECT_DATA:
+            case WK_STATE_GET_OBJECT_DATA_RESULT:
+            case WK_STATE_CAST_WAIT_PAGES:
+                res = anyCastStates(w, ticks, &rdiValue); break;
+            case WK_STATE_NEW_OBJECT_WAIT_PAGES_X64:
+                res = x64NewObjectStates(w, ticks, &rdiValue); break;
             case WK_STATE_PUSH_OBJECT_WAIT_X64:
-                res=x64NewObjectMachine(w, ticks, &rdiValue); break;
-            case WK_STATE_PUSH_OBJECT_WAIT_X64:
-                res=x64PushObjectWorker(w, ticks, &rdiValue); break;
+                res = x64PushObjectStates(w, ticks, &rdiValue); break;
+            case WK_STATE_QUERY_OBJECT_WAIT_X64:
+                res = x64QueryObjectStates(w, ticks, &rdiValue); break;
             //<<--QuoteEnd-->>
         }
         if (res)

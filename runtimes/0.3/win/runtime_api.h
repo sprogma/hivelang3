@@ -25,8 +25,9 @@
 // // rdx=worker id
 // case OP_CAST:
 // // rdi=object
-// // rsi=toID
-// // rdx=fromID
+// // rsi=toID | (object_type << 8)
+// // rdx=fromID | (object_type << 8)
+// // rcx=objectSize
 // case OP_NEW_INT:
 // case OP_NEW_FLOAT:
 // case OP_NEW_STRING:
@@ -87,22 +88,22 @@ extern int any_fastCastProvider(void);
 
 
 __attribute__((sysv_abi))
-int64_t x64QueryObject  (void   *destination, int64_t object,    int64_t offset,    int64_t size,  void *returnAddress, void *rbpValue);
+int64_t x64QueryObject  (void   *destination, int64_t object,    int64_t offset,    int64_t size,            void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
-int64_t x64QueryPipe    (void   *destination, int64_t object_id, int64_t offset,    int64_t size,  void *returnAddress, void *rbpValue);
+int64_t x64QueryPipe    (void   *destination, int64_t object_id, int64_t offset,    int64_t size,            void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
-void    x64PushObject   (int64_t object,      void   *source,    int64_t offset,    int64_t size,  void *returnAddress, void *rbpValue);
+void    x64PushObject   (int64_t object,      void   *source,    int64_t offset,    int64_t size,            void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
-void    x64PushPipe     (int64_t object,      void   *source,    int64_t offset,    int64_t size,  void *returnAddress, void *rbpValue);
+void    x64PushPipe     (int64_t object,      void   *source,    int64_t offset,    int64_t size,            void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
-int64_t x64NewObject    (int64_t type,        int64_t size,      int64_t param,     int64_t _,     void *returnAddress, void *rbpValue);
+int64_t x64NewObject    (int64_t type,        int64_t size,      int64_t param,     int64_t _,               void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
-int64_t gpuNewObject    (int64_t type,        int64_t size,      int64_t param,     int64_t _,     void *returnAddress, void *rbpValue);
+int64_t gpuNewObject    (int64_t type,        int64_t size,      int64_t param,     int64_t _,               void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
-void    x64CallObject   (int64_t moditifer,   BYTE *args,        int64_t workerId,  int64_t _,     void *returnAddress, void *rbpValue);
+void    x64CallObject   (int64_t moditifer,   BYTE *args,        int64_t workerId,  int64_t _,               void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
-void    gpuCallObject   (int64_t moditifer,   BYTE *args,        int64_t workerId,  int64_t _,     void *returnAddress, void *rbpValue);
+void    gpuCallObject   (int64_t moditifer,   BYTE *args,        int64_t workerId,  int64_t _,               void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
-int64_t anyCastProvider (void *obj,           int64_t to,        int64_t from,      int64_t _,     void *returnAddress, void *rbpValue);
+int64_t anyCastProvider (void *obj,           int64_t to,        int64_t from,      int64_t object_size,     void *returnAddress, void *rbpValue);
 
 #endif

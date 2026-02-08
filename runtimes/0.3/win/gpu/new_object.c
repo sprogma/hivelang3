@@ -10,51 +10,34 @@
 #include "../providers.h"
 #include "gpu.h"
 
-void gpuNewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id)
+void gpuNewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t *remote_id)
 {
-    // generate header
-    struct object header;
-    header.type = type;
-
+    log("Allocating buffer of size %lld param %lld\n", size, param);
+    struct gpu_object *res = myMalloc(sizeof(*res));
+    res->size = size;
+    res->length = size / param;
+    int err;
+    res->mem = gpuAlloc(size, CL_MEM_READ_WRITE, &err);
+    if (err)
+    {
+        print("ERROR: gpuAlloc failed [%lld]\n", err);
+    }
+    *remote_id = (int64_t)res;
+    print("result %p\n", res);
+    
     // create object
     switch (type)
     {
         case OBJECT_PIPE:
         {
-            print("ERROR: Pipes are unsupported on GPU provider\n");
+            print("ERROR: Pipes are unsupported on GPU provider\n");    
             return;
         }
         case OBJECT_ARRAY:
-        {
-            log("Array of %lld bytes, element of size %lld allocated\n", size, param);
-            struct object_array *res = myMalloc(sizeof(*res) + size);
-            memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
-            res->length = size / param;
-            int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
-            RegisterObjectWithId(remote_id, (struct object *)pointer);
-            log("[id=%llx]\n", remote_id);
-            return;
-        }
         case OBJECT_PROMISE:
-        {
-            log("Promise for size %lld allocated\n", size);
-            struct object_promise *res = myMalloc(sizeof(*res) + size);
-            memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
-            res->type = OBJECT_PROMISE;
-            res->ready = 0;
-            int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
-            RegisterObjectWithId(remote_id, (struct object *)pointer);
-            log("[id=%llx]\n", remote_id);
-            return;
-        }
         case OBJECT_OBJECT:
         {
-            log("Class for size %lld allocated\n", size);
-            struct object_object *res = myMalloc(sizeof(*res) + size);
-            res->type = OBJECT_OBJECT;
-            int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
-            RegisterObjectWithId(remote_id, (struct object *)pointer);
-            log("[id=%llx]\n", remote_id);
+            log("object for size %lld allocated\n", size);
             return;
         }
         case OBJECT_DEFINED_ARRAY:
@@ -76,31 +59,13 @@ void gpuNewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t re
 __attribute__((sysv_abi))
 int64_t gpuNewObject(int64_t type, int64_t size, int64_t param, int64_t _, void *returnAddress, void *rbpValue)
 {
+    (void)returnAddress;
+    (void)rbpValue;
     (void)_;
     
     // find non empty memory page
     int64_t remote_id;
-    
-    if (!GetNewObjectId(&remote_id))
-    {
-        if (returnAddress == NULL)
-        {
-            return 0;
-        }
-        /* wait for new pages */
-        struct waiting_pages *cause = myMalloc(sizeof(*cause));
-        cause->type = WAITING_PAGES,
-        cause->provider = PROVIDER_GPU,
-        cause->obj_type = type,
-        cause->size = size,
-        cause->param = param,
-        universalPauseWorker(returnAddress, rbpValue, (struct waiting_cause *)cause);
-        
-        struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
-        longjmpUN(&lc_data->ShedulerBuffer, 1);
-    }
-
-    gpuNewObjectUsingPage(type, size, param, remote_id);
+    gpuNewObjectUsingPage(type, size, param, &remote_id);
     return remote_id;
 }
 

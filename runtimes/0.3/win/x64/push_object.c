@@ -46,8 +46,26 @@ struct wait_push_info
     BYTE id[BROADCAST_ID_LENGTH];
     int64_t repeat_timeout;
 };
-//@reg WK_STATE_PUSH_OBJECT_WAIT_X64 x64PushObjectWorker
-int64_t x64PushObjectMachine(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue)
+//@regPush WK_STATE_PUSH_OBJECT_WAIT_X64 x64OnPushObject
+int64_t x64OnPushObject(struct waiting_worker *w, int64_t object, int64_t offset, int64_t size)
+{
+    switch (w->state)
+    {
+    
+    case WK_STATE_PUSH_OBJECT_WAIT_X64:
+        struct wait_push_info *info = w->state_data;
+        if (info->object_id == object && info->offset == offset && myAbs(info->size) == size)
+        {
+            myFree(info);
+            return 1;
+        }
+        return 0;
+        
+    }
+    __builtin_unreachable();
+}
+//@reg WK_STATE_PUSH_OBJECT_WAIT_X64 x64PushObjectStates
+int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue)
 {
     (void)rdiValue;
     switch (w->state)
@@ -62,7 +80,7 @@ int64_t x64PushObjectMachine(struct waiting_worker *w, int64_t ticks, int64_t *r
             log("waiting for remote push %lld/%lld\n", ticks, info->repeat_timeout);
             if (ticks > info->repeat_timeout)
             {
-                    RequestObjectSet(info->object_id, info->offset, myAbs(info->size), info->data);
+                RequestObjectSet(info->object_id, info->offset, myAbs(info->size), info->data);
                 info->repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT);
             }
             break;
@@ -70,6 +88,7 @@ int64_t x64PushObjectMachine(struct waiting_worker *w, int64_t ticks, int64_t *r
         else
         {
             x64UpdateLocalPush(obj, info->offset, info->size, info->data);
+            myFree(info);
             return 1;
         }
         return 0;
@@ -99,7 +118,7 @@ void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size
             .repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT),
         };
         BCryptGenRandom(NULL, info->id, BROADCAST_ID_LENGTH, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-        x64PauseWorker(returnAddress, rbpValue, WK_STATE_PUSH_OBJECT_WAIT_X64, info);
+        universalPauseWorker(returnAddress, rbpValue, WK_STATE_PUSH_OBJECT_WAIT_X64, info);
     
         struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
         longjmpUN(&lc_data->ShedulerBuffer, 1);

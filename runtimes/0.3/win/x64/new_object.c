@@ -10,11 +10,13 @@
 #include "../providers.h"
 #include "x64.h"
 
-void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t remote_id)
+void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t *remote_id)
 {
     // generate header
     struct object header;
     header.type = type;
+    header.provider = PROVIDER_X64;
+    header.data_size = size;
 
     // create object
     switch (type)
@@ -24,11 +26,10 @@ void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t re
             log("Pipe for size %lld allocated\n", size);
             struct object_promise *res = myMalloc(sizeof(*res) + size);
             memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
-            res->type = OBJECT_PROMISE;
             res->ready = 0;
             int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
-            RegisterObjectWithId(remote_id, (struct object *)pointer);
-            log("[id=%llx]\n", remote_id);
+            RegisterObjectWithId(*remote_id, (struct object *)pointer);
+            log("[id=%llx]\n", *remote_id);
             return;
         }
         case OBJECT_ARRAY:
@@ -38,8 +39,8 @@ void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t re
             memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
             res->length = size / param;
             int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
-            RegisterObjectWithId(remote_id, (struct object *)pointer);
-            log("[id=%llx]\n", remote_id);
+            RegisterObjectWithId(*remote_id, (struct object *)pointer);
+            log("[id=%llx]\n", *remote_id);
             return;
         }
         case OBJECT_PROMISE:
@@ -47,21 +48,20 @@ void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t re
             log("Promise for size %lld allocated\n", size);
             struct object_promise *res = myMalloc(sizeof(*res) + size);
             memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
-            res->type = OBJECT_PROMISE;
             res->ready = 0;
             int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
-            RegisterObjectWithId(remote_id, (struct object *)pointer);
-            log("[id=%llx]\n", remote_id);
+            RegisterObjectWithId(*remote_id, (struct object *)pointer);
+            log("[id=%llx]\n", *remote_id);
             return;
         }
         case OBJECT_OBJECT:
         {
             log("Class for size %lld allocated\n", size);
             struct object_object *res = myMalloc(sizeof(*res) + size);
-            res->type = OBJECT_OBJECT;
+            memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
             int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
-            RegisterObjectWithId(remote_id, (struct object *)pointer);
-            log("[id=%llx]\n", remote_id);
+            RegisterObjectWithId(*remote_id, (struct object *)pointer);
+            log("[id=%llx]\n", *remote_id);
             return;
         }
         case OBJECT_DEFINED_ARRAY:
@@ -71,9 +71,9 @@ void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t re
             int64_t objSize = defined_arrays[size].size;
             log("Defined array for size %lld allocated\n", objSize);
             struct object_array *res = myMalloc(sizeof(*res) + objSize);
-            memcpy(res->_, &param, 8);
-            res->type = OBJECT_ARRAY;
+            memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
             res->length = objSize / param;
+            res->type = OBJECT_ARRAY;
             // fill data
             memcpy(res->data, objStart, objSize);
             for (int i = 0; i < objSize; ++i)
@@ -82,8 +82,8 @@ void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t re
             }
             log("\n");
             int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
-            RegisterObjectWithId(remote_id, (struct object *)pointer);
-            log("[id=%llx]\n", remote_id);
+            RegisterObjectWithId(*remote_id, (struct object *)pointer);
+            log("[id=%llx]\n", *remote_id);
             return;
         }
         default:
@@ -99,16 +99,28 @@ struct wait_pages_info
     int64_t size;
     int64_t param;
 };
-//@reg WK_STATE_NEW_OBJECT_WAIT_PAGES_X64 x64NewObjectMachine
-int64_t x64NewObjectMachine(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue)
+//@reg WK_STATE_NEW_OBJECT_WAIT_PAGES_X64 x64NewObjectStates
+int64_t x64NewObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue)
 {
+    (void)ticks;
+    
     switch (w->state)
     {
     
     case WK_STATE_NEW_OBJECT_WAIT_PAGES_X64:
-        
-            
+        struct wait_pages_info *info = (struct wait_pages_info *)w->state_data;
+        int64_t new_id;
+        if (GetNewObjectId(&new_id))
+        {
+            x64NewObjectUsingPage(info->obj_type, info->size, info->param, &new_id);
+            *rdiValue = new_id;
+            myFree(info);
+            return 1;
+        }
+        return 0;
     }
+    
+    __builtin_unreachable();
 }
 
 // if allocating ARRAY, param must be element size.
@@ -130,18 +142,16 @@ int64_t x64NewObject(int64_t type, int64_t size, int64_t param, int64_t _, void 
         }
         /* wait for new pages */
         struct wait_pages_info *info = myMalloc(sizeof(*info));
-        info->type = WAITING_PAGES,
-        info->provider = PROVIDER_X64,
         info->obj_type = type,
         info->size = size,
         info->param = param,
-        x64PauseWorker(returnAddress, rbpValue, (struct wait_pages_info *)info);
+        universalPauseWorker(returnAddress, rbpValue, WK_STATE_NEW_OBJECT_WAIT_PAGES_X64, info);
 
         struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
         longjmpUN(&lc_data->ShedulerBuffer, 1);
     }
 
-    x64NewObjectUsingPage(type, size, param, remote_id);
+    x64NewObjectUsingPage(type, size, param, &remote_id);
     return remote_id;
 }
 

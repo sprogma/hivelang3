@@ -264,18 +264,23 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
     for (int64_t i = 0; i < wait_list_len; ++i)
     {
         struct waiting_worker *w = wait_list[i];
-        if (w->waiting_data->type == WAITING_PUSH)
+        int64_t res = 0;
+        switch (w->state)
         {
-            struct waiting_push *cause = (struct waiting_push *)w->waiting_data;
-            if (cause->object_id == object_id && myAbs(cause->size) == size && cause->offset == offset)
-            {
-                EnqueueWorkerFromWaitList(w, 0);
-                myFree(cause->data);
-                myFree(cause);
-                myFree(w);
-                wait_list[i] = wait_list[--wait_list_len];
-                i--;
-            }
+        //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regPush\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*8)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t, int64_t);"}})-join"`n"
+        int64_t x64OnPushObject(struct waiting_worker *, int64_t, int64_t, int64_t);
+        //<<--QuoteEnd-->>
+        //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regPush\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"        case $($_.a):"};"            res = $($n.Name)(w, object_id, offset, size); break;"})-join"`n"
+        case WK_STATE_PUSH_OBJECT_WAIT_X64:
+            res = x64OnPushObject(w, object_id, offset, size); break;
+        //<<--QuoteEnd-->>
+        }
+        if (res == 1)
+        {
+            EnqueueWorkerFromWaitList(w, 0);
+            myFree(w);
+            wait_list[i] = wait_list[--wait_list_len];
+            i--;
         }
     }
     ReleaseSRWLockExclusive(&wait_list_lock);
@@ -724,19 +729,28 @@ static int64_t HandleApiCall(struct hive_connection *con)
             for (int64_t i = 0; i < wait_list_len; ++i)
             {
                 struct waiting_worker *w = wait_list[i];
-                if (w->waiting_data->type == WAITING_QUERY)
+                int64_t res = 0, rdiValue;
+                switch (w->state)
                 {
-                    struct waiting_query *cause = (struct waiting_query *)w->waiting_data;
-                    if (cause->object_id == object_id && myAbs(cause->size) == query_size && cause->offset == query_offset)
-                    {
-                        int64_t rdiValue = 0;
-                        UpdateFromQueryResult(cause->destination, object_id, query_offset, query_size, data, &rdiValue);
-                        EnqueueWorkerFromWaitList(w, rdiValue);
-                        myFree(cause);
-                        myFree(w);
-                        wait_list[i] = wait_list[--wait_list_len];
-                        i--;
-                    }
+                //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regQuery\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*16)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);"}})-join"`n"
+                int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
+                int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
+                int64_t x64OnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
+                //<<--QuoteEnd-->>
+                //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regQuery\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*16)case $($_.a):"};"$(" "*20)res = $($n.Name)(w, object_id, query_offset, query_size, data, &rdiValue); break;"})-join"`n"
+                case WK_STATE_GET_OBJECT_SIZE:
+                case WK_STATE_GET_OBJECT_DATA:
+                    res = castOnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
+                case WK_STATE_QUERY_OBJECT_WAIT_X64:
+                    res = x64OnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
+                //<<--QuoteEnd-->>
+                }
+                if (res)
+                {
+                    EnqueueWorkerFromWaitList(w, rdiValue);
+                    myFree(w);
+                    wait_list[i] = wait_list[--wait_list_len];
+                    i--;
                 }
             }
             ReleaseSRWLockExclusive(&wait_list_lock);
