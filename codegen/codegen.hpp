@@ -10,18 +10,20 @@ typedef uint8_t BYTE;
 class CodeAssembler
 {
 public:
+    virtual ~CodeAssembler(){}
     virtual pair<BYTE *, BYTE *> Build(BuildResult *t, BYTE *header, BYTE *body, int64_t bodyOffset) = 0;
 };
 
 
 CodeAssembler *new_x64_Assembler();
 CodeAssembler *new_gpu_Assembler();
+CodeAssembler *new_DLL_Assembler();
 
 int64_t GetExportWorkerId(BuildResult *ctx, int64_t wkId, const string &provider);
 
 static inline bool validateProvider(const string& name)
 {
-    return name == "x64" || name == "gpu";
+    return name == "x64" || name == "gpu" || name == "dll";
 }
 
 static inline bool AllowInlining(const string& name)
@@ -38,6 +40,10 @@ static inline int64_t ProviderId(const string &name)
     if (name == "gpu")
     {
         return 1;
+    }
+    if (name == "dll")
+    {
+        return 2;
     }
     return -1;
 }
@@ -73,7 +79,10 @@ static inline int8_t GetHeaderId(enum header_id_action action, const string &pro
         case ACTION_QUERY_PIPE:
             return (provider == "x64" ? 9 : 29);
         case ACTION_CALL_WORKER:
-            return (provider == "x64" ? 3 : 23);
+            if (provider == "x64") return 3;
+            if (provider == "gpu") return 23;
+            if (provider == "dll") return 33;
+            break;
         case ACTION_CAST_PROVIDER:
             return 10;
         case HEADER_DLL_IMPORT:
@@ -85,6 +94,8 @@ static inline int8_t GetHeaderId(enum header_id_action action, const string &pro
         case HEADER_STRINGS_TABLE:
             return 17;
     }
+    printf("Error: unsupported action: %lld on provider %s\n", (int64_t)action, provider.c_str());
+    return -1;
 }
 
 

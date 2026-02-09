@@ -933,16 +933,6 @@ private:
     // header key, value
     map<BYTE, vector<api_call_entry>> runtimeApiHeader;
     
-    // worker id -> vector of input sizes + output size
-    struct dll_import_entry
-    {
-        int64_t output;
-        vector<int64_t> inputs;
-        string library;
-        string entry;
-    };
-    map<int64_t, dll_import_entry> dllImportHeader;
-
     vector<pair<OperationBlock *, OperationBlock *>> toBuild;
 
     bool isSigned(int64_t name)
@@ -1059,32 +1049,7 @@ private:
     {
         if (wk->content == NULL)
         {
-            // if this function is extern, create it's header
-            if (wk->attributes.contains("dllimport") && holds_alternative<string>(wk->attributes["dllimport"]))
-            {
-                string &lib = get<string>(wk->attributes["dllimport"]);
-                string entry = (wk->attributes.contains("dllimport.entry") && holds_alternative<string>(wk->attributes["dllimport.entry"])
-                               ? get<string>(wk->attributes["dllimport.entry"]) : wk->name);
-                if (wk->outputs.size() > 1)
-                {
-                    logError(ir->filename, ir->code, wk->code_start, wk->code_end, "DLLIMPORT function have more than 1 return argument");
-                    return;
-                }
-                if (!wk->outputs.empty() && wk->outputs[0].second->type != TYPE_PROMISE)
-                {
-                    logError(ir->filename, ir->code, wk->code_start, wk->code_end, "DLLIMPORT function's return argument isn't promise");
-                    return;
-                }
-                int64_t out_size = (wk->outputs.empty() ? -1 : wk->outputs[0].second->_vector.base->size);
-                // generate parameter sizes
-                vector<int64_t> sizes;
-                for (auto &[name, type] : wk->inputs)
-                {
-                    sizes.push_back(type->size);
-                }
-                // for now, there is no extra marshalling
-                dllImportHeader[workerId] = {out_size, sizes, lib, entry};
-            }
+            logError(ir->filename, ir->code, wk->code_start, wk->code_end, "x64 doesn't supports workers without body");
             return;
         }
         
@@ -1387,6 +1352,14 @@ private:
             }
                 
             case OP_CAST: 
+                // if this is cast scalar->object - all is ok
+                // TODO: what to do?
+                if ((varType(op->data[0])->type == TYPE_SCALAR) != 
+                    (varType(op->data[1])->type == TYPE_SCALAR))
+                {
+                    InsertMove(op, op->data[0], op->data[1]);
+                    break;
+                }
                 // if provider is same [x64] - move, else - request cast from provider
                 if ((varType(op->data[0])->provider == varType(op->data[1])->provider))
                 {
@@ -1923,39 +1896,6 @@ private:
             {
                 *(uint64_t *)header = (pos.position + bodyOffset);
                 header += 8;
-            }
-        }
-        /* add dll import data */
-        {
-            for (auto &[id, data] : dllImportHeader)
-            {
-                printf("Export dllimport data for worker %lld\n", id);
-                *header++ = GetHeaderId(HEADER_DLL_IMPORT);
-                /* export id */
-                *(uint64_t *)header = id;
-                header += 8;
-                /* export library name */
-                *(uint64_t *)header = data.library.size();
-                header += 8;
-                memcpy(header, data.library.c_str(), data.library.size());
-                header += data.library.size();
-                /* export function name */
-                *(uint64_t *)header = data.entry.size();
-                header += 8;
-                memcpy(header, data.entry.c_str(), data.entry.size());
-                header += data.entry.size();
-                /* export output size [base from promise] */
-                *(uint64_t *)header = data.output;
-                header += 8;
-                /* export inputs count */
-                *(uint64_t *)header = data.inputs.size();
-                header += 8;
-                /* export inputs */
-                for (auto &size : data.inputs)
-                {
-                    *(uint64_t *)header = size;
-                    header += 8;
-                }
             }
         }
         /* add x64 workers positions */

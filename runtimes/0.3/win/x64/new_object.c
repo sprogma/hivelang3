@@ -71,9 +71,10 @@ void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t *r
             int64_t objSize = defined_arrays[size].size;
             log("Defined array for size %lld allocated\n", objSize);
             struct object_array *res = myMalloc(sizeof(*res) + objSize);
+            header.type = OBJECT_ARRAY;
+            header.data_size = objSize;
             memcpy((BYTE *)res + DATA_OFFSET(*res) - DATA_OFFSET(header), &header, sizeof(header));
             res->length = objSize / param;
-            res->type = OBJECT_ARRAY;
             // fill data
             memcpy(res->data, objStart, objSize);
             for (int i = 0; i < objSize; ++i)
@@ -83,7 +84,10 @@ void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t *r
             log("\n");
             int64_t pointer = (int64_t)res + DATA_OFFSET(*res);
             RegisterObjectWithId(*remote_id, (struct object *)pointer);
-            log("[id=%llx]\n", *remote_id);
+            
+            int64_t size = 0;
+            memcpy(&size, (void *)pointer - 8, 6);
+            log("[id=%llx] [size=%lld]\n", *remote_id, size);
             return;
         }
         default:

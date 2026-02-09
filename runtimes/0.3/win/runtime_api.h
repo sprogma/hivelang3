@@ -81,6 +81,7 @@ extern int x64_fastPushPipe(void);
 extern int x64_fastQueryPipe(void);
 extern int gpu_fastNewObject(void);
 extern int gpu_fastCallObject(void);
+extern int dll_fastCallObject(void);
 extern int any_fastCastProvider(void);
 
 

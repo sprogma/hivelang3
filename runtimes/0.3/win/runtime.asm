@@ -8,6 +8,7 @@ public x64_fastPushPipe
 public x64_fastQueryPipe
 public gpu_fastNewObject
 public gpu_fastCallObject
+public dll_fastCallObject
 public any_fastCastProvider
 
 public x64AsmExecuteWorker
@@ -27,6 +28,7 @@ extrn x64NewObject
 extrn gpuNewObject
 extrn x64CallObject
 extrn gpuCallObject
+extrn dllCallObject
 extrn anyCastProvider
 extrn myPrintf
 
@@ -119,6 +121,8 @@ gpu_fastNewObject:
     CWrapper gpuNewObject
 gpu_fastCallObject:
     CWrapper gpuCallObject
+dll_fastCallObject:
+    CWrapper dllCallObject
 any_fastCastProvider:
     CWrapper anyCastProvider
 
@@ -202,8 +206,7 @@ jmp QWORD [rcx + 72]
 ;    void *loaded_function;      // + 0
 ;    int64_t output_size;        // + 8
 ;    int64_t sizes_len;          // +16
-;    int64_t *sizes;             // +24
-;    int64_t call_stack_usage;   // +32 // precalculated stack usage value
+;    int64_t call_stack_usage;   // +24 // precalculated stack usage value
 DllCall:
     push r12
     push r13
@@ -211,7 +214,7 @@ DllCall:
     push r15
     push rdi
 
-    mov r12, QWORD [rcx + 32]
+    mov r12, QWORD [rcx + 24]
     mov r13, r8
     mov r14, QWORD [rcx + 8]
     mov r15, QWORD [rcx + 16]
@@ -242,7 +245,6 @@ DllCall:
     ; if result size is 1 2 4 8 - save result
     test r13, r13
     jz .noRet
-    mov BYTE [r13 - 2], 1
     cmp r14, 1
     jne .not1
     mov [r13], al

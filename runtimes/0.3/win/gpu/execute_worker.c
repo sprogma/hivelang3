@@ -24,7 +24,7 @@ void gpuExecuteWorker(struct queued_worker *worker)
         return;
     }
     // TODO: set interrupt lock
-    myPrintf(L"RUN GPU worker=%p\n", worker);
+    log("RUN GPU worker=%p\n", worker);
     
     BYTE *inputTable = (BYTE *)worker->rdiValue;
     struct gpu_worker_info *info = Workers[worker->id].data;
@@ -65,7 +65,6 @@ void gpuExecuteWorker(struct queued_worker *worker)
             if (addr_qual == CL_KERNEL_ARG_ADDRESS_GLOBAL)
             {
                 struct gpu_object *obj = *(void **)currentArg;
-                print("AAA [%lld]\n", obj->mem);
                 err = clSetKernelArg(
                     info->kernel,
                     arg++,
@@ -75,7 +74,6 @@ void gpuExecuteWorker(struct queued_worker *worker)
             }
             else
             {
-                print("BBB\n");
                 err = clSetKernelArg(
                     info->kernel,
                     arg++,
@@ -87,13 +85,12 @@ void gpuExecuteWorker(struct queued_worker *worker)
             {
                 print("Error: at clSetKernelArg %lld\n", err);
             }
-            print("ok...\n");
         }
         currentArg += info->inputMap[i].size;
     }
 
     // queue kernel
-    print("CONFIGURED: dims=%lld\n", dims);
+    log("CONFIGURED: dims=%lld\n", dims);
     err = clEnqueueNDRangeKernel(
         SL_queues[SL_main_platform][0], 
         info->kernel, 
@@ -111,12 +108,10 @@ void gpuExecuteWorker(struct queued_worker *worker)
     ReleaseSRWLockExclusive(&info->kernel_lock);
     
     /* after return: push Errorcode to promise */
-    int64_t value = err; // TODO: set error code instead of 0
-    
+    int64_t value = err;
     int64_t promise = *(int64_t *)&inputTable[inputTableSize - 8];
    
     // wait for answer
-
     x64PushObject(promise, &value, 0, 8, RETURN_STATE_GPU_END, NULL);
 
     // return

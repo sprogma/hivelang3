@@ -1,0 +1,17 @@
+@x64
+
+[entry:yes]
+[export:yes]
+(i64[] input)main(i32? res)
+{
+    i16[] text;
+    text <- new i16[]"Goodbye!";
+    res <- ?(0, text, text, 0x40)MessageBox@dll(*);
+}
+
+
+[dllimport:User32.dll]
+[dllimport.entry:MessageBoxW]
+[dllimport.out:text,caption]
+[noinline:true]
+(i64 hwnd, i16[] text, i16[] caption, u32 type)MessageBox(i32? result);

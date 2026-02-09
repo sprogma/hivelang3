@@ -14,18 +14,6 @@
 #include "remote.h"
 #include "providers.h"
 
-// ! DON'T MOVE FIELDS [only in both this file and runtime.asm]
-struct dll_call_data
-{
-    void *loaded_function;
-    // marshal info
-    int64_t output_size;
-    int64_t sizes_len;
-    int64_t *sizes;
-    int64_t call_stack_usage;
-};
-
-extern int DllCall(struct dll_call_data *, int64_t *, void *);
 
 extern void callExample(void *);
 

@@ -10,6 +10,8 @@ if ($Sanitize)
 $dbgLF = , "-Wl,/debug"
 $rlsLF = ,"-flto", "-fuse-ld=lld"
 $rlsFF = ,"-fno-unwind-tables", "-fno-asynchronous-unwind-tables"
+$rlsDef = , "-DNDEBUG"
+$dbgDef = , "-D_DEBUG"
 $files = (ls -r *.c)
 $jobs = @()
 $jobs += Start-ThreadJob {   
@@ -20,7 +22,7 @@ $jobs += Start-ThreadJob {
         $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
         $o = "obj/$o"
         $z += $o
-        & $using:CC $_ -c -o $o $Speed -g -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS $using:rlsFF || Write-Host "Error in compilation"
+        & $using:CC $_ -c -o $o $Speed -g $using:rlsDef -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS $using:rlsFF || Write-Host "Error in compilation"
     }
     & $using:CC $z obj/asm.o -g -o a.exe $Speed "-Wl,/subsystem:console" "-Wl,/MAP:release.map" $using:LF $using:FLAGS $using:rlsLF $using:rlsFF || Write-Host "Error in compilation"
 }
@@ -31,7 +33,7 @@ $jobs += Start-ThreadJob {
         $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
         $o = "obj/dbg_$o"
         $z += $o
-        & $using:CC $_ -c -o $o -g -D_DEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS  || Write-Host "Error in compilation" # -fsanitize=address
+        & $using:CC $_ -c -o $o -g $using:dbgDef -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS  || Write-Host "Error in compilation" # -fsanitize=address
     }
     & $using:CC $z obj/asm_dbg.o -g -o d.exe "-Wl,/subsystem:console" "-Wl,/MAP:debug.map" $using:LF $using:FLAGS $using:dbgLF  || Write-Host "Error in compilation" # -fsanitize=address
 }

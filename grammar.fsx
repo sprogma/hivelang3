@@ -1,14 +1,14 @@
 // this file was generated using grammar_gen.ps1
 
-let prefix = "<RULE:751204425>"
+let prefix = "<RULE:2056159596>"
 
 let identifer_or_number = prefix + "identifer_or_number"
+let identifer = prefix + "identifer"
 let integer = prefix + "integer"
+let S = prefix + "S"
+let quotedstring = prefix + "quotedstring"
 let float = prefix + "float"
 let Sn = prefix + "Sn"
-let identifer = prefix + "identifer"
-let quotedstring = prefix + "quotedstring"
-let S = prefix + "S"
 let Global = prefix + "Global"
 let _using = prefix + "_using"
 let _record = prefix + "_record"
@@ -20,6 +20,7 @@ let worker = prefix + "worker"
 let worker_decl = prefix + "worker_decl"
 let attribute_list = prefix + "attribute_list"
 let attribute_list_entity = prefix + "attribute_list_entity"
+let identifer_with_dots = prefix + "identifer_with_dots"
 let arguments_list = prefix + "arguments_list"
 let code_block = prefix + "code_block"
 let statement = prefix + "statement"
@@ -110,8 +111,11 @@ let grammar =
             v [] [attribute_list_entity] []
         ]
         rule "attribute_list_entity" [
-            v [Sn; "["; Sn; identifer; Sn; "::"; Sn; expression; Sn; "]"] [] []
-            v [Sn; "["; Sn; identifer; Sn; ":"; Sn; identifer_or_number; Sn; "]"] [] []
+            v [Sn; "["; Sn; identifer_with_dots; Sn; "::"; Sn; expression; Sn; "]"] [] []
+            v [Sn; "["; Sn; identifer_with_dots; Sn; ":"; Sn; identifer_or_number; Sn; "]"] [] []
+        ]
+        rule "identifer_with_dots" [
+            v [identifer] ["."; identifer] []
         ]
         rule "arguments_list" [
             v [] [var_type; S; identifer; Sn; ","] [var_type; S; identifer]
@@ -251,7 +255,7 @@ let keyToIndexMap inputMap =
     |> Seq.mapi (fun i (k, _) -> (k, i + 20))
     |> Map.ofSeq
 
-let indexMap = keyToIndexMap grammar  |> Map.add "identifer_or_number" 4  |> Map.add "integer" 5  |> Map.add "float" 6  |> Map.add "Sn" 2  |> Map.add "identifer" 3  |> Map.add "quotedstring" 7  |> Map.add "S" 1
+let indexMap = keyToIndexMap grammar  |> Map.add "identifer_or_number" 4  |> Map.add "identifer" 3  |> Map.add "integer" 5  |> Map.add "S" 1  |> Map.add "quotedstring" 7  |> Map.add "float" 6  |> Map.add "Sn" 2
 
 let printTerm = function 
     | Terminal s -> sprintf "\"%s\"" s 

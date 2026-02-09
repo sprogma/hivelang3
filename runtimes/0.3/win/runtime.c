@@ -18,6 +18,7 @@
 
 #include "x64/x64.h"
 #include "gpu/gpu.h"
+#include "dll/dll.h"
 
 struct defined_array *defined_arrays;
 
@@ -30,6 +31,10 @@ struct hive_provider_info Providers[] = {
     {
         .ExecuteWorker=gpuExecuteWorker,
         .NewObjectUsingPage=gpuNewObjectUsingPage,
+    },
+    {
+        .ExecuteWorker=dllExecuteWorker,
+        .NewObjectUsingPage=NULL,
     }
 };
 
@@ -170,12 +175,6 @@ void EnqueueWorker(struct queued_worker *t)
 
 void UpdateWaitingWorkers()
 {
-    static int xt = 0;
-    if (xt++ > 300)
-    {
-        print("break\n");
-        ExitProcess(1);
-    }
     int64_t ticks;
     QueryPerformanceCounter((void *)&ticks);
     log("wait list: %lld\n", wait_list_len);
@@ -262,82 +261,8 @@ void SheduleWorker(struct thread_data *lc_data)
         log("Continue worker %lld from data=%p [rdi=%llx] [context=%p] [rbp=%p]\n",
                 copy->id, copy->data, copy->rdiValue, copy->context, copy->rbpValue);
         lc_data->runningId = copy->id;
-        print("copy(%p)=queue[%lld]=%p\n", copy, queue_len, queue[queue_len]);
+        log("copy(%p)=queue[%lld]=%p\n", copy, queue_len, queue[queue_len]);
         Providers[Workers[copy->id].provider].ExecuteWorker(copy);
-        // TODO: check if this doesn't break anything, and uncomment this
-        // myFree(copy);
-//         {
-//             // TODO: lock interrupts mutex
-// 
-//             // prepare data
-//             struct dll_call_data *data = Workers[copy->id].ptr;
-// 
-//             void *args = (void *)copy->rdiValue;
-//             int64_t result_promise_id = 0;
-// 
-//             // TODO: remove 16 args limit [use alloca?]
-//             int64_t call_data[32] = {}, *cd;
-//             void *output = NULL;
-//             cd = call_data;
-// 
-//             if (data->output_size != -1 &&
-//                 data->output_size != 1 &&
-//                 data->output_size != 2 &&
-//                 data->output_size != 4 &&
-//                 data->output_size != 8)
-//             {
-//                 *cd++ = (int64_t)output;
-//             }
-//             else if (data->output_size != -1)
-//             {
-//                 output = __builtin_alloca(data->output_size);
-//             }
-// 
-//             for (int64_t i = 0; i < data->sizes_len; ++i)
-//             {
-//                 switch (data->sizes[i])
-//                 {
-//                     case 1:
-//                     case 2:
-//                     case 4:
-//                     case 8:
-//                     {
-//                         *cd = 0;
-//                         memcpy(cd, args, data->sizes[i]);
-//                         cd++;
-//                         break;
-//                     }
-//                     default:
-//                     {
-//                         *cd++ = (int64_t)args;
-//                         break;
-//                     }
-//                 }
-//                 args += data->sizes[i];
-//             }
-// 
-//             if (data->output_size != -1)
-//             {
-//                 result_promise_id = *(int64_t*)args;
-//                 args += 8;
-//             }
-// 
-//             log("calling worker %lld\n", lc_data->runningId);
-//             for (int64_t i = 0; i < data->sizes_len; ++i)
-//             {
-//                 log("ARG[%lld] = %lld\n", i, call_data[i]);
-//             }
-//             log("output is %p [->to promise %lld]\n", output, result_promise_id);
-// 
-//             DllCall(copy->ptr, call_data, output);
-// 
-//             log("returned + Error=%lld\n", (int64_t)GetLastError());
-// 
-//             if (output != NULL)
-//             {
-//                 RequestObjectSet(result_promise_id, 0, data->output_size, output);
-//             }
-//         }
     }
     UpdateWaitingWorkers();
 }
@@ -494,6 +419,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
             case 22:
             case 3:
             case 23:
+            case 33:
             case 8:
             case 28:
             case 9:
@@ -519,6 +445,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                         case 22: *callPosition = (uint64_t)&gpu_fastNewObject; break;
                         case 3:  *callPosition = (uint64_t)&x64_fastCallObject; break;
                         case 23: *callPosition = (uint64_t)&gpu_fastCallObject; break;
+                        case 33: *callPosition = (uint64_t)&dll_fastCallObject; break;
                         case 8:  *callPosition = (uint64_t)&x64_fastPushPipe; break;
                         // case 28: *callPosition = (uint64_t)&gpu_fastPushPipe; break;
                         case 9:  *callPosition = (uint64_t)&x64_fastQueryPipe; break;
@@ -558,41 +485,40 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                 int64_t totalSize = 8;
                 int64_t output_size = *(int64_t *)pos;
                 pos += 8;
-                int64_t sizes_len = *(int64_t *)pos;
+                int64_t inputs_len = *(int64_t *)pos;
                 pos += 8;
-                int64_t *sizes;
+                struct dll_input_table *inputs = myMalloc(sizeof(*inputs) * inputs_len);
+                for (int64_t i = 0; i < inputs_len; ++i)
                 {
-                    sizes = myMalloc(sizeof(*sizes) * (sizes_len + 1));
-                    for (int64_t i = 0; i < sizes_len; ++i)
-                    {
-                        sizes[i] = *(int64_t *)pos;
-                        totalSize += sizes[i];
-                        pos += 8;
-                    }
+                    inputs[i].type = *pos++;
+                    inputs[i].size = *(int64_t *)pos;
+                    pos += 8;
+                    inputs[i].param = *(int64_t *)pos;
+                    pos += 8;
+                    totalSize += inputs[i].size;
                 }
                 // set information
-                struct dll_call_data *data = myMalloc(sizeof(*data));
+                struct dll_worker_info *data = myMalloc(sizeof(*data));
 
                 // int64_t num_chars = strlen(lib_name) + 1;
                 // wchar_t *utf16 = myMalloc(sizeof(*utf16) * num_chars);
                 // MultiByteToWideChar(CP_UTF8, 0, lib_name, -1, utf16, num_chars);
 
                 HINSTANCE lib = LoadLibraryA(lib_name);
-                data->loaded_function = GetProcAddress(lib, entry);
-
+                data->entry = GetProcAddress(lib, entry);
                 data->output_size = output_size;
-                data->sizes_len = sizes_len;
-                data->sizes = sizes;
-                data->call_stack_usage = 32 + 16 * (sizes_len < 4 ? 0 : (sizes_len - 4 + 1) / 2);
-                Workers[id] = (struct worker_info){1, data, totalSize};
+                data->inputMapLength = inputs_len;
+                data->inputMap = inputs;
+                data->call_stack_usage = 32 + 16 * (inputs_len < 4 ? 0 : (inputs_len - 4 + 1) / 2);
+                Workers[id] = (struct worker_info){PROVIDER_DLL, data, totalSize};
 
                 // log data
-                log("worker %lld is dll call of library %s %s -> result function is %p\n", id, lib_name, entry, data->loaded_function);
+                log("worker %lld is dll call of library %s %s -> result function is %p\n", id, lib_name, entry, data->entry);
                 log("stack usage: %lld\n", data->call_stack_usage);
                 log("output have size %lld [and args of total size %lld]\n", output_size, totalSize);
-                for (int64_t i = 0; i < sizes_len; ++i)
+                for (int64_t i = 0; i < inputs_len; ++i)
                 {
-                    log("argument %lld have size %lld\n", i, sizes[i]);
+                    log("argument %lld have size %lld [type %02x]\n", i, inputs[i].size, inputs[i].type);
                 }
                 break;
             case 16: // x64 Worker positions
@@ -644,6 +570,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                             pos += 8;
                             defined_arrays[i].start = data_copy + el_offset;
                             defined_arrays[i].size = el_size;
+                            print("READ STRING:\n");
+                            myPrintf((wchar_t *)defined_arrays[i].start);
                         }
                         pos += rawsize;
                         break;
@@ -749,7 +677,7 @@ DWORD ShedulerInstance(void *vparam)
                 print("ShedulerInstance completed\n");
                 return 0;
             }
-            print("promise not set\n");
+            // print("promise not set\n");
         }
         else
         {

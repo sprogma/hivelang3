@@ -196,27 +196,26 @@ int main(int argc, char **argv)
     
     for (auto &name : newCode->used_providers)
     {
+        CodeAssembler *assembler;
+        
         printf("Building for <%s>\n", name.c_str());
         if (name == "x64")
-        {
-            CodeAssembler *assembler = new_x64_Assembler();
-            tie(header, body) = assembler->Build(newCode, header, body, body - body_start);
-        }
+        { assembler = new_x64_Assembler(); }
         else if (name == "gpu")
-        {
-            CodeAssembler *assembler = new_gpu_Assembler();
-            tie(header, body) = assembler->Build(newCode, header, body, body - body_start);
-        }
+        { assembler = new_gpu_Assembler(); }
+        else if (name == "dll")
+        { assembler = new_DLL_Assembler(); }
         else
         {
             printf("Error: UNKNOWN PROVIDER: %s\n", name.c_str());
             return 1;
         }
+        tie(header, body) = assembler->Build(newCode, header, body, body - body_start);
+        delete assembler;
     }
 
     /* fill header size */
     *(uint64_t *)(header_start + 12) = header - header_start;
-
 
     int64_t totalBytes = (header - header_start) + (body - body_start);
     fwrite(header_start, 1, header - header_start, o);

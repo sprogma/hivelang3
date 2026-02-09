@@ -331,7 +331,7 @@ pair<map<string, variant<string, int64_t>>, vector<Operation>> getAttributeList(
                 // key expression pair - build expression, store temp_id as string [8 bytes]
                 Node *key = attr->nonTerm(0);
                 Node *value = attr->nonTerm(1);
-                assert_type(key, "identifer");
+                assert_type(key, "identifer_with_dots");
                 assert_type(value, "expression");
                 auto [expOps, tmp_id] = buildExpression(ctx, value);
                 append(ops, expOps);
@@ -343,7 +343,7 @@ pair<map<string, variant<string, int64_t>>, vector<Operation>> getAttributeList(
                 // simple key value pair
                 Node *key = attr->nonTerm(0);
                 Node *value = attr->nonTerm(1);
-                assert_type(key, "identifer");
+                assert_type(key, "identifer_with_dots");
                 assert_type(value, "identifer_or_number");
                 attrs[Substr(ctx, key)] = Substr(ctx, value);
                 break;

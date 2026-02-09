@@ -25,6 +25,7 @@ enum
 {
     PROVIDER_X64=0,
     PROVIDER_GPU=1,
+    PROVIDER_DLL=2,
 };
 
 void universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data);

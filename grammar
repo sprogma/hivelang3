@@ -41,8 +41,11 @@ rule "attribute_list" [
     v [] [attribute_list_entity] []
 ]
 rule "attribute_list_entity" [
-    v [Sn; "["; Sn; identifer; Sn; "::"; Sn; expression; Sn; "]"] [] []
-    v [Sn; "["; Sn; identifer; Sn; ":"; Sn; identifer_or_number; Sn; "]"] [] []
+    v [Sn; "["; Sn; identifer_with_dots; Sn; "::"; Sn; expression; Sn; "]"] [] []
+    v [Sn; "["; Sn; identifer_with_dots; Sn; ":"; Sn; identifer_or_number; Sn; "]"] [] []
+]
+rule "identifer_with_dots" [
+    v [identifer] ["."; identifer] []
 ]
 rule "arguments_list" [
     v [] [var_type; S; identifer; Sn; ","] [var_type; S; identifer]

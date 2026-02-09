@@ -155,7 +155,11 @@ private:
 
     void BuildFn(WorkerDeclarationContext *wk, int64_t workerId)
     {
-        if (wk->content == NULL) { return; }
+        if (wk->content == NULL) 
+        { 
+            logError(ir->filename, ir->code, wk->code_start, wk->code_end, "gpu doesn't supports workers without body");
+            return;
+        }
         printf("Building worker %s\n", wk->name.c_str());
         
         current = wk;
