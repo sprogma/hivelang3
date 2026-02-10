@@ -1,5 +1,9 @@
+param(
+    [switch]$NoSanitize
+)
 pushd $PSScriptRoot
 mkdir obj 2>$null
+$sFlag = ($NoSanitize ? "" : "-fsanitize=address")
 $FLAGS = ,"-O3"
 $f = (ls -r *.cpp)
 $need = $false
@@ -19,7 +23,7 @@ $os = $f | %{
             $first = $false
         }
         Write-Host "Builing $_" -Fore yellow
-        clang++ -c -std=gnu++2c $_ -o $o -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $FLAGS -fsanitize=address
+        clang++ -c -std=gnu++2c $_ -o $o -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $FLAGS $sFlag
         $need = $true
     }
     $id++
@@ -36,7 +40,7 @@ if (!$first)
 if ($need)
 {
     Write-Host "Linking" -Fore yellow
-    clang++ -std=gnu++2c $os -o a.exe -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $FLAGS -fsanitize=address
+    clang++ -std=gnu++2c $os -o a.exe -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $FLAGS $sFlag
 }
 else
 {

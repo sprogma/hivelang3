@@ -12,7 +12,6 @@ public dll_fastCallObject
 public any_fastCastProvider
 
 public x64AsmExecuteWorker
-public context
 
 public DllCall
 
@@ -31,6 +30,7 @@ extrn gpuCallObject
 extrn dllCallObject
 extrn anyCastProvider
 extrn myPrintf
+
 
 section '.text' code readable executable
 
@@ -92,7 +92,9 @@ macro LeaveCCode {
 
 
 macro CWrapper endpoint {
-    StoreContext context
+    mov rax, rbp
+    sub rax, 1024
+    StoreContext rax
     mov rax, [rsp]
     EnterCCode
     mov r8, rax

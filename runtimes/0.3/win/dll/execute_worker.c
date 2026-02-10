@@ -54,7 +54,7 @@ void dllExecuteWorker(struct queued_worker *worker)
         // worker start
         // TODO: set interrupt lock
         log("RUN dllimport worker=%p\n", worker);
-        print("worker id=%lld [dll]\n", worker->id);
+        // print("worker id=%lld [dll]\n", worker->id);
 
         {
             BYTE *inputTable = (BYTE *)worker->rdiValue;

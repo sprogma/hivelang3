@@ -23,7 +23,7 @@ int64_t GetExportWorkerId(BuildResult *ctx, int64_t wkId, const string &provider
 
 static inline bool validateProvider(const string& name)
 {
-    return name == "x64" || name == "gpu" || name == "dll";
+    return name == "x64" || name == "gpu" || name == "dll" || name == "loc";
 }
 
 static inline bool AllowInlining(const string& name)
@@ -44,6 +44,10 @@ static inline int64_t ProviderId(const string &name)
     if (name == "dll")
     {
         return 2;
+    }
+    if (name == "loc")
+    {
+        return 3;
     }
     return -1;
 }
@@ -69,11 +73,20 @@ static inline int8_t GetHeaderId(enum header_id_action action, const string &pro
     switch (action)
     {
         case ACTION_NEW_OBJECT:
-            return (provider == "x64" ? 2 : 22);
+            if (provider == "x64") return 2;
+            if (provider == "gpu") return 22;
+            if (provider == "loc") return 42;
+            break;
         case ACTION_PUSH_OBJECT:
-            return (provider == "x64" ? 0 : 20);
+            if (provider == "x64") return 0;
+            if (provider == "gpu") return 20;
+            if (provider == "loc") return 40;
+            break;
         case ACTION_QUERY_OBJECT:
-            return (provider == "x64" ? 1 : 21);
+            if (provider == "x64") return 1;
+            if (provider == "gpu") return 21;
+            if (provider == "loc") return 41;
+            break;
         case ACTION_PUSH_PIPE:
             return (provider == "x64" ? 8 : 28);
         case ACTION_QUERY_PIPE:

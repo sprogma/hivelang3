@@ -44,10 +44,6 @@ SRWLOCK wait_list_lock = SRWLOCK_INIT;
 struct waiting_worker *wait_list[100000];
 _Atomic int64_t wait_list_len = 0;
 
-SRWLOCK queue_lock = SRWLOCK_INIT;
-struct queued_worker *queue[10000];
-_Atomic int64_t queue_len = 0;
-
 void RegisterObjectWithId(int64_t id, void *object)
 {
     SetHashtable(&local_objects, (BYTE *)&id, 8, (int64_t)object);
@@ -158,19 +154,13 @@ void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
 {
     struct queued_worker *t = myMalloc(sizeof(*t));
     t->id = w->id;
+    t->depth = w->depth;
     t->data = w->data;
     t->rbpValue = w->rbpValue;
     t->rdiValue = rdi_value;
     memcpy(t->context, w->context, sizeof(t->context));
-    EnqueueWorker(t);
-}
-
-void EnqueueWorker(struct queued_worker *t)
-{
-    AcquireSRWLockExclusive(&queue_lock);
-    queue[queue_len++] = t;
     log("Worker enqueued [id=%lld, data=%p]\n", t->id, t->data);
-    ReleaseSRWLockExclusive(&queue_lock);
+    queue_enqueue(t);
 }
 
 void UpdateWaitingWorkers()
@@ -182,7 +172,9 @@ void UpdateWaitingWorkers()
     {
         return;
     }
-    for (int i = 0; i < wait_list_len; ++i)
+    BYTE rnd;
+    BCryptGenRandom(NULL, &rnd, 1, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    for (int i = rnd % 16; i < wait_list_len; i += 16)
     {
         struct waiting_worker *w = wait_list[i];
         int64_t res = 0;
@@ -235,7 +227,7 @@ void SheduleWorker(struct thread_data *lc_data)
     int64_t now = GetTicks();
     if (now - lc_data->prevPrint > MicrosecondsToTicks(100000))
     {
-        print("thread %lld:  Wait|Queued %lld|%lld [%lld completed]\n", lc_data->number, wait_list_len, queue_len, lc_data->completedTasks);
+        print("thread %lld:  Wait|Queued %lld|%lld [%lld completed]\n", lc_data->number, wait_list_len, queue.size, lc_data->completedTasks);
         // AcquireSRWLockShared(&wait_list_lock);
         // int64_t cnt[10] = {};
         // for (int64_t i = 0; i < wait_list_len; ++i)
@@ -250,19 +242,17 @@ void SheduleWorker(struct thread_data *lc_data)
     }
 
     // call next worker
-    if (queue_len > 0)
+
+    struct queued_worker *curr = queue_extract();
+    if (curr)
     {
         lc_data->completedTasks++;
         log("\nSheduling new worker\n");
-        AcquireSRWLockExclusive(&queue_lock);
-        --queue_len;
-        struct queued_worker *copy = queue[queue_len];
-        ReleaseSRWLockExclusive(&queue_lock);
         log("Continue worker %lld from data=%p [rdi=%llx] [context=%p] [rbp=%p]\n",
-                copy->id, copy->data, copy->rdiValue, copy->context, copy->rbpValue);
-        lc_data->runningId = copy->id;
-        log("copy(%p)=queue[%lld]=%p\n", copy, queue_len, queue[queue_len]);
-        Providers[Workers[copy->id].provider].ExecuteWorker(copy);
+                curr->id, curr->data, curr->rdiValue, curr->context, curr->rbpValue);
+        lc_data->runningId = curr->id;
+        lc_data->runningDepth = curr->depth;
+        Providers[Workers[curr->id].provider].ExecuteWorker(curr);
     }
     UpdateWaitingWorkers();
 }
@@ -273,7 +263,7 @@ void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
     int64_t rnd = 0;
     BCryptGenRandom(NULL, (BYTE *)&rnd, 8, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
     rnd = myAbs(rnd);
-    int64_t random_confirm = (rnd & 0x80000000) && (rnd % 100 < 5 * (wait_list_len + queue_len));
+    int64_t random_confirm = (rnd & 0x80000000) && (rnd % 100 < 5 * (wait_list_len + queue.size));
     if ((random_confirm || global_id != 0) && global_id != 1)
     {
         /* select random connection */
@@ -301,14 +291,17 @@ void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
     void *data = myMalloc(1024 + 2048);
     memcpy(data + 1024 - tableSize, inputTable, tableSize);
 
+    struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+    
     struct queued_worker *t = myMalloc(sizeof(*t));
     t->id = workerId;
+    t->depth = (lc_data ? lc_data->runningDepth + 1 : 0);
     t->data = Workers[workerId].data;
     t->rdiValue = (int64_t)data + 1024 - tableSize;
     t->rbpValue = (BYTE *)data + 1024;
     memset(t->context, 0, sizeof(t->context));
 
-    EnqueueWorker(t);
+    queue_enqueue(t);
 }
 
 
@@ -755,18 +748,20 @@ int wmain(void)
     log("\n");
 
 
-
-    ////////////////////////// running stage
-
-    InitInternalStructures();
-    start_remote_subsystem();
-
-    // run first worker with comand line arguments as i64 array
-
+    // cmdargs
+    
+    int NUM_THREADS = 1;
     int64_t inputLen = 0, connectingToMain = 0;
-    int64_t resCodeId = 0, hangAfterEnd = 0;
+    int64_t resCodeId = 0, hangAfterEnd = 0, noStdin = 0;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argc > 1 && argv[1][0] == 'n')
+    {
+        noStdin = 1;
+        // 'shift'
+        argv++;
+        argc--;
+    }
     if (argc > 1 && argv[1][0] == 'h')
     {
         hangAfterEnd = 1;
@@ -774,6 +769,23 @@ int wmain(void)
         argv++;
         argc--;
     }
+    if (argc > 1 && argv[1][0] == 'j')
+    {
+        NUM_THREADS = argv[1][1] - '0';
+        // 'shift'
+        argv++;
+        argc--;
+    }
+
+    ////////////////////////// running stage
+
+    InitInternalStructures();
+    queue_init();
+    start_remote_subsystem(noStdin);
+
+    // run first worker with comand line arguments as i64 array    
+    
+    print("NUM_THREADS=%lld\n", NUM_THREADS);
     if (argc > 1 && argv[1][0] == 'n')
     {
         connectingToMain = 1;
@@ -792,11 +804,21 @@ int wmain(void)
         }
         log("\n");
         #else
-        inputLen = myScanI64();
-        int64_t *input = myMalloc(8 * inputLen);
-        for (int64_t i = 0; i < inputLen; ++i)
+        int64_t *input;
+        if (noStdin)
         {
-            input[i] = myScanI64();
+            inputLen = 1;
+            input = myMalloc(8 * inputLen);
+            *input = 0;
+        }
+        else
+        {
+            inputLen = myScanI64();
+            input = myMalloc(8 * inputLen);
+            for (int64_t i = 0; i < inputLen; ++i)
+            {
+                input[i] = myScanI64();
+            }
         }
         #endif
 
@@ -808,8 +830,6 @@ int wmain(void)
     }
 
     print("Running...\n");
-
-    const int NUM_THREADS = 1;
 
     // TODO: make better program end determination
     (void)connectingToMain;

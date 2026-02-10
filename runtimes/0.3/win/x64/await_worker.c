@@ -7,6 +7,7 @@
 #include "../runtime_lib.h"
 #include "../remote.h"
 #include "../runtime.h"
+
 #include "x64.h"
 
 void x64PauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
@@ -16,8 +17,9 @@ void x64PauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state 
 
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
 
-    memcpy(t->context, context, sizeof(t->context));
+    memcpy(t->context, rbpValue - 1024, sizeof(t->context));
     t->id = lc_data->runningId;
+    t->depth = lc_data->runningDepth;
     t->data = returnAddress;
     t->state = state;
     t->state_data = state_data;

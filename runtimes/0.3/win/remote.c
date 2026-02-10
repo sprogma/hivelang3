@@ -197,20 +197,23 @@ static DWORD ConnectionListnerWorker(void *param)
 {
     (void)param;
     
-    log("Server started...\n");
+    print("Server started...\n");
     
     SOCKET listenSock = socket(AF_INET6, SOCK_STREAM, 0);
     
     int32_t no = 0;
     setsockopt(listenSock, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&no, sizeof(no));
 
-    struct sockaddr_in6 addr;
+    struct sockaddr_in6 addr = {};
     addr.sin6_family = AF_INET6;
     addr.sin6_port = htons(*(int16_t *)param);
     addr.sin6_addr = in6addr_any;
+
+    print("binding...\n");
     
     if (bind(listenSock, (struct sockaddr*)&addr, sizeof(addr)) == 0) 
     {
+        print("Socket created\n");
         struct sockaddr_in6 boundAddr;
         int addrLen = sizeof(boundAddr);
 
@@ -218,6 +221,14 @@ static DWORD ConnectionListnerWorker(void *param)
             server_port = boundAddr.sin6_port;
             print("server started on port %lld\n", (int64_t)ntohs(boundAddr.sin6_port));
         }
+        else
+        {
+            print("get name failed %lld\n", WSAGetLastError());
+        }
+    }
+    else
+    {
+        print("Error happen %lld\n", WSAGetLastError());
     }
     
     listen(listenSock, SOMAXCONN);
@@ -1553,9 +1564,7 @@ void SendHiveState()
     AcquireSRWLockShared(&wait_list_lock);
     int64_t this_wait_list_len = wait_list_len;
     ReleaseSRWLockShared(&wait_list_lock);
-    AcquireSRWLockShared(&queue_lock);
-    int64_t this_queue_len = queue_len;
-    ReleaseSRWLockShared(&queue_lock);
+    int64_t this_queue_len = queue.size;
     // TODO: create better idle time getter
     int64_t this_idle_time = 0;
     
@@ -1627,24 +1636,35 @@ static DWORD StateSender(void *param)
 }
 
 
-void start_remote_subsystem() 
+void start_remote_subsystem(int64_t noStdin) 
 {
+    print("intiializating...\n");
+    
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
 
+    print("p %lld\n", __LINE__);
     hIOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
+    print("p %lld\n", __LINE__);
 
     char cmd[128] = {};
-    myScanS(cmd);
-
     int16_t port = 0;
     
-    if (cmd[0] == 'p' || cmd[0] == 'P')
+    print("p %lld\n", __LINE__);
+
+    if (!noStdin)
     {
-        port = myScanI64();
-        print("Confirmed port=%lld\n", port);
         myScanS(cmd);
+        
+        if (cmd[0] == 'p' || cmd[0] == 'P')
+        {
+            port = myScanI64();
+            print("Confirmed port=%lld\n", port);
+            myScanS(cmd);
+        }
     }
+    
+    print("p %lld\n", __LINE__);
 
     for (int64_t i = 0; i < 2; ++i)
     {
@@ -1653,16 +1673,19 @@ void start_remote_subsystem()
         (void)hwk;
     }
 
+    print("p %lld\n", __LINE__);
     DWORD clId;
     HANDLE hcl = CreateThread(NULL, 0, ConnectionListnerWorker, &port, 0, &clId);
     (void)hcl;
+    print("p %lld\n", __LINE__);
 
     while (server_port == -1)
     {
         Sleep(1);
     }
     
-    while (1) 
+    print("p %lld\n", __LINE__);
+    while (!noStdin) 
     {
         log("Get command [%s]\n", cmd);
         if (cmd[0] == 'c' || cmd[0] == 'C')
@@ -1684,6 +1707,8 @@ void start_remote_subsystem()
         }
         myScanS(cmd);
     }
+    
+    print("get id\n");
 
     AcquireSRWLockExclusive(&ServerIdGetLock);
 
@@ -1697,9 +1722,12 @@ void start_remote_subsystem()
         Sleep(50);
     }
 
+    print("sleeping\n");
+    
     Sleep(1000);
     DumpConnections();
 
+    print("running threads\n");
     
     DWORD paId;
     HANDLE hpa = CreateThread(NULL, 0, PagesAllocator, &port, 0, &paId);
@@ -1708,6 +1736,8 @@ void start_remote_subsystem()
     DWORD ssId;
     HANDLE hss = CreateThread(NULL, 0, StateSender, &port, 0, &ssId);
     (void)hss;
+
+    print("network initializated\n");
 }
 
 // TODO: clean_remote_subsystem()

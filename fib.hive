@@ -1,0 +1,21 @@
+@x64
+
+[entry:yes]
+[export:yes]
+(i64[] args)main(i32? res)
+{
+    res <- ?(22)fib(*);
+}
+
+(i32 n)fib(i32? res)
+{
+    match n <= 1
+    {
+        -1 {
+            res <- n;
+        }
+        0 {
+            res <- ?(n - 1)fib(*) + ?(n - 2)fib(*);
+        }
+    }
+}

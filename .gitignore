@@ -8,3 +8,4 @@
 *.gcov
 *.gcda
 *.gcno
+/prof/

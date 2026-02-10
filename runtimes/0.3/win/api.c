@@ -28,6 +28,14 @@ struct hashtable known_hives;
 
 int64_t equal_bytes(BYTE *a, BYTE *b, int64_t len)
 {
+    if (len == 8)
+    {
+        return *(int64_t *)a == *(int64_t *)b;
+    }
+    while (len >= 8 && *(int64_t *)a == *(int64_t *)b)
+    {
+        len -= 8;
+    }
     while (len-- && *a++ == *b++);
     return len == -1;
 }
@@ -35,6 +43,17 @@ int64_t equal_bytes(BYTE *a, BYTE *b, int64_t len)
 
 static uint64_t GetKnownHiveHash(BYTE *address, int64_t address_length)
 {
+    if (address_length == 8)
+    {  
+        int64_t i = *(int64_t *)address;
+        i += 1ULL;
+        i ^= i >> 33ULL;
+        i *= 0xff51afd7ed558ccdULL;
+        i ^= i >> 33ULL;
+        i *= 0xc4ceb9fe1a85ec53ULL;
+        i ^= i >> 33ULL;
+        return i;
+    }
     uint64_t hash = 123;
     int64_t i = 0;
     while (i < address_length)

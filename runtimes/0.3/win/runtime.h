@@ -17,8 +17,6 @@
 
 extern void callExample(void *);
 
-extern BYTE context[];
-
 
 struct jmpbuf {BYTE _[80];};
 [[noreturn]] extern void longjmpUN(struct jmpbuf *, int64_t val);
@@ -31,6 +29,7 @@ struct waiting_worker
     void *state_data;
     // worker id
     int64_t id;
+    int64_t depth;
     // worker data [continue address on x64]
     void *data;
     // registers
@@ -42,6 +41,7 @@ struct waiting_worker
 struct queued_worker
 {
     int64_t id;
+    int64_t depth;
     // worker data [continue address on x64]
     void *data;
     // object awaiting data
@@ -54,7 +54,6 @@ struct queued_worker
 
 
 
-void EnqueueWorker(struct queued_worker *t);
 void WaitListWorker(struct waiting_worker *t);
 
 
@@ -131,6 +130,7 @@ struct thread_data
 {
     int64_t number;
     int64_t runningId;
+    int64_t runningDepth;
     int64_t completedTasks;
     int64_t prevPrint;
     struct jmpbuf ShedulerBuffer;
@@ -141,15 +141,24 @@ extern SRWLOCK wait_list_lock;
 extern struct waiting_worker *wait_list[];
 extern _Atomic int64_t wait_list_len;
 
-extern SRWLOCK queue_lock;
-extern struct queued_worker *queue[];
-extern _Atomic int64_t queue_len;
-
 extern struct defined_array *defined_arrays;
 
 
 
 
+struct queue_t
+{
+    SRWLOCK queue_lock;
+    _Atomic int64_t size;
+    int64_t alloc;
+    void **data;
+};
+
+extern struct queue_t queue;
+
+void queue_init();
+void queue_enqueue(struct queued_worker *wk);
+struct queued_worker *queue_extract();
 
 
 

@@ -216,7 +216,7 @@ extern struct hashtable known_hives; // global_id -> local_id
 // ------------- other -----------
 
 void InitInternalStructures();
-void start_remote_subsystem();
+void start_remote_subsystem(int64_t noStdin);
 
 
 #endif

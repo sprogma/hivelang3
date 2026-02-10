@@ -10,7 +10,7 @@ extern int x64AsmExecuteWorker(void *, int64_t, void *, BYTE *);
 void x64ExecuteWorker(struct queued_worker *worker)
 {
     log("worker=%p\n", worker);
-    print("worker id=%lld\n", worker->id);
+    // print("worker id=%lld\n", worker->id);
     
     x64AsmExecuteWorker(
         worker->data,
