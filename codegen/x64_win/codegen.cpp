@@ -75,6 +75,15 @@ enum asm_operation2rc
     ASM_ADD_RC,
 };
 
+enum asm_operation5mr
+{
+    ASM_MOV_5MR,
+};
+enum asm_operation5rm
+{
+    ASM_MOV_5RM,
+};
+
 enum asm_operation3mr
 {
     ASM_MOV_MR,
@@ -469,6 +478,10 @@ private:
 
     void printRM(OperationBlock *node, asm_operation3rm op, pair<int64_t, int64_t> r1, pair<int64_t, int64_t> r2, int64_t offset)
     {
+        if (r2.second != 8)
+        {
+            logError(ir->filename, ir->code, node->code_start, node->code_end, "Mem register must be 64 bit");
+        }
         
         BYTE rex = 0x40;
         bool needrex = false;
@@ -530,14 +543,179 @@ private:
         }
     }
 
+    void printRRCRC(OperationBlock *node, asm_operation5rm op, pair<int64_t, int64_t> dest, pair<int64_t, int64_t> base, int64_t elementSize, pair<int64_t, int64_t> index, int64_t elementOffset)
+    {
+        (void)node;
+        
+        if (elementSize != 1 && elementSize != 2 && elementSize != 4 && elementSize != 8) {
+            logError(ir->filename, ir->code, node->code_start, node->code_end, "Invalid element size for index scaling");
+            return;
+        }
+        
+        if (base.second != 8 || index.second != 8) {
+            logError(ir->filename, ir->code, node->code_start, node->code_end, "Base and index must be 64 bit");
+            return;
+        }
+        
+        int scale = 31 - __builtin_clz(elementSize);
+        BYTE rex = 0x40;
+        bool needrex = false;
+        if (dest.second == 8) { needrex = true; rex |= 0x08; }
+        if (dest.first & 8) { needrex = true; rex |= 0x04; }
+        if (index.first & 8) { needrex = true; rex |= 0x02; }
+        if (base.first & 8) { needrex = true; rex |= 0x01; }
+        if (dest.second == 1 && dest.first >= 4) { needrex = true; }
+
+        switch (op)
+        {
+            case ASM_MOV_5RM:
+            {
+                    
+                if (dest.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                
+                BYTE mod = 0;
+                bool d8 = false;
+                bool d32 = false;
+                
+                if (elementOffset == 0 && (base.first & 7) != 5) 
+                {
+                    mod = 0; // [base + index*scale]
+                } 
+                else if (elementOffset >= -128 && elementOffset <= 127) 
+                {
+                    mod = 1; // [base + index*scale + i8]
+                    d8 = true;
+                } 
+                else 
+                {
+                    mod = 2; // [base + index*scale + i32]
+                    d32 = true;
+                }
+
+                if ((base.first & 7) == 5 && mod == 0) 
+                {
+                    mod = 1;
+                    d8 = true;
+                    elementOffset = 0;
+                }
+                
+                pbyte(dest.second == 1 ? 0x8A : 0x8B);
+                
+                BYTE modrm = (mod << 6) | ((dest.first & 7) << 3) | 0x04;
+                pbyte(modrm);
+                
+                BYTE sib = (scale << 6) | ((index.first & 7) << 3) | (base.first & 7);
+                pbyte(sib);
+                
+                if (d8) 
+                {
+                    int8_t disp8 = (int8_t)elementOffset;
+                    pbyte(disp8);
+                } 
+                else if (d32) 
+                {
+                    int32_t disp32 = (int32_t)elementOffset;
+                    memcpy(assemblyEnd, &disp32, 4);
+                    assemblyEnd += 4;
+                }
+                break;
+            }
+        }
+    }   
+    void printRCRCR(OperationBlock *node, asm_operation5mr op, pair<int64_t, int64_t> base, int64_t elementSize, pair<int64_t, int64_t> index, int64_t elementOffset, pair<int64_t, int64_t> source)
+    {
+        (void)node;
+        
+        if (elementSize != 1 && elementSize != 2 && elementSize != 4 && elementSize != 8) {
+            logError(ir->filename, ir->code, node->code_start, node->code_end, "Invalid element size for index scaling");
+            return;
+        }
+        
+        if (base.second != 8 || index.second != 8) {
+            logError(ir->filename, ir->code, node->code_start, node->code_end, "Base and index must be 64 bit");
+            return;
+        }
+        
+        int scale = 31 - __builtin_clz(elementSize);
+        BYTE rex = 0x40;
+        bool needrex = false;
+        if (source.second == 8) { needrex = true; rex |= 0x08; }
+        if (source.first & 8) { needrex = true; rex |= 0x04; }
+        if (index.first & 8) { needrex = true; rex |= 0x02; }
+        if (base.first & 8) { needrex = true; rex |= 0x01; }
+        if (source.second == 1 && source.first >= 4) { needrex = true; }
+
+        switch (op)
+        {
+            case ASM_MOV_5MR:
+            {
+                
+                if (source.second == 2) { pbyte(0x66); }
+                if (needrex) { pbyte(rex); }
+                
+                BYTE mod = 0;
+                bool d8 = false;
+                bool d32 = false;
+                
+                if (elementOffset == 0 && (base.first & 7) != 5) 
+                {
+                    mod = 0; // [base + index*scale]
+                } 
+                else if (elementOffset >= -128 && elementOffset <= 127) 
+                {
+                    mod = 1; // [base + index*scale + i8]
+                    d8 = true;
+                } 
+                else 
+                {
+                    mod = 2; // [base + index*scale + i32]
+                    d32 = true;
+                }
+
+                if ((base.first & 7) == 5 && mod == 0) 
+                {
+                    mod = 1;
+                    d8 = true;
+                    elementOffset = 0;
+                }
+                
+                pbyte(source.second == 1 ? 0x88 : 0x89);
+                
+                BYTE modrm = (mod << 6) | ((source.first & 7) << 3) | 0x04;
+                pbyte(modrm);
+                
+                BYTE sib = (scale << 6) | ((index.first & 7) << 3) | (base.first & 7);
+                pbyte(sib);
+                
+                if (d8) 
+                {
+                    int8_t disp8 = (int8_t)elementOffset;
+                    pbyte(disp8);
+                } 
+                else if (d32) 
+                {
+                    int32_t disp32 = (int32_t)elementOffset;
+                    memcpy(assemblyEnd, &disp32, 4);
+                    assemblyEnd += 4;
+                }
+                break;
+            }
+        }
+        
+    }
+
     void printRC(OperationBlock *node, asm_operation2rc op, pair<int64_t, int64_t> r1, int64_t value)
     {
         (void)node;
+
+        bool use32signex = false;
                     
         switch (op)
         {
             case ASM_MOV_RC:
                 if (r1.second == 8 && value == (uint32_t)value) { r1.second = 4; }
+                if (r1.second == 8 && value == (int32_t)value) { use32signex = true; }
                 break;
             default:
                 break;
@@ -569,11 +747,20 @@ private:
                 if (r1.second == 2) { pbyte(0x66); }
                 
                 if (needrex) { pbyte(rex); }
-                
-                pbyte((r1.second == 1 ? 0xB0 : 0xB8) | (r1.first & 7));
 
-                memcpy(assemblyEnd, &value, r1.second);
-                assemblyEnd += r1.second;
+                if (use32signex)
+                {
+                    pbyte(0xC7);
+                    pbyte(0xC0 | (r1.first & 7));
+                    memcpy(assemblyEnd, &value, 4);
+                    assemblyEnd += 4;
+                }
+                else
+                {
+                    pbyte((r1.second == 1 ? 0xB0 : 0xB8) | (r1.first & 7));
+                    memcpy(assemblyEnd, &value, r1.second);
+                    assemblyEnd += r1.second;
+                }
                 
                 break;
             }
@@ -598,7 +785,7 @@ private:
                 }
                 else
                 {
-                    logError(ir->filename, "", 0, 0, "Can't use ADD_RC with 64bit constant");
+                    logError(ir->filename, ir->code, node->code_start, node->code_end, "Can't use ADD_RC with 64bit constant");
                     return;
                 }
                 
@@ -689,7 +876,7 @@ private:
                 assertExpr(node, r1.second == r2.second);
                 if (r1.second == 1)
                 {
-                    logError(ir->filename, "", 0, 0, "IMUL can't take byte variables");
+                    logError(ir->filename, ir->code, node->code_start, node->code_end, "IMUL can't take byte variables");
                     return;
                 }
 
@@ -712,7 +899,7 @@ private:
                 } 
                 else 
                 {
-                    logError(ir->filename, "", 0, 0, "IMUL can't take 64bit constants");
+                    logError(ir->filename, ir->code, node->code_start, node->code_end, "IMUL can't take 64bit constants");
                     return;
                 }
                 break;
@@ -794,7 +981,7 @@ private:
         }
         else
         {
-            logError(ir->filename, "", 0, 0, "Wrong encoding_variant: %lld", encoding_variant);
+            logError(ir->filename, ir->code, node->code_start, node->code_end, "Wrong encoding_variant: %lld", encoding_variant);
             return {0, 0};
         }
     }
@@ -853,7 +1040,7 @@ private:
         }
         else
         {
-            logError(ir->filename, "", 0, 0, "Wrong encoding_variant: %lld", var);
+            logError(ir->filename, ir->code, node->code_start, node->code_end, "Wrong encoding_variant: %lld", var);
             return -1;
         }
     }
@@ -1342,7 +1529,7 @@ private:
                     }
                     else
                     {
-                        logError(ir->filename, "", op->code_start, op->code_end, "Wrong \"on\" call attribute value: %s", get<string>(op->attributes["on"]).c_str());
+                        logError(ir->filename, ir->code, op->code_start, op->code_end, "Wrong \"on\" call attribute value: %s", get<string>(op->attributes["on"]).c_str());
                     }
                 }
                 else { InsertInteger(op, {7, 8}, 0); } // default run attribute
@@ -1477,9 +1664,34 @@ private:
                 
             case OP_PUSH_ARRAY:
             {
+                if (varType(op->data[0])->provider == "loc")
+                {
+                    int64_t elementSize = varType(op->data[0])->_vector.base->size;
+                    int64_t elementOffset = op->data[2];
+                    if (isApiScalar(op->data[4]))
+                    {
+                        if (elementSize == 1 || elementSize == 2 || elementSize == 4 || elementSize == 8)
+                        {
+                            // mov [base + n * index + offset], reg
+                            ExternTo64Bit(op, Register(op->data[1]), isSigned(op->data[1]));
+                            printRCRCR(op, ASM_MOV_5MR, Register(op->data[0]), elementSize, Register(op->data[1], 8), elementOffset, Register(op->data[4]));
+                        }
+                        else
+                        {
+                            ExternTo64Bit(op, Register(op->data[1]), isSigned(op->data[1]));
+                            printRRC(op, ASM_IMUL_RRC, {2, 8}, Register(op->data[1], 8), elementSize);
+                            // mov [base + index + offset], reg
+                            printRCRCR(op, ASM_MOV_5MR, Register(op->data[0]), 1, {2, 8}, elementOffset, Register(op->data[4]));
+                        }
+                    }
+                    else
+                    {
+                        logError(ir->filename, ir->code, op->code_start, op->code_end, "Local structures as element set aren't implemented [you can set their fields separately]");
+                    }
+                }
                 // TODO: remove usage of source as size provider
                 // rcx=size rdx=offset rdi=object rsi=value
-                if (isApiScalar(op->data[4]))
+                else if (isApiScalar(op->data[4]))
                 {
                     InsertInteger(op, {1, 8}, -varSize(op->data[4]));
                     ExternTo64Bit(op, Register(op->data[1]), isSigned(op->data[1]));
@@ -1504,6 +1716,10 @@ private:
             
             case OP_PUSH_PROMISE:
             {
+                if (varType(op->data[0])->provider == "loc")
+                {
+                    logError(ir->filename, ir->code, op->code_start, op->code_end, "Local promises are not implemented");
+                }
                 // TODO: remove usage of source as size provider
                 // rcx=size rdx=offset rdi=object rsi=value
                 if (isApiScalar(op->data[1]))
@@ -1527,6 +1743,10 @@ private:
             
             case OP_PUSH_PIPE:
             {
+                if (varType(op->data[0])->provider == "loc")
+                {
+                    logError(ir->filename, ir->code, op->code_start, op->code_end, "Local pipes are not implemented");
+                }
                 // TODO: remove usage of source as size provider
                 // rcx=size rdx=offset rdi=object rsi=value
                 if (isApiScalar(op->data[1]))
@@ -1550,9 +1770,21 @@ private:
             
             case OP_PUSH_CLASS:
             {
+                if (varType(op->data[0])->provider == "loc")
+                {
+                    int64_t elementOffset = op->data[1];
+                    if (isApiScalar(op->data[3]))
+                    {
+                        printMR(op, ASM_MOV_MR, Register(op->data[0]), Register(op->data[0]), elementOffset);
+                    }
+                    else
+                    {
+                        logError(ir->filename, ir->code, op->code_start, op->code_end, "Local classes can't assign structure field [you can set their fields separately]");
+                    }
+                }
                 // TODO: remove usage of source as size provider
                 // rcx=size rdx=offset rdi=object rsi=value
-                if (isApiScalar(op->data[3]))
+                else if (isApiScalar(op->data[3]))
                 {
                     InsertInteger(op, {1, 8}, -varSize(op->data[3]));
                     InsertInteger(op, {2, 8}, op->data[1]);
@@ -1583,9 +1815,34 @@ private:
                 
             case OP_QUERY_INDEX:
             {
+                if (varType(op->data[1])->provider == "loc")
+                {
+                    int64_t elementSize = varType(op->data[1])->_vector.base->size;
+                    int64_t elementOffset = op->data[2];
+                    if (isApiScalar(op->data[0]))
+                    {
+                        if (elementSize == 1 || elementSize == 2 || elementSize == 4 || elementSize == 8)
+                        {
+                            // mov reg, [base + n * index + offset]
+                            ExternTo64Bit(op, Register(op->data[4]), isSigned(op->data[4]));
+                            printRRCRC(op, ASM_MOV_5RM, Register(op->data[0]), Register(op->data[1]), elementSize, Register(op->data[4], 8), elementOffset);
+                        }
+                        else
+                        {
+                            ExternTo64Bit(op, Register(op->data[4]), isSigned(op->data[4]));
+                            printRRC(op, ASM_IMUL_RRC, {2, 8}, Register(op->data[4], 8), elementSize);
+                            // mov [base + index + offset], reg
+                            printRRCRC(op, ASM_MOV_5RM, Register(op->data[0]), Register(op->data[1]), 1, {2, 8}, elementOffset);
+                        }
+                    }
+                    else
+                    {
+                        logError(ir->filename, ir->code, op->code_start, op->code_end, "Local structures as element get aren't implemented [you can set their fields separately]");
+                    }
+                }
                 // TODO: remove usage of destination as size provider
                 // rcx=size rdx=offset rdi=value rsi=object
-                if (isApiScalar(op->data[0]))
+                else if (isApiScalar(op->data[0]))
                 {
                     InsertInteger(op, {1, 8}, -varSize(op->data[0]));
                     ExternTo64Bit(op, Register(op->data[4]), isSigned(op->data[4]));
@@ -1610,9 +1867,13 @@ private:
             
             case OP_QUERY_ARRAY:
             {
+                if (varType(op->data[1])->provider == "loc")
+                {
+                    printRM(op, ASM_MOV_RM, Register(op->data[0]), Register(op->data[1]), -16);
+                }
                 // rcx=size rdx=offset rdi=value rsi=object
                 // TODO: remove usage of destination as size provider
-                if (isApiScalar(op->data[0]))
+                else if (isApiScalar(op->data[0]))
                 {
                     InsertInteger(op, {1, 8}, -varSize(op->data[0]));
                     InsertInteger(op, {2, 8}, -16);
@@ -1633,6 +1894,10 @@ private:
             
             case OP_QUERY_PROMISE:
             {
+                if (varType(op->data[1])->provider == "loc")
+                {
+                    logError(ir->filename, ir->code, op->code_start, op->code_end, "Local promises are not implemented");
+                }
                 // TODO: remove usage of destination as size provider
                 // rcx=size rdx=offset rdi=value rsi=object
                 if (isApiScalar(op->data[0]))
@@ -1656,9 +1921,21 @@ private:
             
             case OP_QUERY_CLASS:
             {
+                if (varType(op->data[1])->provider == "loc")
+                {
+                    int64_t elementOffset = op->data[2];
+                    if (isApiScalar(op->data[0]))
+                    {
+                        printMR(op, ASM_MOV_MR, Register(op->data[0]), Register(op->data[1]), elementOffset);
+                    }
+                    else
+                    {
+                        logError(ir->filename, ir->code, op->code_start, op->code_end, "Local classes can't load structure field [you can set their fields separately]");
+                    }
+                }
                 // TODO: remove usage of destination as size provider
                 // rcx=size rdx=offset rdi=value rsi=object
-                if (isApiScalar(op->data[0]))
+                else if (isApiScalar(op->data[0]))
                 {
                     InsertInteger(op, {1, 8}, -varSize(op->data[0]));
                     InsertInteger(op, {2, 8}, op->data[2]);
@@ -1679,6 +1956,10 @@ private:
             
             case OP_QUERY_PIPE:
             {
+                if (varType(op->data[1])->provider == "loc")
+                {
+                    logError(ir->filename, ir->code, op->code_start, op->code_end, "Local pipes are not implemented");
+                }
                 // TODO: remove usage of destination as size provider
                 // rcx=size rdx=offset rdi=value rsi=object
                 if (isApiScalar(op->data[0]))

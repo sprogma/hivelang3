@@ -19,6 +19,7 @@
 #include "x64/x64.h"
 #include "gpu/gpu.h"
 #include "dll/dll.h"
+#include "loc/loc.h"
 
 struct defined_array *defined_arrays;
 
@@ -35,6 +36,10 @@ struct hive_provider_info Providers[] = {
     {
         .ExecuteWorker=dllExecuteWorker,
         .NewObjectUsingPage=NULL,
+    },
+    {
+        .ExecuteWorker=NULL,
+        .NewObjectUsingPage=locNewObjectUsingPage,
     }
 };
 
@@ -410,6 +415,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
             case 21:
             case 2:
             case 22:
+            case 42:
             case 3:
             case 23:
             case 33:
@@ -436,6 +442,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                         // case 21: *callPosition = (uint64_t)&gpu_fastQueryObject; break;
                         case 2:  *callPosition = (uint64_t)&x64_fastNewObject; break;
                         case 22: *callPosition = (uint64_t)&gpu_fastNewObject; break;
+                        case 42: *callPosition = (uint64_t)&loc_fastNewObject; break;
                         case 3:  *callPosition = (uint64_t)&x64_fastCallObject; break;
                         case 23: *callPosition = (uint64_t)&gpu_fastCallObject; break;
                         case 33: *callPosition = (uint64_t)&dll_fastCallObject; break;
@@ -755,24 +762,33 @@ int wmain(void)
     int64_t resCodeId = 0, hangAfterEnd = 0, noStdin = 0;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (argc > 1 && argv[1][0] == 'n')
+    while (argc > 1)
     {
-        noStdin = 1;
-        // 'shift'
-        argv++;
-        argc--;
-    }
-    if (argc > 1 && argv[1][0] == 'h')
-    {
-        hangAfterEnd = 1;
-        // 'shift'
-        argv++;
-        argc--;
-    }
-    if (argc > 1 && argv[1][0] == 'j')
-    {
-        NUM_THREADS = argv[1][1] - '0';
-        // 'shift'
+        if (argv[1][0] == 'n')
+        {
+            noStdin = 1;
+        }
+        else if (argv[1][0] == 'h')
+        {
+            hangAfterEnd = 1;
+        }
+        else if (argv[1][0] == 'j')
+        {
+            NUM_THREADS = argv[1][1] - '0';
+        }
+        else if (argv[1][0] == 'n')
+        {
+            connectingToMain = 1;
+        }
+        else if (argv[1][0] == '-' && argv[1][1] == '-')
+        {
+            break;
+        }
+        else
+        {
+            print("Unknown cmdline parameter: %lld\n");
+            return 1;
+        }
         argv++;
         argc--;
     }
@@ -786,12 +802,7 @@ int wmain(void)
     // run first worker with comand line arguments as i64 array    
     
     print("NUM_THREADS=%lld\n", NUM_THREADS);
-    if (argc > 1 && argv[1][0] == 'n')
-    {
-        connectingToMain = 1;
-        print("Starting without any workers\n");
-    }
-    else
+    if (!connectingToMain)
     {
         #ifdef _DEBUG
         inputLen = argc - 1;
@@ -822,11 +833,11 @@ int wmain(void)
         }
         #endif
 
-        print("Entry worker id=%lld\n", entryWorker);
+        log("Entry worker id=%lld\n", entryWorker);
 
         resCodeId = StartInitialProcess(entryWorker, input, inputLen);
 
-        print("result promise %p %lld\n", resCodeId);
+        log("result promise %p %lld\n", resCodeId);
     }
 
     print("Running...\n");

@@ -8,6 +8,7 @@ public x64_fastPushPipe
 public x64_fastQueryPipe
 public gpu_fastNewObject
 public gpu_fastCallObject
+public loc_fastNewObject
 public dll_fastCallObject
 public any_fastCastProvider
 
@@ -27,6 +28,7 @@ extrn x64NewObject
 extrn gpuNewObject
 extrn x64CallObject
 extrn gpuCallObject
+extrn locNewObject
 extrn dllCallObject
 extrn anyCastProvider
 extrn myPrintf
@@ -123,6 +125,8 @@ gpu_fastNewObject:
     CWrapper gpuNewObject
 gpu_fastCallObject:
     CWrapper gpuCallObject
+loc_fastNewObject:
+    CWrapper locNewObject
 dll_fastCallObject:
     CWrapper dllCallObject
 any_fastCastProvider:

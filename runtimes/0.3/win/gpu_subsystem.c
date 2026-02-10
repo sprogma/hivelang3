@@ -31,14 +31,14 @@ int init_gpu_subsystem()
     {
         SL_platforms_len = MAX_SL_PLATFORMS;
     }
-    print("Got at least %lld platforms\n", (int64_t)SL_platforms_len);
-    // print them
+    log("Got at least %lld platforms\n", (int64_t)SL_platforms_len);
+    // log them
     for (int i = 0; i < SL_platforms_len; ++i)
     {
         size_t allocated = 100;
         size_t info_len = 0;
         char *info = myMalloc(100), *tmp = NULL;
-        print("Platform %lld:\n", (int64_t)i);
+        log("Platform %lld:\n", (int64_t)i);
         #define PRINT(type, ...) \
         clGetPlatformInfo(SL_platforms[i], type, 0, NULL, &info_len); /* get size */ \
         if (allocated < info_len) \
@@ -48,7 +48,7 @@ int init_gpu_subsystem()
             if (!info) { myFree(tmp); return 57; }\
         } \
         clGetPlatformInfo(SL_platforms[i], type, info_len, info, NULL); /* get value */ \
-        print(__VA_ARGS__, info)
+        log(__VA_ARGS__, info)
         #define PRINV(type, typename, ...) \
         clGetPlatformInfo(SL_platforms[i], type, 0, NULL, &info_len); /* get size */ \
         if (allocated < info_len) \
@@ -58,7 +58,7 @@ int init_gpu_subsystem()
             if (!info) { myFree(tmp); return 57; }\
         } \
         clGetPlatformInfo(SL_platforms[i], type, info_len, info, NULL); /* get value */ \
-        print(__VA_ARGS__, *(typename *)info)
+        log(__VA_ARGS__, *(typename *)info)
         PRINT(CL_PLATFORM_NAME,                                 "\t%lld.Name             : %s\n", (int64_t)i);
         PRINT(CL_PLATFORM_VENDOR,                               "\t%lld.Vendor           : %s\n", (int64_t)i);
         PRINT(CL_PLATFORM_VERSION,                              "\t%lld.Version          : %s\n", (int64_t)i);
@@ -68,7 +68,7 @@ int init_gpu_subsystem()
         #undef PRINT
         #undef PRINV
         myFree(info);
-        print("\n");
+        log("\n");
 
         int value = 0;
         value += 0;
@@ -79,7 +79,7 @@ int init_gpu_subsystem()
         }
     }
 
-    print("\n");
+    log("\n");
 
     // load all devices
     int count = 0;
@@ -95,16 +95,16 @@ int init_gpu_subsystem()
         {
             read_count = MAX_SL_DEVICES;
         }
-        print("platform %lld: Got at least %lld devices\n", (int64_t)i, (int64_t)read_count);
+        log("platform %lld: Got at least %lld devices\n", (int64_t)i, (int64_t)read_count);
         SL_devices_len[i] = read_count;
-        // print them
+        // log them
         for (int dev = 0; dev < SL_devices_len[i]; ++dev)
         {
             size_t allocated = 100;
             size_t info_len = 0;
             unsigned dims = -1;
             char *info = myMalloc(100), *tmp = NULL;
-            print("Device %lld:\n", (int64_t)i);
+            log("Device %lld:\n", (int64_t)i);
             #define PRINT(type, ...) \
             clGetDeviceInfo(SL_devices[i][dev], type, 0, NULL, &info_len); /* get size */ \
             if (allocated < info_len) \
@@ -114,7 +114,7 @@ int init_gpu_subsystem()
                 if (!info) { myFree(tmp); return 57; }\
             } \
             clGetDeviceInfo(SL_devices[i][dev], type, info_len, info, NULL); /* get value */ \
-            print(__VA_ARGS__, info)
+            log(__VA_ARGS__, info)
             #define PRINV(type, typename, ...) \
             clGetDeviceInfo(SL_devices[i][dev], type, 0, NULL, &info_len); /* get size */ \
             if (allocated < info_len) \
@@ -124,7 +124,7 @@ int init_gpu_subsystem()
                 if (!info) { myFree(tmp); return 57; }\
             } \
             clGetDeviceInfo(SL_devices[i][dev], type, info_len, info, NULL); /* get value */ \
-            print(__VA_ARGS__, *(typename *)info)
+            log(__VA_ARGS__, *(typename *)info)
             #define PRINS(type, typename, ...) \
             clGetDeviceInfo(SL_devices[i][dev], type, 0, NULL, &info_len); /* get size */ \
             if (allocated < info_len) \
@@ -134,7 +134,7 @@ int init_gpu_subsystem()
                 if (!info) { myFree(tmp); return 57; }\
             } \
             clGetDeviceInfo(SL_devices[i][dev], type, info_len, info, NULL); /* get value */ \
-            print(__VA_ARGS__, *(typename *)info); \
+            log(__VA_ARGS__, *(typename *)info); \
             dims = *(unsigned *)info;
             #define PRINI(type, typename, ...) \
             clGetDeviceInfo(SL_devices[i][dev], type, 0, NULL, &info_len); /* get size */ \
@@ -147,7 +147,7 @@ int init_gpu_subsystem()
             clGetDeviceInfo(SL_devices[i][dev], type, info_len, info, NULL); /* get value */ \
             for (uint32_t d = 0; d < dims; ++d) \
             { \
-                print(__VA_ARGS__, d, ((typename *)info)[d]); \
+                log(__VA_ARGS__, d, ((typename *)info)[d]); \
             }
             PRINT(CL_DEVICE_NAME,                                     "\t%lld.%lld.Name                      : %s\n", (int64_t)i, (int64_t)dev);
             PRINV(CL_DEVICE_AVAILABLE, int,                           "\t%lld.%lld.Available                 : %llx\n", (int64_t)i, (int64_t)dev);
@@ -172,18 +172,18 @@ int init_gpu_subsystem()
             #undef PRINS
             #undef PRINI
             myFree(info);
-            print("\n");
+            log("\n");
         }
         count += read_count;
     }
     
-    print("At end have %lld devices.\n", count);
+    log("At end have %lld devices.\n", count);
 
 
     int platform_id = SL_best_platform;
     SL_main_platform = platform_id;
 
-    print("Init form platform %lld [auto selected]\n", platform_id);
+    log("Init form platform %lld [auto selected]\n", platform_id);
     
     SL_context = clCreateContext(NULL,
                                  SL_devices_len[platform_id],

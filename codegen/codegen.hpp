@@ -80,12 +80,10 @@ static inline int8_t GetHeaderId(enum header_id_action action, const string &pro
         case ACTION_PUSH_OBJECT:
             if (provider == "x64") return 0;
             if (provider == "gpu") return 20;
-            if (provider == "loc") return 40;
             break;
         case ACTION_QUERY_OBJECT:
             if (provider == "x64") return 1;
             if (provider == "gpu") return 21;
-            if (provider == "loc") return 41;
             break;
         case ACTION_PUSH_PIPE:
             return (provider == "x64" ? 8 : 28);

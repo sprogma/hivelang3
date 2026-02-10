@@ -197,7 +197,7 @@ static DWORD ConnectionListnerWorker(void *param)
 {
     (void)param;
     
-    print("Server started...\n");
+    log("Server started...\n");
     
     SOCKET listenSock = socket(AF_INET6, SOCK_STREAM, 0);
     
@@ -209,11 +209,11 @@ static DWORD ConnectionListnerWorker(void *param)
     addr.sin6_port = htons(*(int16_t *)param);
     addr.sin6_addr = in6addr_any;
 
-    print("binding...\n");
+    log("binding...\n");
     
     if (bind(listenSock, (struct sockaddr*)&addr, sizeof(addr)) == 0) 
     {
-        print("Socket created\n");
+        log("Socket created\n");
         struct sockaddr_in6 boundAddr;
         int addrLen = sizeof(boundAddr);
 
@@ -1048,7 +1048,7 @@ static DWORD Worker(void *param)
                     log("process body[ok]\n");
                     if (!HandleApiCall(ctx->connection))
                     {
-                        print("closing connection...\n");
+                        print("connection was closed. [local_id = %lld]\n", ctx->connection->local_id);
                         // delete this connection.
                         deleteConnection = 1;
                         closesocket(ctx->socket);
@@ -1310,7 +1310,7 @@ void RequestMemoryPage(int64_t page_id)
 
 void RequestServerId(int64_t new_id)
 {
-    print("Trying to get server id %lld\n", new_id);
+    log("Trying to get server id %lld\n", new_id);
 
     // create random seed
     BYTE broadcast_id[BROADCAST_ID_LENGTH];
@@ -1638,19 +1638,16 @@ static DWORD StateSender(void *param)
 
 void start_remote_subsystem(int64_t noStdin) 
 {
-    print("intiializating...\n");
+    log("intiializating network...\n");
     
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
 
-    print("p %lld\n", __LINE__);
     hIOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
-    print("p %lld\n", __LINE__);
 
     char cmd[128] = {};
     int16_t port = 0;
     
-    print("p %lld\n", __LINE__);
 
     if (!noStdin)
     {
@@ -1664,7 +1661,6 @@ void start_remote_subsystem(int64_t noStdin)
         }
     }
     
-    print("p %lld\n", __LINE__);
 
     for (int64_t i = 0; i < 2; ++i)
     {
@@ -1673,18 +1669,15 @@ void start_remote_subsystem(int64_t noStdin)
         (void)hwk;
     }
 
-    print("p %lld\n", __LINE__);
     DWORD clId;
     HANDLE hcl = CreateThread(NULL, 0, ConnectionListnerWorker, &port, 0, &clId);
     (void)hcl;
-    print("p %lld\n", __LINE__);
 
     while (server_port == -1)
     {
         Sleep(1);
     }
     
-    print("p %lld\n", __LINE__);
     while (!noStdin) 
     {
         log("Get command [%s]\n", cmd);
@@ -1708,7 +1701,7 @@ void start_remote_subsystem(int64_t noStdin)
         myScanS(cmd);
     }
     
-    print("get id\n");
+    log("get id\n");
 
     AcquireSRWLockExclusive(&ServerIdGetLock);
 
@@ -1722,12 +1715,12 @@ void start_remote_subsystem(int64_t noStdin)
         Sleep(50);
     }
 
-    print("sleeping\n");
+    log("sleeping\n");
     
     Sleep(1000);
     DumpConnections();
 
-    print("running threads\n");
+    log("running threads\n");
     
     DWORD paId;
     HANDLE hpa = CreateThread(NULL, 0, PagesAllocator, &port, 0, &paId);
@@ -1737,7 +1730,7 @@ void start_remote_subsystem(int64_t noStdin)
     HANDLE hss = CreateThread(NULL, 0, StateSender, &port, 0, &ssId);
     (void)hss;
 
-    print("network initializated\n");
+    log("network initializated\n");
 }
 
 // TODO: clean_remote_subsystem()

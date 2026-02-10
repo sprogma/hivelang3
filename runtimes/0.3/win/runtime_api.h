@@ -81,6 +81,7 @@ extern int x64_fastPushPipe(void);
 extern int x64_fastQueryPipe(void);
 extern int gpu_fastNewObject(void);
 extern int gpu_fastCallObject(void);
+extern int loc_fastNewObject(void);
 extern int dll_fastCallObject(void);
 extern int any_fastCastProvider(void);
 
@@ -100,6 +101,8 @@ __attribute__((sysv_abi))
 int64_t x64NewObject    (int64_t type,        int64_t size,      int64_t param,     int64_t _,               void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
 int64_t gpuNewObject    (int64_t type,        int64_t size,      int64_t param,     int64_t _,               void *returnAddress, void *rbpValue);
+__attribute__((sysv_abi))
+int64_t locNewObject    (int64_t type,        int64_t size,      int64_t param,     int64_t _,               void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
 void    x64CallObject   (int64_t moditifer,   BYTE *args,        int64_t workerId,  int64_t _,               void *returnAddress, void *rbpValue);
 __attribute__((sysv_abi))
