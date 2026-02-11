@@ -85,6 +85,7 @@ function Deploy-System
     )
     begin
     {
+        $ToRun = @()
         $tmps = @()
         $res = @()
     }
@@ -96,14 +97,14 @@ function Deploy-System
         $hive.ArgumentList = $hive.ArgumentList -replace "@", "$($tmp.FullName)"
         Write-Host $hive.ArgumentList
         #  -RedirectStandardInput $tmp
-        $res += Start-Process -FilePath $hive.Executable -ArgumentList $hive.ArgumentList -WindowStyle Normal -PassThru
+        $ToRun += @{FilePath=$hive.Executable; ArgumentList=$hive.ArgumentList; WindowStyle="Normal"; PassThru=$true}
         $tmps += $tmp
     }
     end
     {
         Write-Host "System deployed" -Fore green
         Write-Host "[waiting for closing all nodes]" -Fore darkgray
-        $res | Wait-Process
+        $ToRun | % -ThrottleLimit ($ToRun.Count * 2) -Parallel {Start-Process @_} | Wait-Process
         $tmps | rm
         Write-Host "All processes terminated"
     }

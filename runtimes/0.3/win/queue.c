@@ -19,7 +19,8 @@ struct queue_t
     void **data;
 };
 
-// #define USE_ARRAY
+// ! without this doesn't work
+#define USE_ARRAY
 
 #define SHARED_QUEUE ((sizeof(queues) / sizeof(*queues)) - 1)
 struct queue_t queues[32];

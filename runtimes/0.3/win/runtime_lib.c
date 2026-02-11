@@ -201,7 +201,7 @@ wchar_t *Print2H(wchar_t *dest, uint8_t value)
     return dest + 2;
 }
 
-wchar_t buf[2048] = {};
+wchar_t buf[16*2048] = {};
 
 void myPrintf(const wchar_t *format, ...)
 {
@@ -224,7 +224,11 @@ void myPrintf(const wchar_t *format, ...)
             else if (s[1] == 's')
             {
                 const char *str = va_arg(args, const char *);
-                int64_t converted = MultiByteToWideChar(CP_UTF8, 0, str, -1, d, 1024*1024); // no limit
+                // DWORD written;
+                // int len = 0;
+                // while (str[len]) len++;
+                // WriteConsoleA(hOutput, str, len, &written, NULL);
+                int64_t converted = MultiByteToWideChar(CP_UTF8, 0, str, -1, d, 1024*1024*1024); // no limit
                 d += converted;
                 s += 2;
             }

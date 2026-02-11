@@ -3,32 +3,44 @@ param(
     [switch]$Debugger
 )
 
-$exe = "pwsh"
 if ($Debugger)
 {
+    $exe = "cmd"
     if ($Release)
     {
-        $ag = "-NoExit", "-c", 'gc "@"; lldb a.exe -o """process launch -i @ -- c j3"""'
-        $agMain = "-NoExit", "-c", 'gc "@"; lldb a.exe -o """process launch -i @ -- j3"""'
+        $ag = "/k", "type `@ & lldb a.exe -o ""process launch -i @ -- c j1"""
+        $agMain = "/k", "type `@ & lldb a.exe -o ""process launch -i @ -- j1"""
     }
     else
     {
-        $ag = "-NoExit", "-c", 'gc "@"; lldb d.exe -o """process launch -i @ -- c"""'
-        $agMain = "-NoExit", "-c", 'gc "@"; lldb d.exe -o """process launch -i @ --"""'
+        $ag = "/k", "type `@ & lldb d.exe -o ""process launch -i @ -- c"""
+        $agMain = "/k", "type `@ & lldb d.exe -o ""process launch -i @ --"""
     }
 }
 else
 {
+    $exe = "cmd"
     if ($Release)
     {
-        $ag = "-NoExit", "-c", 'gc "@"; gc "@" | .\a.exe c j3'
-        $agMain = "-NoExit", "-c", 'gc "@"; gc "@" | .\a.exe j3'
+        $ag = "/k", "type `@ & type `@ | a.exe c j3"
+        $agMain = "/k", "type `@ & type `@ | a.exe j3"
     }
     else
     {
-        $ag = "-NoExit", "-c", 'gc "@"; gc "@" | .\d.exe c -- 3 5'
-        $agMain = "-NoExit", "-c", 'gc "@"; gc "@" | .\d.exe -- 3 5'
+        $ag = "/k", "type `@ & type `@ | d.exe c -- 3 5"
+        $agMain = "/k", "type `@ & type `@ | d.exe -- 3 5"
     }
+    # $exe = "pwsh"
+    # if ($Release)
+    # {
+    #     $ag = "-NoExit", "-c", 'gc "@"; gc "@" | .\a.exe c j3'
+    #     $agMain = "-NoExit", "-c", 'gc "@"; gc "@" | .\a.exe j3'
+    # }
+    # else
+    # {
+    #     $ag = "-NoExit", "-c", 'gc "@"; gc "@" | .\d.exe c -- 3 5'
+    #     $agMain = "-NoExit", "-c", 'gc "@"; gc "@" | .\d.exe -- 3 5'
+    # }
 }
 
 # $h1 = Start-Hive -Executable $exe -ArgumentList $agMain

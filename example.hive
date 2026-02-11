@@ -2,20 +2,28 @@
 
 [entry:yes]
 [export:yes]
-(i64[] args)main(i32? res)
+(i64[] input)main(i32? res)
 {
-    res <- ?(30)fib(*);
+    i64[]@gpu tmp;
+    tmp <- `i64[]@gpu`input;
+    ?(tmp, 0, ?input, 0)double@gpu(*);
+    input <- `i64[]`tmp;
+    i64 t, sum;
+    sum <- t <- 0;
+    while t < ?input
+    {
+        sum <- sum + input[t];
+        t <- t + `i64`1;
+    }
+    res <- `i32`sum;
 }
 
-(i32 n)fib(i32? res)
+@gpu
+
+[GPUxVariable:index]
+[GPUxBase:xstart]
+[GPUxSize:xend]
+(i64[] tmp, i64 xstart, i64 xend, i64 index)double(i32?@x64 await)
 {
-    match n <= 1
-    {
-        -1 {
-            res <- n;
-        }
-        0 {
-            res <- ?(n - 1)fib(*) + ?(n - 2)fib(*);
-        }
-    }
+    tmp[index] <- tmp[index] * 2;
 }

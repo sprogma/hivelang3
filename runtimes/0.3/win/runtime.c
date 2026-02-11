@@ -173,7 +173,6 @@ void UpdateWaitingWorkers()
 {
     int64_t ticks;
     QueryPerformanceCounter((void *)&ticks);
-    log("wait list: %lld\n", wait_list_len);
     if (!TryAcquireSRWLockExclusive(&wait_list_lock))
     {
         return;
@@ -261,7 +260,11 @@ void SheduleWorker(struct thread_data *lc_data)
                 curr->id, curr->data, curr->rdiValue, curr->context, curr->rbpValue);
         lc_data->runningId = curr->id;
         lc_data->runningDepth = curr->depth;
+        
         Providers[Workers[curr->id].provider].ExecuteWorker(curr);
+        // free current worker
+        myFree(curr->rbpValue - 1024);
+        myFree(curr);
     }
     UpdateWaitingWorkers();
 }
@@ -864,6 +867,14 @@ int wmain(void)
     }
 
     print("Running...\n");
+    if (connectingToMain)
+    {
+        print("-------------------------------------------------->>>>>>>>> this is client server\n");
+    }
+    else
+    {
+        print("-------------------------------------------------->>>>>>>>> this is main server\n");
+    }
 
     // TODO: make better program end determination
 

@@ -947,6 +947,12 @@ static int64_t HandleApiCall(struct hive_connection *con)
             int64_t global_id = *(int64_t *)(ctx->res_buffer+8);
             BYTE *data = ctx->res_buffer + 16;
             log("Get remote start worker %lld from local_id=%lld on %lld\n", worker_id, con->local_id, global_id);
+            /* load data */
+            for (int i = 0; i < Workers[worker_id].inputSize; ++i)
+            {
+                log("%02x ", data[i]);
+            }
+            log("\n");
             StartNewWorker(worker_id, global_id, data);
             return 1;
         }

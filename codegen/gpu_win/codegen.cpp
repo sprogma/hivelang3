@@ -395,17 +395,17 @@ private:
                 
             case OP_PUSH_VAR:
             {
-                print("*(");printType(op, varType(op->data[3]));print("*)((char *)&var_%lld+%lld)=var_%lld;", op->data[0], op->data[1], op->data[3]);
+                print("*(");printType(op, varType(op->data[3]));print(" __global *)((char __global*)&var_%lld+%lld)=var_%lld;", op->data[0], op->data[1], op->data[3]);
                 break;
             }                
             case OP_PUSH_ARRAY:
             {
-                print("*(");printType(op, varType(op->data[4]));print("*)((char*)var_%lld+var_%lld*%lld+%lld)=var_%lld;", op->data[0], op->data[1], varType(op->data[0])->_vector.base->size, op->data[2], op->data[4]);
+                print("*(");printType(op, varType(op->data[4]));print(" __global *)((char __global*)var_%lld+var_%lld*%lld+%lld)=var_%lld;", op->data[0], op->data[1], varType(op->data[0])->_vector.base->size, op->data[2], op->data[4]);
                 break;
             }
             case OP_PUSH_PROMISE:
             {
-                print("*(");printType(op, varType(op->data[1]));print("*)var_%lld=var_%lld;", op->data[0], op->data[1]);
+                print("*(");printType(op, varType(op->data[1]));print(" __global *)var_%lld=var_%lld;", op->data[0], op->data[1]);
                 break;
             }
             case OP_PUSH_PIPE:
@@ -415,17 +415,17 @@ private:
             }
             case OP_PUSH_CLASS:
             {
-                print("*(");printType(op, varType(op->data[3]));print("*)((char *)var_%lld+%lld)=var_%lld;", op->data[0], op->data[1], op->data[3]);
+                print("*(");printType(op, varType(op->data[3]));print(" __global *)((char __global *)var_%lld+%lld)=var_%lld;", op->data[0], op->data[1], op->data[3]);
                 break;
             }                
             case OP_QUERY_VAR: 
             {
-                print("var_%lld=*(", op->data[0]);printType(op, varType(op->data[0]));print("*)((char *)&var_%lld+%lld);", op->data[1], op->data[2]);
+                print("var_%lld=*(", op->data[0]);printType(op, varType(op->data[0]));print(" __global *)((char __global *)&var_%lld+%lld);", op->data[1], op->data[2]);
                 break;
             }
             case OP_QUERY_INDEX:
             {
-                print("var_%lld=*(", op->data[0]);printType(op, varType(op->data[0]));print("*)((char *)var_%lld+var_%lld*%lld+%lld);", op->data[1], op->data[4], varType(op->data[1])->_vector.base->size, op->data[2]);
+                print("var_%lld=*(", op->data[0]);printType(op, varType(op->data[0]));print(" __global *)((char __global *)var_%lld+var_%lld*%lld+%lld);", op->data[1], op->data[4], varType(op->data[1])->_vector.base->size, op->data[2]);
                 break;
             }
             case OP_QUERY_ARRAY:
@@ -436,12 +436,12 @@ private:
             }
             case OP_QUERY_PROMISE:
             {
-                print("var_%lld=*(", op->data[0]);printType(op, varType(op->data[0]));print("*)var_%lld;", op->data[1]);
+                print("var_%lld=*(", op->data[0]);printType(op, varType(op->data[0]));print(" __global *)var_%lld;", op->data[1]);
                 break;
             }
             case OP_QUERY_CLASS:
             {
-                print("var_%lld=*(", op->data[0]);printType(op, varType(op->data[0]));print("*)((char *)var_%lld+%lld);", op->data[1], op->data[2]);
+                print("var_%lld=*(", op->data[0]);printType(op, varType(op->data[0]));print(" __global *)((char __global *)var_%lld+%lld);", op->data[1], op->data[2]);
                 break;
             }
             case OP_QUERY_PIPE:

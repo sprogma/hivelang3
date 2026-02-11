@@ -223,6 +223,7 @@ cl_kernel gpuBuildFromText(int platform_id, int device_id, const char *kernel_fu
     if (err)
     {
         print("BuildProgram Error: %lld\n", err);
+        print("...\n");
         size_t len = 0;
         cl_int ret = CL_SUCCESS;
         ret = clGetProgramBuildInfo(program, SL_devices[platform_id][device_id], CL_PROGRAM_BUILD_LOG, 0, NULL, &len);
@@ -232,6 +233,7 @@ cl_kernel gpuBuildFromText(int platform_id, int device_id, const char *kernel_fu
             * ret_err = 1;
             return NULL;
         }
+        print("...\n");
         len += 10;
         char *buffer = myMalloc(len);
         memset(buffer, 0, len);
@@ -242,14 +244,19 @@ cl_kernel gpuBuildFromText(int platform_id, int device_id, const char *kernel_fu
             * ret_err = 1;
             return NULL;
         }
+        print("...\n");
 
-        print("Error Info: code=%lld: info=%s\n", err, buffer);
+        print("Error Info: code=%lld:\n", err);
+        print("%02x %02x %02x\n", buffer[0], buffer[1], buffer[2]);
+        print("%s\n", buffer);
 
         myFree(buffer);
+        print("...\n");
         if (ret_err)
         {
             *ret_err = err;
         }
+        print("...\n");
         return NULL;
     }
     cl_kernel kernel = clCreateKernel(program,
