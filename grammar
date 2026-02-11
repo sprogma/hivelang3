@@ -59,6 +59,7 @@ rule "statement" [
     v [expression; Sn; ";"] [] []
     v [Sn; "while"; expression; code_block] [] []
     v [Sn; "match"; expression; Sn; "{"] [case_branch] [Sn; "}"]
+    v [Sn; "sleep"; expression; Sn; ";"] [] []
 ]
 rule "case_branch" [
     v [Sn; "default"; code_block] [] []

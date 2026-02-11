@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <ranges>
+#include <string>
 #include <map>
 
 using namespace std;
@@ -1502,6 +1503,14 @@ private:
                 printMR(op, ASM_MOV_MR, {5, 8}, Register(op->data[0]), op->data[1]);
                 break;
             }
+
+            case OP_SLEEP:
+            {
+                // rdi=time
+                InsertMove(op, {7, 8}, Register(op->data[0]), isSigned(op->data[0]));
+                runtimeApiHeader[GetHeaderId(ACTION_SLEEP, "x64")].push_back({printCALL(op, 0x0) - assemblyCode, currentOrder});
+                break;
+            }
             
             case OP_CALL:
             {
@@ -2195,6 +2204,11 @@ private:
                 header += 8;
                 /* export input table size */
                 *(uint64_t *)header = GetWorkerInputTableSize(id);
+                header += 8;
+                /* export affinity */
+                *(uint64_t *)header = idToWorker[id]->attributes.contains("affinity") &&
+                                      holds_alternative<string>(idToWorker[id]->attributes["affinity"]) ? 
+                                        stoi(get<string>(idToWorker[id]->attributes["affinity"])) : -1;
                 header += 8;
             }
         }

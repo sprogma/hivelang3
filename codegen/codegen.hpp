@@ -55,6 +55,7 @@ static inline int64_t ProviderId(const string &name)
 
 enum header_id_action
 {
+    ACTION_SLEEP,
     ACTION_PUSH_OBJECT,
     ACTION_QUERY_OBJECT,
     ACTION_PUSH_PIPE,
@@ -72,6 +73,9 @@ static inline int8_t GetHeaderId(enum header_id_action action, const string &pro
 {
     switch (action)
     {
+        case ACTION_SLEEP:
+            if (provider == "x64") return 50;
+            break;
         case ACTION_NEW_OBJECT:
             if (provider == "x64") return 2;
             if (provider == "gpu") return 22;

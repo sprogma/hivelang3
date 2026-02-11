@@ -17,6 +17,7 @@
 
 extern void callExample(void *);
 
+extern int NUM_THREADS;
 
 struct jmpbuf {BYTE _[80];};
 [[noreturn]] extern void longjmpUN(struct jmpbuf *, int64_t val);
@@ -110,6 +111,7 @@ struct worker_info
     int64_t provider;
     void *data;
     int64_t inputSize;
+    int64_t affinity;
 };
 extern struct worker_info Workers[];
 struct hive_provider_info
@@ -146,19 +148,11 @@ extern struct defined_array *defined_arrays;
 
 
 
-struct queue_t
-{
-    SRWLOCK queue_lock;
-    _Atomic int64_t size;
-    int64_t alloc;
-    void **data;
-};
-
-extern struct queue_t queue;
+extern _Atomic int64_t queue_size;
 
 void queue_init();
 void queue_enqueue(struct queued_worker *wk);
-struct queued_worker *queue_extract();
+struct queued_worker *queue_extract(int64_t threadId);
 
 
 

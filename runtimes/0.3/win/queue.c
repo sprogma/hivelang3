@@ -9,11 +9,20 @@
 #include "runtime_lib.h"
 #include "runtime.h"
 
+_Atomic int64_t queue_size;
+
+struct queue_t
+{
+    SRWLOCK queue_lock;
+    int64_t size;
+    int64_t alloc;
+    void **data;
+};
 
 // #define USE_ARRAY
 
-
-struct queue_t queue;
+#define SHARED_QUEUE ((sizeof(queues) / sizeof(*queues)) - 1)
+struct queue_t queues[32];
 
 
 static inline int p(int x)
@@ -30,7 +39,7 @@ int64_t is_less(struct queued_worker *w1, struct queued_worker *w2)
 
 void push_up(int64_t x)
 {   
-    void **a = queue.data;
+    void **a = queues[SHARED_QUEUE].data;
     while (x != 0 && is_less(a[p(x)], a[x]))
     {
         void *tmp = a[x];
@@ -43,8 +52,8 @@ void push_up(int64_t x)
 
 void push_down(int64_t x)
 {
-    void **a = queue.data;
-    int64_t n = queue.size;
+    void **a = queues[SHARED_QUEUE].data;
+    int64_t n = queues[SHARED_QUEUE].size;
     while (x < n)
     {
         int64_t l = 2 * x + 1;
@@ -82,41 +91,71 @@ void push_down(int64_t x)
 
 void queue_init()
 {   
-    queue.size = 0;
-    queue.alloc = 1024*16;
-    queue.data = myMalloc(sizeof(*queue.data) * queue.alloc);
-    queue.queue_lock = (SRWLOCK)SRWLOCK_INIT;
+    for (int i = 0; i < (int)(sizeof(queues)/sizeof(*queues)); ++i)
+    {
+        queues[i].size = 0;
+        queues[i].alloc = 1024*16;
+        queues[i].data = myMalloc(sizeof(*queues[i].data) * queues[i].alloc);
+        queues[i].queue_lock = (SRWLOCK)SRWLOCK_INIT;
+    }
+    queue_size = 0;
 }
 
 void queue_enqueue(struct queued_worker *wk)
 {
-    AcquireSRWLockExclusive(&queue.queue_lock);
+    queue_size++;
+    int64_t queue_id = SHARED_QUEUE;
+    if (Workers[wk->id].affinity != -1)
+    {
+        queue_id = Workers[wk->id].affinity % NUM_THREADS;
+    }
+    AcquireSRWLockExclusive(&queues[queue_id].queue_lock);
     #ifdef USE_ARRAY
-    queue.data[queue.size++] = wk;
+    queues[queue_id].data[queues[queue_id].size++] = wk;
     #else
-    queue.data[queue.size] = wk;
-    push_up(queue.size);
-    queue.size++;
+    queues[queue_id].data[queues[queue_id].size] = wk;
+    push_up(queues[queue_id].size);
+    queues[queue_id].size++;
     #endif
-    ReleaseSRWLockExclusive(&queue.queue_lock);
+    ReleaseSRWLockExclusive(&queues[queue_id].queue_lock);
 }
 
-struct queued_worker *queue_extract()
+struct queued_worker *queue_extract(int64_t threadId)
 {
-    AcquireSRWLockExclusive(&queue.queue_lock);
-    if (queue.size == 0)
+    AcquireSRWLockExclusive(&queues[threadId].queue_lock);
+    if (queues[threadId].size != 0)
     {
-        ReleaseSRWLockExclusive(&queue.queue_lock);
+        queue_size--;
+        #ifdef USE_ARRAY
+        void *res = queues[threadId].data[--queues[threadId].size];
+        #else
+        void *res = queues[threadId].data[0];
+        queues[threadId].size--;
+        queues[threadId].data[0] = queues[threadId].data[queues[threadId].size];
+        push_down(0);
+        #endif
+        ReleaseSRWLockExclusive(&queues[threadId].queue_lock);
+        return res;
+    }
+    ReleaseSRWLockExclusive(&queues[threadId].queue_lock);
+    
+    // use thread queues[SHARED_QUEUE], if it is empty - use shared queues[SHARED_QUEUE]
+    
+    AcquireSRWLockExclusive(&queues[SHARED_QUEUE].queue_lock);
+    if (queues[SHARED_QUEUE].size == 0)
+    {
+        ReleaseSRWLockExclusive(&queues[SHARED_QUEUE].queue_lock);
         return NULL;
     }
+    queue_size--;
     #ifdef USE_ARRAY
-    void *res = queue.data[--queue.size];
+    void *res = queues[SHARED_QUEUE].data[--queues[SHARED_QUEUE].size];
     #else
-    void *res = queue.data[0];
-    queue.size--;
-    queue.data[0] = queue.data[queue.size];
+    void *res = queues[SHARED_QUEUE].data[0];
+    queues[SHARED_QUEUE].size--;
+    queues[SHARED_QUEUE].data[0] = queues[SHARED_QUEUE].data[queues[SHARED_QUEUE].size];
     push_down(0);
     #endif
-    ReleaseSRWLockExclusive(&queue.queue_lock);
+    ReleaseSRWLockExclusive(&queues[SHARED_QUEUE].queue_lock);
     return res;
 }

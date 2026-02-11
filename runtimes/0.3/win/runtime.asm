@@ -6,6 +6,7 @@ public x64_fastNewObject
 public x64_fastCallObject
 public x64_fastPushPipe
 public x64_fastQueryPipe
+public x64_fastSleep
 public gpu_fastNewObject
 public gpu_fastCallObject
 public loc_fastNewObject
@@ -25,14 +26,16 @@ extrn x64QueryPipe
 extrn x64PushObject
 extrn x64PushPipe
 extrn x64NewObject
-extrn gpuNewObject
+extrn x64Sleep
 extrn x64CallObject
+extrn gpuNewObject
 extrn gpuCallObject
 extrn locNewObject
 extrn dllCallObject
 extrn anyCastProvider
 extrn myPrintf
 
+fmt du 'bad value: %lld', 10, 0
 
 section '.text' code readable executable
 
@@ -73,12 +76,12 @@ macro EnterCCode {
     push r14
     push r15
     
-    sub rsp, 0+32
+    sub rsp, 32
 }
 
 macro LeaveCCode {
     ; load used registers
-    add rsp, 0+32
+    add rsp, 32
 
     pop r15
     pop r14
@@ -101,11 +104,26 @@ macro CWrapper endpoint {
     EnterCCode
     mov r8, rax
     mov r9, rbp
+    ;test rsp, 0xF
+    ;jnz .BAD
     call endpoint
     mov rdi, rax
     LeaveCCode
     ret
+;.BAD:
+    ;sub rsp, 32
+
+    ;mov rcx, fmt
+    ;mov rdx, rsp
+
+    ;call myPrintf
+    
+    ;add rsp, 32
+    
+    ;LeaveCCode
+    ;ret
 }
+
 
 ; arguments:
 ; fn(rdi, rsi, rdx, rcx, returnAddress, rbpValue)
@@ -121,6 +139,8 @@ x64_fastPushPipe:
     CWrapper x64PushPipe
 x64_fastQueryPipe:
     CWrapper x64QueryPipe
+x64_fastSleep:
+    CWrapper x64Sleep
 gpu_fastNewObject:
     CWrapper gpuNewObject
 gpu_fastCallObject:

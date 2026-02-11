@@ -168,6 +168,11 @@ private:
             header += 8;
             memcpy(header, data.entry.c_str(), data.entry.size());
             header += data.entry.size();
+            /* export affinity */
+            *(uint64_t *)header = idToWorker[id]->attributes.contains("affinity") &&
+                                  holds_alternative<string>(idToWorker[id]->attributes["affinity"]) ? 
+                                      stoi(get<string>(idToWorker[id]->attributes["affinity"])) : -1;
+            header += 8;
             /* export output size [base from promise] */
             *(uint64_t *)header = data.output;
             header += 8;

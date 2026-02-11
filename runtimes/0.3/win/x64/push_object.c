@@ -77,7 +77,7 @@ int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rd
         if (obj == 0)
         {
             // remote object, repeat request, with timeout
-            log("waiting for remote push %lld/%lld\n", ticks, info->repeat_timeout);
+            log("waiting for remote push %lld/%lld for obj=%lld\n", ticks, info->repeat_timeout, info->object_id);
             if (ticks > info->repeat_timeout)
             {
                 RequestObjectSet(info->object_id, info->offset, myAbs(info->size), info->data);

@@ -845,6 +845,11 @@ pair<vector<Operation>, int64_t> buildSimpleTerm(BuildContext *ctx, Node *node)
             attributes["provider"] = provider;
             fn->used_providers.insert(provider);
             ctx->result->used_providers.insert(provider);
+            // expand "on" attribute
+            if (!attributes.contains("on") && fn->attributes.contains("on"))
+            {
+                attributes["on"] = fn->attributes["on"];
+            }
             append(ops, {OP_CALL, args, attributes, node->start, node->end});
             freeAttributeTemps(ops, attributes);
 
@@ -1772,6 +1777,16 @@ vector<Operation> buildStatement(BuildContext *ctx, Node *node)
             freeTemp(ops, matchPos);
             break;
         }
+        case 4:
+        {
+            printf("statement sleep\n");
+            auto [var, varPos] = buildExpression(ctx, node->nonTerm(0));
+            if (handleNotNull(ctx, varPos, node->nonTerm(0))) { break; }
+            append(ops, var);
+            append(ops, {OP_SLEEP, {varPos}, {}, node->start, node->end});
+            freeTemp(ops, varPos);
+            break;
+        }
     }
     return ops;
 }
@@ -2101,6 +2116,7 @@ void applyNamesTranslition(OperationBlock *op, const map<int64_t, int64_t> &tran
             break;
 
         // all args
+        case OP_SLEEP:
         case OP_FREE_TEMP:
         case OP_JMP:
         case OP_JZ:
@@ -2163,6 +2179,7 @@ vector<int64_t> getWritedVariables(OperationBlock *op)
 
         case OP_CALL:
         case OP_FREE_TEMP:
+        case OP_SLEEP:
         case OP_PUSH_PIPE:
         case OP_PUSH_PROMISE:
         case OP_PUSH_CLASS:
@@ -2257,6 +2274,7 @@ vector<int64_t> getUsedVariables(OperationBlock *op)
 
         // all args
         case OP_FREE_TEMP:
+        case OP_SLEEP:
         case OP_JMP:
         case OP_JZ:
         case OP_JNZ:
@@ -2346,6 +2364,7 @@ vector<int64_t> getReadVariables(OperationBlock *op)
         // first arg
         case OP_JZ:
         case OP_JNZ:
+        case OP_SLEEP:
         case OP_STORE:
         case OP_STORE_INPUT:
             result = {op->data[0]}; break;
@@ -2404,7 +2423,8 @@ void dumpIRR(WorkerDeclarationContext *fn, OperationBlock *x)
     printf("%p ", x);
     switch (x->type)
     {
-
+        case OP_SLEEP: printf("OP_SLEEP "); break;
+        
         case OP_LOAD_INPUT: printf("OP_LOAD_INPUT "); break;
         case OP_LOAD_OUTPUT: printf("OP_LOAD_OUTPUT "); break;
 

@@ -17,6 +17,14 @@
 //     {
 //         return 1;
 //     }
+//     if (name == "dll")
+//     {
+//         return 2;
+//     }
+//     if (name == "loc")
+//     {
+//         return 3;
+//     }
 //     return -1;
 // }
 //<<--QuoteEnd-->>

@@ -18,7 +18,9 @@
 // fn(rdi, rsi, rdx, rcx, returnAddress, rbpValue)
 
 
-//<<--Quote-->> from:../../../codegen/x64_win/codegen.cpp:(//\s*(rdi|rsi|rdx|rcx)=.*|case OP_\w*(CALL|CAST|NEW|PUSH|QUERY)\w*:)
+//<<--Quote-->> from:../../../codegen/x64_win/codegen.cpp:(//\s*(rdi|rsi|rdx|rcx)=.*|case OP_\w*(CALL|CAST|NEW|PUSH|QUERY|SLEEP)\w*:)
+// case OP_SLEEP:
+// // rdi=time
 // case OP_CALL:
 // // rdi="on" parameter
 // // rsi=call table
@@ -79,6 +81,7 @@ extern int x64_fastNewObject(void);
 extern int x64_fastCallObject(void);
 extern int x64_fastPushPipe(void);
 extern int x64_fastQueryPipe(void);
+extern int x64_fastSleep(void);
 extern int gpu_fastNewObject(void);
 extern int gpu_fastCallObject(void);
 extern int loc_fastNewObject(void);

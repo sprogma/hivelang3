@@ -21,6 +21,7 @@
 #include "dll/dll.h"
 #include "loc/loc.h"
 
+int NUM_THREADS = 1;
 struct defined_array *defined_arrays;
 
 struct worker_info Workers[100] = {};
@@ -196,6 +197,7 @@ void UpdateWaitingWorkers()
             int64_t x64NewObjectStates(struct waiting_worker *, int64_t, int64_t *);
             int64_t x64PushObjectStates(struct waiting_worker *, int64_t, int64_t *);
             int64_t x64QueryObjectStates(struct waiting_worker *, int64_t, int64_t *);
+            int64_t x64SleepStates(struct waiting_worker *, int64_t, int64_t *);
             //<<--QuoteEnd-->>
             // calls
             //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@reg\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"            case $($_.a):"};"                res = $($n.Name)(w, ticks, &rdiValue); break;"})-join"`n"
@@ -211,6 +213,8 @@ void UpdateWaitingWorkers()
                 res = x64PushObjectStates(w, ticks, &rdiValue); break;
             case WK_STATE_QUERY_OBJECT_WAIT_X64:
                 res = x64QueryObjectStates(w, ticks, &rdiValue); break;
+            case WK_STATE_TIMER_WAIT_X64:
+                res = x64SleepStates(w, ticks, &rdiValue); break;
             //<<--QuoteEnd-->>
         }
         if (res)
@@ -232,7 +236,7 @@ void SheduleWorker(struct thread_data *lc_data)
     int64_t now = GetTicks();
     if (now - lc_data->prevPrint > MicrosecondsToTicks(100000))
     {
-        print("thread %lld:  Wait|Queued %lld|%lld [%lld completed]\n", lc_data->number, wait_list_len, queue.size, lc_data->completedTasks);
+        print("thread %lld:  Wait|Queued %lld|%lld [%lld completed]\n", lc_data->number, wait_list_len, queue_size, lc_data->completedTasks);
         // AcquireSRWLockShared(&wait_list_lock);
         // int64_t cnt[10] = {};
         // for (int64_t i = 0; i < wait_list_len; ++i)
@@ -248,7 +252,7 @@ void SheduleWorker(struct thread_data *lc_data)
 
     // call next worker
 
-    struct queued_worker *curr = queue_extract();
+    struct queued_worker *curr = queue_extract(lc_data->number);
     if (curr)
     {
         lc_data->completedTasks++;
@@ -268,8 +272,8 @@ void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
     int64_t rnd = 0;
     BCryptGenRandom(NULL, (BYTE *)&rnd, 8, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
     rnd = myAbs(rnd);
-    int64_t random_confirm = (rnd & 0x80000000) && (rnd % 100 < 5 * (wait_list_len + queue.size));
-    if ((random_confirm || global_id != 0) && global_id != 1)
+    int64_t random_confirm = (rnd & 0x80000000) && (rnd % 100 < 5 * (wait_list_len + queue_size));
+    if (((random_confirm || global_id != 0) && global_id != 1) || global_id == 2)
     {
         /* select random connection */
         AcquireSRWLockShared(&connections_lock);
@@ -279,12 +283,17 @@ void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
             log("Want run remote, but: %lld %lld [con=%p]\n", connections[t]->wait_list_len, connections[t]->queue_len, connections[t]);
             if (connections[t]->outgoing != INVALID_SOCKET &&
                 ((connections[t]->wait_list_len < 50 && connections[t]->queue_len < 30) ||
-                  connections[t]->queue_len == 0))
+                  connections[t]->queue_len == 0 || 
+                    global_id == 2))
             {
                 StartNewWorkerRemote(connections[t], workerId, (IS_CALL_PARAM_GLOBAL_ID(global_id) ? global_id : 0), inputTable);
                 ReleaseSRWLockShared(&connections_lock);
                 return;
             }
+        }
+        else if (global_id == 2)
+        {
+            print("Error: can't run remote worker %lld: no remote connections found\n", workerId);
         }
         ReleaseSRWLockShared(&connections_lock);
     }
@@ -381,18 +390,31 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
         // {
         //     switch (action)
         //     {
+        //         case ACTION_SLEEP:
+        //             if (provider == "x64") return 50;
+        //             break;
         //         case ACTION_NEW_OBJECT:
-        //             return (provider == "x64" ? 2 : 22);
+        //             if (provider == "x64") return 2;
+        //             if (provider == "gpu") return 22;
+        //             if (provider == "loc") return 42;
+        //             break;
         //         case ACTION_PUSH_OBJECT:
-        //             return (provider == "x64" ? 0 : 20);
+        //             if (provider == "x64") return 0;
+        //             if (provider == "gpu") return 20;
+        //             break;
         //         case ACTION_QUERY_OBJECT:
-        //             return (provider == "x64" ? 1 : 21);
+        //             if (provider == "x64") return 1;
+        //             if (provider == "gpu") return 21;
+        //             break;
         //         case ACTION_PUSH_PIPE:
         //             return (provider == "x64" ? 8 : 28);
         //         case ACTION_QUERY_PIPE:
         //             return (provider == "x64" ? 9 : 29);
         //         case ACTION_CALL_WORKER:
-        //             return (provider == "x64" ? 3 : 23);
+        //             if (provider == "x64") return 3;
+        //             if (provider == "gpu") return 23;
+        //             if (provider == "dll") return 33;
+        //             break;
         //         case ACTION_CAST_PROVIDER:
         //             return 10;
         //         case HEADER_DLL_IMPORT:
@@ -404,6 +426,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
         //         case HEADER_STRINGS_TABLE:
         //             return 17;
         //     }
+        //     printf("Error: unsupported action: %lld on provider %s\n", (int64_t)action, provider.c_str());
+        //     return -1;
         // }
         //<<--QuoteEnd-->>
         BYTE type = *pos++;
@@ -424,6 +448,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
             case 9:
             case 29:
             case 10:
+            case 50:
             {
                 // read positions and replace calls
                 int64_t count = *(int64_t *)pos;
@@ -451,6 +476,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                         case 9:  *callPosition = (uint64_t)&x64_fastQueryPipe; break;
                         // case 29: *callPosition = (uint64_t)&gpu_fastQueryPipe; break;
                         case 10:  *callPosition = (uint64_t)&any_fastCastProvider; break;
+                        case 50:  *callPosition = (uint64_t)&x64_fastSleep; break;
                         default:
                             print("ERROR: Runtime endpoint %lld doensn't supported for now [gpu push/query]\n");
                             ExitProcess(1);
@@ -482,6 +508,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                     pos += sz;
                 }
                 // read argument sizes
+                int64_t affinity = *(int64_t *)pos;
+                pos += 8;
                 int64_t totalSize = 8;
                 int64_t output_size = *(int64_t *)pos;
                 pos += 8;
@@ -510,7 +538,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                 data->inputMapLength = inputs_len;
                 data->inputMap = inputs;
                 data->call_stack_usage = 32 + 16 * (inputs_len < 4 ? 0 : (inputs_len - 4 + 1) / 2);
-                Workers[id] = (struct worker_info){PROVIDER_DLL, data, totalSize};
+                Workers[id] = (struct worker_info){PROVIDER_DLL, data, totalSize, affinity};
 
                 // log data
                 log("worker %lld is dll call of library %s %s -> result function is %p\n", id, lib_name, entry, data->entry);
@@ -534,9 +562,11 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                     pos += 8;
                     int64_t tableSize = *(int64_t *)pos;
                     pos += 8;
+                    int64_t affinity = *(int64_t *)pos;
+                    pos += 8;
                     // set data
                     void *ptr = mem + offset;
-                    Workers[id] = (struct worker_info){PROVIDER_X64, ptr, tableSize};
+                    Workers[id] = (struct worker_info){PROVIDER_X64, ptr, tableSize, affinity};
                     log("Worker %lld [x64] have been loaded to %p [offset %llx] with input table of size %lld\n", id, ptr, offset, tableSize);
                 }
                 break;
@@ -570,8 +600,6 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                             pos += 8;
                             defined_arrays[i].start = data_copy + el_offset;
                             defined_arrays[i].size = el_size;
-                            print("READ STRING:\n");
-                            myPrintf((wchar_t *)defined_arrays[i].start);
                         }
                         pos += rawsize;
                         break;
@@ -626,7 +654,7 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                         print("Error: kernel build failed\n");
                         ExitProcess(1);
                     }
-                    Workers[id] = (struct worker_info){PROVIDER_GPU, info, tableSize};
+                    Workers[id] = (struct worker_info){PROVIDER_GPU, info, tableSize, -1};
                     log("Worker %lld [GPU] have been loaded to %p [offset %llx:%llx] with input table of size %lld\n", id, info, start, end, tableSize);
                 }
                 break;
@@ -678,10 +706,6 @@ DWORD ShedulerInstance(void *vparam)
                 return 0;
             }
             // print("promise not set\n");
-        }
-        else
-        {
-            print("promise not found\n");
         }
     }
     myFree(lc_data);
@@ -757,7 +781,6 @@ int wmain(void)
 
     // cmdargs
     
-    int NUM_THREADS = 1;
     int64_t inputLen = 0, connectingToMain = 0;
     int64_t resCodeId = 0, hangAfterEnd = 0, noStdin = 0;
     int argc;
@@ -776,7 +799,7 @@ int wmain(void)
         {
             NUM_THREADS = argv[1][1] - '0';
         }
-        else if (argv[1][0] == 'n')
+        else if (argv[1][0] == 'c')
         {
             connectingToMain = 1;
         }
@@ -786,7 +809,7 @@ int wmain(void)
         }
         else
         {
-            print("Unknown cmdline parameter: %lld\n");
+            print("Unknown cmdline parameter: %lld\n", argv[1][0]);
             return 1;
         }
         argv++;
@@ -843,7 +866,6 @@ int wmain(void)
     print("Running...\n");
 
     // TODO: make better program end determination
-    (void)connectingToMain;
 
     HANDLE hThreads[NUM_THREADS];
     DWORD threadId;

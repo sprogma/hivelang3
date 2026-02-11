@@ -351,6 +351,9 @@ private:
             case OP_LOAD:
             case OP_STORE:
             // unsupported for now
+            case OP_SLEEP:
+                logError(ir->filename, ir->code, op->code_start, op->code_end, "slepp is unsupported in gpu provider");
+                break;
             case OP_STORE_INPUT: 
             case OP_CALL:
                 logError(ir->filename, ir->code, op->code_start, op->code_end, "calls are unsupported in gpu provider");

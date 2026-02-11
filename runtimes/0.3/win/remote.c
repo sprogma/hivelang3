@@ -158,7 +158,7 @@ void ConfirmID(int64_t confirmed_id)
 
 void HandleNewConnection(SOCKET client, SOCKADDR_STORAGE storage, int storage_len)
 {
-    log("Client connected\n");
+    print("Client connected!\n");
     
     struct hive_connection *new_connection = myMalloc(sizeof(*new_connection));
     struct connection_context *new_context = myMalloc(sizeof(*new_context));
@@ -1564,7 +1564,7 @@ void SendHiveState()
     AcquireSRWLockShared(&wait_list_lock);
     int64_t this_wait_list_len = wait_list_len;
     ReleaseSRWLockShared(&wait_list_lock);
-    int64_t this_queue_len = queue.size;
+    int64_t this_queue_len = queue_size;
     // TODO: create better idle time getter
     int64_t this_idle_time = 0;
     
@@ -1651,6 +1651,8 @@ void start_remote_subsystem(int64_t noStdin)
 
     if (!noStdin)
     {
+        print("[p <port>] to select port [c <ip> <port>] to connect remote [r] to confirm configuration\n");
+        print("Enter command>");
         myScanS(cmd);
         
         if (cmd[0] == 'p' || cmd[0] == 'P')
@@ -1680,6 +1682,7 @@ void start_remote_subsystem(int64_t noStdin)
     
     while (!noStdin) 
     {
+        print("Enter command>");
         log("Get command [%s]\n", cmd);
         if (cmd[0] == 'c' || cmd[0] == 'C')
         {

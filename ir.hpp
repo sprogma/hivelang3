@@ -124,6 +124,9 @@ enum OperationType
     OP_QUERY_PROMISE, // format is [dest, source]
     OP_QUERY_CLASS, // format is [dest, source, offset, type?]
     
+    // format [time:i64 [TODO: float sleep]] [in ms?]
+    OP_SLEEP,
+    
     OP_JZ, OP_JNZ,
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD,
     OP_BOR, OP_BAND, OP_BXOR, OP_SHL, OP_SHR, OP_BNOT,
