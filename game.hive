@@ -49,6 +49,15 @@ class player
         0
     )CreateWindowEx@dll(*);
 
+    i32? a;
+    a = new i32?();
+
+    ()fun(a);
+    
+    ()fun(var x);
+    
+    ?(()fun(*)) + 5;
+
     match (hwnd)
     {
         `i64`0 {
