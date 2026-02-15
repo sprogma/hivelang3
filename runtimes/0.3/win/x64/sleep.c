@@ -33,7 +33,7 @@ int64_t x64SleepStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValu
         }
         return 0;
     }
-    __builtin_unreachable();
+    unreachable;
 }
 
 __attribute__((sysv_abi))

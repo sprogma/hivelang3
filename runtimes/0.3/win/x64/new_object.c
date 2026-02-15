@@ -124,7 +124,7 @@ int64_t x64NewObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rdi
         return 0;
     }
     
-    __builtin_unreachable();
+    unreachable;
 }
 
 // if allocating ARRAY, param must be element size.

@@ -43,6 +43,6 @@ struct gpu_object
 void gpuExecuteWorker(struct queued_worker *obj);
 int64_t gpuUpdateWaitingWorker(struct waiting_worker *wk, int64_t ticks, int64_t *rdiValue);
 void gpuNewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t *remote_id);
-
+void gpuStartNewLocalWorker(int64_t workerId, BYTE *inputTable);
 
 #endif

@@ -5,6 +5,12 @@
     #define _WIN32_WINNT _WIN32_WINNT_VISTA
 #endif
 
+#ifndef NDEBUG
+    #define unreachable assert(NULL == "This is unreachable code")
+#else
+    #define unreachable __builtin_unreachable()
+#endif
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include "windows.h"
@@ -17,7 +23,10 @@
 
 extern void callExample(void *);
 
-extern int NUM_THREADS;
+extern int64_t NUM_THREADS;
+extern int64_t CHUNK_TIME_US;
+
+#define CONTEXT_SIZE (9+5)
 
 struct jmpbuf {BYTE _[80];};
 [[noreturn]] extern void longjmpUN(struct jmpbuf *, int64_t val);
@@ -35,7 +44,7 @@ struct waiting_worker
     void *data;
     // registers
     void *rbpValue;
-    int64_t context[9];
+    int64_t context[CONTEXT_SIZE];
 };
 
 
@@ -49,7 +58,7 @@ struct queued_worker
     int64_t rdiValue;
     // registers
     void *rbpValue;
-    int64_t context[9];
+    int64_t context[CONTEXT_SIZE];
 };
 
 
@@ -106,21 +115,6 @@ struct __attribute__((packed)) object_object
     struct object;
 };
 
-struct worker_info
-{
-    int64_t provider;
-    void *data;
-    int64_t inputSize;
-    int64_t affinity;
-};
-extern struct worker_info Workers[];
-struct hive_provider_info
-{
-    void (*ExecuteWorker)(struct queued_worker *);
-    int64_t (*UpdateWaitingWorker)(struct waiting_worker *, int64_t, int64_t *);
-    void (*NewObjectUsingPage)(int64_t type, int64_t size, int64_t param, int64_t *remote_id);
-};
-extern struct hive_provider_info Providers[];
 
 struct defined_array
 {
@@ -133,11 +127,36 @@ struct thread_data
     int64_t number;
     int64_t runningId;
     int64_t runningDepth;
-    int64_t completedTasks;
-    int64_t prevPrint;
     struct jmpbuf ShedulerBuffer;
+    // special fields
+    _Atomic int64_t lastWorkerStart;
+    // performance counters
+    _Atomic int64_t executedTasks;
+    _Atomic int64_t completedTasks;
+    _Atomic int64_t stalledTasks;
+    _Atomic int64_t stallable;
 };
+
 extern DWORD dwTlsIndex;
+
+struct worker_info
+{
+    int64_t provider;
+    void *data;
+    int64_t inputSize;
+    int64_t affinity;
+};
+extern struct worker_info Workers[];
+
+struct hive_provider_info
+{
+    void (*ExecuteWorker)(struct queued_worker *);
+    void (*NewObjectUsingPage)(int64_t type, int64_t size, int64_t param, int64_t *remote_id);
+    int64_t stallable;
+    int64_t (*TryStallWorker)(HANDLE hThread, struct thread_data *data, int64_t runnedTicks);
+    void (*StartNewLocalWorker)(int64_t workerId, BYTE *inputTable);
+};
+extern struct hive_provider_info Providers[];
 
 extern SRWLOCK wait_list_lock;
 extern struct waiting_worker *wait_list[];
@@ -171,6 +190,7 @@ struct queued_worker *queue_extract(int64_t threadId);
 
 
 
+void UpdateWaitingWorkers();
 void RegisterObjectWithId(int64_t id, void *object);
 int64_t GetNewObjectId(int64_t *result);
 void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue);
@@ -186,5 +206,6 @@ void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value);
 void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable);
 
 int64_t StartInitialProcess(int64_t entryWorker, int64_t *cmdArgs, int64_t cmdArgsLen);
+int64_t ShedulerStart(int64_t resCodeId);
 
 #endif

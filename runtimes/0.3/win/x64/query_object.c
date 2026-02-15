@@ -61,7 +61,7 @@ int64_t x64OnQueryObject(struct waiting_worker *w, int64_t object, int64_t offse
     }
         
     }
-    __builtin_unreachable();
+    unreachable;
 }
 
 
@@ -83,7 +83,7 @@ int64_t x64QueryObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *r
                 RequestObjectGet(info->object_id, info->offset, myAbs(info->size));
                 info->repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT);
             }
-            break;
+            return 0;
         }
         else
         {
@@ -96,7 +96,7 @@ int64_t x64QueryObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *r
         return 0;
         
     }
-    __builtin_unreachable();
+    unreachable;
 }
 
 
@@ -115,11 +115,17 @@ int64_t x64QueryObject(void *destination, int64_t object_id, int64_t offset, int
             return rdiValue;
         }
     }
-    else
+    
+    struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+    lc_data->stallable = 0;
+    
+    if (obj == NULL)
     {
         // send request
         RequestObjectGet(object_id, offset, myAbs(size));
     }
+    
+    
     /* shedule query */
     struct wait_query_info *query = myMalloc(sizeof(*query));
     *query = (struct wait_query_info){
@@ -131,8 +137,7 @@ int64_t x64QueryObject(void *destination, int64_t object_id, int64_t offset, int
     };
     BCryptGenRandom(NULL, query->id, BROADCAST_ID_LENGTH, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
     universalPauseWorker(returnAddress, rbpValue, WK_STATE_QUERY_OBJECT_WAIT_X64, query);
-    
-    struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+
     longjmpUN(&lc_data->ShedulerBuffer, 1);
 }
 

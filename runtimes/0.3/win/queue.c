@@ -16,11 +16,11 @@ struct queue_t
     SRWLOCK queue_lock;
     int64_t size;
     int64_t alloc;
-    void **data;
+    struct queued_worker **data;
 };
 
 // ! without this doesn't work
-#define USE_ARRAY
+// #define USE_ARRAY
 
 #define SHARED_QUEUE ((sizeof(queues) / sizeof(*queues)) - 1)
 struct queue_t queues[32];
@@ -34,13 +34,13 @@ static inline int p(int x)
 
 int64_t is_less(struct queued_worker *w1, struct queued_worker *w2)
 {
-    return w1->id < w2->id;
+    return w1->depth < w2->depth;
 }
 
 
-void push_up(int64_t x)
+void push_up(int64_t queueId, int64_t x)
 {   
-    void **a = queues[SHARED_QUEUE].data;
+    struct queued_worker **a = queues[queueId].data;
     while (x != 0 && is_less(a[p(x)], a[x]))
     {
         void *tmp = a[x];
@@ -51,10 +51,10 @@ void push_up(int64_t x)
 }
 
 
-void push_down(int64_t x)
+void push_down(int64_t queueId, int64_t x)
 {
-    void **a = queues[SHARED_QUEUE].data;
-    int64_t n = queues[SHARED_QUEUE].size;
+    struct queued_worker **a = queues[queueId].data;
+    int64_t n = queues[queueId].size;
     while (x < n)
     {
         int64_t l = 2 * x + 1;
@@ -111,11 +111,20 @@ void queue_enqueue(struct queued_worker *wk)
         queue_id = Workers[wk->id].affinity % NUM_THREADS;
     }
     AcquireSRWLockExclusive(&queues[queue_id].queue_lock);
-    #ifdef USE_ARRAY
-    queues[queue_id].data[queues[queue_id].size++] = wk;
+    #ifdef USE_ARRAY    
+    if (queues[queue_id].size > 0 && is_less(wk, queues[queue_id].data[queues[queue_id].size-1]))
+    {
+        queues[queue_id].data[queues[queue_id].size++] = queues[queue_id].data[0];
+        queues[queue_id].data[0] = wk;
+    }
+    else
+    {
+        queues[queue_id].data[queues[queue_id].size++] = wk;
+    }
+    // swap if priority
     #else
     queues[queue_id].data[queues[queue_id].size] = wk;
-    push_up(queues[queue_id].size);
+    push_up(queue_id, queues[queue_id].size);
     queues[queue_id].size++;
     #endif
     ReleaseSRWLockExclusive(&queues[queue_id].queue_lock);
@@ -133,7 +142,7 @@ struct queued_worker *queue_extract(int64_t threadId)
         void *res = queues[threadId].data[0];
         queues[threadId].size--;
         queues[threadId].data[0] = queues[threadId].data[queues[threadId].size];
-        push_down(0);
+        push_down(threadId, 0);
         #endif
         ReleaseSRWLockExclusive(&queues[threadId].queue_lock);
         return res;
@@ -155,7 +164,7 @@ struct queued_worker *queue_extract(int64_t threadId)
     void *res = queues[SHARED_QUEUE].data[0];
     queues[SHARED_QUEUE].size--;
     queues[SHARED_QUEUE].data[0] = queues[SHARED_QUEUE].data[queues[SHARED_QUEUE].size];
-    push_down(0);
+    push_down(threadId, 0);
     #endif
     ReleaseSRWLockExclusive(&queues[SHARED_QUEUE].queue_lock);
     return res;

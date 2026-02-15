@@ -63,6 +63,20 @@ macro LoadContext dest {
     mov r15, QWORD [dest + 64]
 }
 
+; used for stalling threads
+macro LoadExtraContext dest {
+    LoadContext dest
+    mov rax, QWORD [dest + 80]
+    mov rcx, QWORD [dest + 88]
+    mov rdx, QWORD [dest + 96]
+    ; rsi is last
+    mov rsi, QWORD [dest + 72]
+    if ~(dest eq rsi)
+        display 'Error: expected rsi, but got: ', `dest, 13, 10
+        err
+    end if
+}
+
 macro EnterCCode {
     ; save used registers
     push r8
@@ -168,11 +182,15 @@ x64AsmExecuteWorker:
     mov rdi, rdx
     mov rsi, r9
     
-    LoadContext rsi
+    push qword 0
+    push rcx
+    
+    LoadExtraContext rsi
 
-    ; must be 8 bytes UNaligned before call
-    call rcx
+    ; must be 16 bytes UNaligned before call
+    call qword [rsp]
 
+    add rsp, 16
     
     pop rbp
     pop rbx
@@ -183,6 +201,12 @@ x64AsmExecuteWorker:
     pop r13
     pop r12
     ret
+
+
+; rcx=context[extra]
+; rdx=continueAddress
+; 
+x64ContinueWorker:
     
 
 

@@ -62,7 +62,7 @@ int64_t x64OnPushObject(struct waiting_worker *w, int64_t object, int64_t offset
         return 0;
         
     }
-    __builtin_unreachable();
+    unreachable;
 }
 //@reg WK_STATE_PUSH_OBJECT_WAIT_X64 x64PushObjectStates
 int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue)
@@ -83,7 +83,7 @@ int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rd
                 RequestObjectSet(info->object_id, info->offset, myAbs(info->size), info->data);
                 info->repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT);
             }
-            break;
+            return 0;
         }
         else
         {
@@ -94,7 +94,7 @@ int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rd
         return 0;
         
     }
-    __builtin_unreachable();
+    unreachable;
 }
 
 
@@ -105,6 +105,9 @@ void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size
     BYTE *obj = (BYTE *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
     if (obj == 0)
     {
+        struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+        lc_data->stallable = 0;
+        
         void *data = myMalloc(myAbs(size));
         memcpy(data, (size < 0 ? &source : source), myAbs(size));
         /* shedule query */
@@ -120,7 +123,6 @@ void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size
         BCryptGenRandom(NULL, info->id, BROADCAST_ID_LENGTH, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
         universalPauseWorker(returnAddress, rbpValue, WK_STATE_PUSH_OBJECT_WAIT_X64, info);
     
-        struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
         longjmpUN(&lc_data->ShedulerBuffer, 1);
     }
     else

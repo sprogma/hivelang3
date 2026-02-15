@@ -21,26 +21,36 @@
 #include "dll/dll.h"
 #include "loc/loc.h"
 
-int NUM_THREADS = 1;
+int64_t NUM_THREADS = 1;
+int64_t CHUNK_TIME_US = 50000;
 struct defined_array *defined_arrays;
 
 struct worker_info Workers[100] = {};
 struct hive_provider_info Providers[] = {
     {
-        .ExecuteWorker=x64ExecuteWorker,
-        .NewObjectUsingPage=x64NewObjectUsingPage,
+        .ExecuteWorker = x64ExecuteWorker,
+        .NewObjectUsingPage = x64NewObjectUsingPage,
+        .stallable = 1,
+        .TryStallWorker = x64TryStallWorker,
+        .StartNewLocalWorker = x64StartNewLocalWorker,
     },
     {
-        .ExecuteWorker=gpuExecuteWorker,
-        .NewObjectUsingPage=gpuNewObjectUsingPage,
+        .ExecuteWorker = gpuExecuteWorker,
+        .NewObjectUsingPage = gpuNewObjectUsingPage,
+        .stallable = 0,
+        .StartNewLocalWorker = gpuStartNewLocalWorker,
     },
     {
-        .ExecuteWorker=dllExecuteWorker,
-        .NewObjectUsingPage=NULL,
+        .ExecuteWorker = dllExecuteWorker,
+        .NewObjectUsingPage = NULL,
+        .stallable = 0,
+        .StartNewLocalWorker = dllStartNewLocalWorker,
     },
     {
-        .ExecuteWorker=NULL,
-        .NewObjectUsingPage=locNewObjectUsingPage,
+        .ExecuteWorker = NULL,
+        .NewObjectUsingPage = locNewObjectUsingPage,
+        .stallable = 0,
+        .StartNewLocalWorker = NULL,
     }
 };
 
@@ -184,6 +194,7 @@ void UpdateWaitingWorkers()
         struct waiting_worker *w = wait_list[i];
         int64_t res = 0;
         int64_t rdiValue = 0;
+        // print("wait for %lld\n", w->state);
         switch (w->state)
         {
             // delarations
@@ -228,47 +239,6 @@ void UpdateWaitingWorkers()
     ReleaseSRWLockExclusive(&wait_list_lock);
 }
 
-void SheduleWorker(struct thread_data *lc_data)
-{
-    setjmpUN(&lc_data->ShedulerBuffer);
-
-    int64_t now = GetTicks();
-    if (now - lc_data->prevPrint > MicrosecondsToTicks(100000))
-    {
-        print("thread %lld:  Wait|Queued %lld|%lld [%lld completed]\n", lc_data->number, wait_list_len, queue_size, lc_data->completedTasks);
-        // AcquireSRWLockShared(&wait_list_lock);
-        // int64_t cnt[10] = {};
-        // for (int64_t i = 0; i < wait_list_len; ++i)
-        // {
-        //     cnt[wait_list[i]->waiting_data->type]++;
-        // }
-        // print("wait for WAITING_PUSH:  %lld\n", cnt[WAITING_PUSH]);
-        // print("wait for WAITING_QUERY: %lld\n", cnt[WAITING_QUERY]);
-        // ReleaseSRWLockShared(&wait_list_lock);
-        lc_data->prevPrint = now;
-        lc_data->completedTasks = 0;
-    }
-
-    // call next worker
-
-    struct queued_worker *curr = queue_extract(lc_data->number);
-    if (curr)
-    {
-        lc_data->completedTasks++;
-        log("\nSheduling new worker\n");
-        log("Continue worker %lld from data=%p [rdi=%llx] [context=%p] [rbp=%p]\n",
-                curr->id, curr->data, curr->rdiValue, curr->context, curr->rbpValue);
-        lc_data->runningId = curr->id;
-        lc_data->runningDepth = curr->depth;
-        
-        Providers[Workers[curr->id].provider].ExecuteWorker(curr);
-        // free current worker
-        myFree(curr->rbpValue - 1024);
-        myFree(curr);
-    }
-    UpdateWaitingWorkers();
-}
-
 void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
 {
     /* if we are running too many tasks - redirect new worker to another hive */
@@ -302,23 +272,14 @@ void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
     }
 
     log("Starting new local worker %lld [input table %p]\n", workerId, inputTable);
-
-    // TODO: remove 2048 body size constant
-    int64_t tableSize = Workers[workerId].inputSize;
-    void *data = myMalloc(1024 + 2048);
-    memcpy(data + 1024 - tableSize, inputTable, tableSize);
-
-    struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
-    
-    struct queued_worker *t = myMalloc(sizeof(*t));
-    t->id = workerId;
-    t->depth = (lc_data ? lc_data->runningDepth + 1 : 0);
-    t->data = Workers[workerId].data;
-    t->rdiValue = (int64_t)data + 1024 - tableSize;
-    t->rbpValue = (BYTE *)data + 1024;
-    memset(t->context, 0, sizeof(t->context));
-
-    queue_enqueue(t);
+    if (Providers[Workers[workerId].provider].StartNewLocalWorker)
+    {
+        Providers[Workers[workerId].provider].StartNewLocalWorker(workerId, inputTable);
+    }
+    else
+    {
+        print("Error: provider %lld doesn't support StartNewLocalWorker\n", Workers[workerId].provider);
+    }
 }
 
 
@@ -563,13 +524,20 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                     pos += 8;
                     int64_t offset = *(int64_t *)pos;
                     pos += 8;
+                    int64_t size = *(int64_t *)pos;
+                    pos += 8;
                     int64_t tableSize = *(int64_t *)pos;
                     pos += 8;
                     int64_t affinity = *(int64_t *)pos;
                     pos += 8;
                     // set data
                     void *ptr = mem + offset;
-                    Workers[id] = (struct worker_info){PROVIDER_X64, ptr, tableSize, affinity};
+                    struct x64_worker_data *info = myMalloc(sizeof(*info));
+                    *info = (struct x64_worker_data){
+                        .start = ptr,
+                        .end = ptr + size,
+                    };
+                    Workers[id] = (struct worker_info){PROVIDER_X64, info, tableSize, affinity};
                     log("Worker %lld [x64] have been loaded to %p [offset %llx] with input table of size %lld\n", id, ptr, offset, tableSize);
                 }
                 break;
@@ -678,43 +646,6 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
 }
 
 
-struct sheduler_instance_info
-{
-    int64_t number;
-    int64_t resCodeId;
-};
-
-
-DWORD ShedulerInstance(void *vparam)
-{
-    struct sheduler_instance_info *param = vparam;
-    struct thread_data *lc_data = myMalloc(sizeof(*lc_data));
-    int64_t resCodeId = param->resCodeId;
-    TlsSetValue(dwTlsIndex, lc_data);
-    lc_data->number = (int64_t)param->number;
-    lc_data->completedTasks = 0;
-    lc_data->prevPrint = 0;
-    while (1)
-    {
-        SheduleWorker(lc_data);
-
-        // if resCodeId is ready - print it and return
-        struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);
-        if (p != NULL)
-        {
-            p = (void *)((BYTE *)p - DATA_OFFSET(*p));
-            if (p->ready)
-            {
-                print("ShedulerInstance completed\n");
-                return 0;
-            }
-            // print("promise not set\n");
-        }
-    }
-    myFree(lc_data);
-    return 0;
-}
-
 
 #ifdef FREESTANDING
 int entry()
@@ -793,18 +724,46 @@ int wmain(void)
         if (argv[1][0] == 'n')
         {
             noStdin = 1;
+            print("This hive will not read any stdin\n");
         }
         else if (argv[1][0] == 'h')
         {
             hangAfterEnd = 1;
+            print("This hive will not stop execution\n");
         }
         else if (argv[1][0] == 'j')
         {
-            NUM_THREADS = argv[1][1] - '0';
+            NUM_THREADS = 0;
+            int64_t x = 1;
+            while (argv[1][x])
+            {
+                NUM_THREADS *= 10;
+                NUM_THREADS += argv[1][x] - '0';
+                x++;
+            }
+            print("Set num threads = %lld\n", NUM_THREADS);
+            if (NUM_THREADS > 64)
+            {
+                print("Error: this build doesn't allow more than 64 threads for PC safety\n");
+                return 1;
+            }
         }
         else if (argv[1][0] == 'c')
         {
             connectingToMain = 1;
+            print("Set hive as protectorate\n", CHUNK_TIME_US);
+        }
+        else if (argv[1][0] == 'p')
+        {
+            CHUNK_TIME_US = 0;
+            int64_t x = 1;
+            while (argv[1][x])
+            {
+                CHUNK_TIME_US *= 10;
+                CHUNK_TIME_US += argv[1][x] - '0';
+                x++;
+            }
+            print("Set chunk time to %lld us\n", CHUNK_TIME_US);
         }
         else if (argv[1][0] == '-' && argv[1][1] == '-')
         {
@@ -878,24 +837,7 @@ int wmain(void)
 
     // TODO: make better program end determination
 
-    HANDLE hThreads[NUM_THREADS];
-    DWORD threadId;
-
-    for (int64_t i = 0; i < NUM_THREADS; ++i)
-    {
-        struct sheduler_instance_info *info = myMalloc(sizeof(*info));
-        info->number = i;
-        info->resCodeId = resCodeId;
-        hThreads[i] = CreateThread(NULL, 0, ShedulerInstance, info, 0, &threadId);
-        if (hThreads[i] == NULL)
-        {
-            print("Failed to create thread %lld\n", i);
-            return 1;
-        }
-    }
-
-    DWORD waitResult = WaitForMultipleObjects(NUM_THREADS, hThreads, TRUE, INFINITE);
-    (void)waitResult;
+    ShedulerStart(resCodeId);
     
     print("Program finished\n");
 

@@ -31,6 +31,8 @@ class player
 {
     endProc <- 0;
     
+    ?(0, new i16[]"Hello client!", new i16[]"Hello!", 0x40)MessageBox@dll(*);
+    
     (0)GetModuleHandle@dll(var hInstance);
 
     i64 hwnd;
@@ -49,16 +51,7 @@ class player
         0
     )CreateWindowEx@dll(*);
 
-    i32? a;
-    a = new i32?();
-
-    ()fun(a);
-    
-    ()fun(var x);
-    
-    ?(()fun(*)) + 5;
-
-    match (hwnd)
+    match hwnd
     {
         `i64`0 {
             ?(0, new i16[]"Failed to create window", new i16[]"Error", 0x10)MessageBox@dll(*);
@@ -358,10 +351,10 @@ class player
         i <- i + 1;
     }
 
-    (rect_size, players, players[0], map, mapW, mapH)Graphics[on:local](var endProc);
-    (rect_size, players, players[1], map, mapW, mapH)Graphics[on:remote](var endProc);
+    ?(rect_size, players, players[0], map, mapW, mapH)Graphics[on:local](*);
+    ?(rect_size, players, players[1], map, mapW, mapH)Graphics[on:remote](*);
 
-    while ?endProc = 0
+    while 1 # ?endProc = 0
     {
         i <- 0;
         while i < `i32`?players
@@ -375,6 +368,7 @@ class player
     resultCode <- 0;
 }
 
+[on:local]
 (player me, player[] players)HandleKeyPresses(i32? running)
 {   
     i32 runningTemp;
@@ -505,6 +499,7 @@ class player
     running <- runningTemp;
 }
 
+[on:local]
 (i32 n)isqrt(i32? res)
 {
     i32 x, y;
@@ -687,17 +682,17 @@ class player
     task <- 1;
 }
 
-
+[on:local]
 (i32 x, i32 y, i32 a, i32 b)dot(i32? res)
 {
     res <- x * a + y * b;
 }
 
+[on:local]
 (i32 x, i32 y, i32 a, i32 b)crs(i32? res)
 {
     res <- x * b - y * a;
 }
-
 
 ()CreateMap(rect[]? resMap, i32? w, i32? h)
 {

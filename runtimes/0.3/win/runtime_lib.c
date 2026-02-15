@@ -238,6 +238,20 @@ void myPrintf(const wchar_t *format, ...)
                 d = PrintI64(d, value);
                 s += 4;
             }
+            else if ('1' <= s[1] && s[1] <= '9' && s[2] == 'l' && s[3] == 'l' && s[4] == 'd')
+            {
+                int64_t value = va_arg(args, int64_t);
+                wchar_t buf[16], *end;
+                end = PrintI64(buf, value);
+                int64_t cnt = s[1] - '0' - (end - buf);
+                for (int64_t i = 0; i < cnt; ++i)
+                {
+                    *d++ = ' ';
+                }
+                memcpy(d, buf, (end - buf)*sizeof(buf));
+                d += (end - buf);
+                s += 5;
+            }
             else if (s[1] == 'p')
             {
                 uint64_t value = va_arg(args, uint64_t);

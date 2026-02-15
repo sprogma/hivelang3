@@ -30,6 +30,7 @@ struct dll_worker_info
 
 void dllExecuteWorker(struct queued_worker *obj);
 int64_t dllUpdateWaitingWorker(struct waiting_worker *wk, int64_t ticks, int64_t *rdiValue);
+void dllStartNewLocalWorker(int64_t workerId, BYTE *inputTable);
 
 
 #endif

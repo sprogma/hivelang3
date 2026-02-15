@@ -1069,6 +1069,7 @@ private:
     
 public:
     map<int64_t, int64_t> resultWorkerPositions;
+    map<int64_t, int64_t> resultWorkerSize;
     
     pair<BYTE *, BYTE *> Build(BuildResult *input, BYTE *header, BYTE *body, int64_t bodyOffset) override 
     {
@@ -1302,6 +1303,8 @@ private:
 
         // join code using JumpInstructions
 
+        resultWorkerSize[workerId] = (assemblyEnd - assemblyCode) - resultWorkerPositions[workerId];
+        
         InsertJumpInstructions();
 
         delete analyzer;
@@ -2195,12 +2198,15 @@ private:
             header += 8;
             for (auto &[id, pos] : resultWorkerPositions)
             {
-                printf("Export worker %lld with offset %016llx\n", GetExportWorkerId(ir, id, "x64"), pos + bodyOffset);
+                printf("Export worker %lld(export id:%lld) of size %lld with offset %016llx\n", id, GetExportWorkerId(ir, id, "x64"), resultWorkerSize[id], pos + bodyOffset);
                 /* export id */
                 *(uint64_t *)header = GetExportWorkerId(ir, id, "x64");
                 header += 8;
                 /* export position */
                 *(uint64_t *)header = pos + bodyOffset;
+                header += 8;
+                /* export size */
+                *(uint64_t *)header = resultWorkerSize[id];
                 header += 8;
                 /* export input table size */
                 *(uint64_t *)header = GetWorkerInputTableSize(id);
