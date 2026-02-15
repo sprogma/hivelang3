@@ -254,7 +254,7 @@ void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
         {
             int64_t t = rnd % connections_len;
             log("Want run remote, but: %lld %lld [con=%p]\n", connections[t]->wait_list_len, connections[t]->queue_len, connections[t]);
-            if (connections[t]->outgoing != INVALID_SOCKET &&
+            if (connections[t]->outgoing.sock != INVALID_SOCKET &&
                 ((connections[t]->wait_list_len < 50 && connections[t]->queue_len < 30) ||
                   connections[t]->queue_len == 0 || 
                     global_id == 2))
@@ -464,12 +464,14 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                 }
                 // read entry name
                 char entry[256];
+                int64_t entryLen = 0;
                 {
                     int64_t sz = *(int64_t *)pos;
                     pos += 8;
                     memcpy(entry, pos, sz);
                     entry[sz] = 0;
                     pos += sz;
+                    entryLen = sz;
                 }
                 // read argument sizes
                 int64_t affinity = *(int64_t *)pos;
@@ -483,6 +485,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                 for (int64_t i = 0; i < inputs_len; ++i)
                 {
                     inputs[i].type = *pos++;
+                    inputs[i].provider = *(int64_t *)pos;
+                    pos += 8;
                     inputs[i].size = *(int64_t *)pos;
                     pos += 8;
                     inputs[i].param = *(int64_t *)pos;
@@ -498,12 +502,13 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
 
                 HINSTANCE lib = LoadLibraryA(lib_name);
                 data->entry = GetProcAddress(lib, entry);
+                data->entryName = myMalloc(entryLen+1);
                 data->output_size = output_size;
                 data->inputMapLength = inputs_len;
                 data->inputMap = inputs;
                 data->call_stack_usage = 32 + 16 * (inputs_len < 4 ? 0 : (inputs_len - 4 + 1) / 2);
+                memcpy(data->entryName, entry, entryLen+1);
                 Workers[id] = (struct worker_info){PROVIDER_DLL, data, totalSize, affinity};
-
                 // log data
                 log("worker %lld is dll call of library %s %s -> result function is %p\n", id, lib_name, entry, data->entry);
                 log("stack usage: %lld\n", data->call_stack_usage);
@@ -512,6 +517,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                 {
                     log("argument %lld have size %lld [type %02x]\n", i, inputs[i].size, inputs[i].type);
                 }
+                // set gdi!
+                GdiSetBatchLimit(1);
                 break;
             case 16: // x64 Worker positions
             {

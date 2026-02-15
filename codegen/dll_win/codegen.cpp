@@ -59,7 +59,7 @@ private:
     struct dll_import_entry
     {
         int64_t output;
-        vector<tuple<BYTE, int64_t, int64_t>> inputs;
+        vector<tuple<int64_t, BYTE, int64_t, int64_t>> inputs;
         string library;
         string entry;
     };
@@ -105,7 +105,7 @@ private:
         }
         int64_t out_size = (wk->outputs.empty() ? -1 : wk->outputs[0].second->_vector.base->size);
         // generate parameter sizes
-        vector<tuple<BYTE, int64_t, int64_t>> sizes;
+        vector<tuple<int64_t, BYTE, int64_t, int64_t>> sizes;
         map<string, int64_t> inputIds;
         int64_t id = 0;
         for (auto &[name, type] : wk->inputs)
@@ -114,18 +114,18 @@ private:
             switch (type->type)
             {
                 case TYPE_ARRAY:
-                    sizes.emplace_back(0, type->size, type->_vector.base->size);
+                    sizes.emplace_back(ProviderId(type->provider), 0, type->size, type->_vector.base->size);
                     break;
                 case TYPE_PROMISE:
-                    sizes.emplace_back(1, type->size, type->_vector.base->size);
+                    sizes.emplace_back(ProviderId(type->provider), 1, type->size, type->_vector.base->size);
                     break;
                 case TYPE_CLASS:
-                    sizes.emplace_back(1, type->size, GetClassSize(type));
+                    sizes.emplace_back(ProviderId(type->provider), 1, type->size, GetClassSize(type));
                     break;
                 case TYPE_RECORD:
                 case TYPE_UNION:
                 case TYPE_SCALAR:
-                    sizes.emplace_back(2, type->size, type->size);
+                    sizes.emplace_back(ProviderId(type->provider), 2, type->size, type->size);
                     break;
                 case TYPE_PIPE:
                     logError(ir->filename, ir->code, wk->code_start, wk->code_end, "pipes as DLLIMPORT function argument are unsupported");
@@ -137,7 +137,7 @@ private:
         {
             for (auto token : views::split(get<string>(wk->attributes["dllimport.out"]), ',')) 
             {
-                get<0>(sizes[inputIds[(string){from_range, token}]]) |= 0x10;
+                get<1>(sizes[inputIds[(string){from_range, token}]]) |= 0x10;
             }
         }
         
@@ -153,7 +153,7 @@ private:
         /* add dll import data */
         for (auto &[id, data] : dllImportHeader)
         {
-            printf("Export dllimport data for worker %lld\n", id);
+            printf("Export dllimport data for worker %lld [export id=%lld] [%s %s]\n", id, GetExportWorkerId(ir, id, "dll"), data.library.c_str(), data.entry.c_str());
             *header++ = GetHeaderId(HEADER_DLL_IMPORT);
             /* export id */
             *(uint64_t *)header = GetExportWorkerId(ir, id, "dll");
@@ -180,10 +180,12 @@ private:
             *(uint64_t *)header = data.inputs.size();
             header += 8;
             /* export inputs */
-            for (auto &[type, size, param] : data.inputs)
+            for (auto &[provider, type, size, param] : data.inputs)
             {
-                printf("    arg [%lld %02x, param=%lld]\n", size, type, param);
+                printf("    dllarg [prov=%lld: %lld %02x, param=%lld]\n", provider, size, type, param);
                 *header++ = type;
+                *(uint64_t *)header = provider;
+                header += 8;
                 *(uint64_t *)header = size;
                 header += 8;
                 *(uint64_t *)header = param;

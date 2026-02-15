@@ -24,7 +24,7 @@ int64_t x64SleepStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValu
     switch (w->state)
     {
 
-    case WK_STATE_QUERY_OBJECT_WAIT_X64:
+    case WK_STATE_TIMER_WAIT_X64:
         struct wait_timer *info = w->state_data;
         if (ticks >= info->endTime)
         {

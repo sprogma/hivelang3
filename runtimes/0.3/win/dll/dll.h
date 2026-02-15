@@ -14,6 +14,7 @@
 
 struct dll_input_table
 {
+    int64_t provider;
     int64_t size;
     int64_t param;
     BYTE type;
@@ -22,6 +23,7 @@ struct dll_input_table
 struct dll_worker_info
 {
     void *entry;
+    char *entryName;
     int64_t call_stack_usage;
     int64_t output_size;
     int64_t inputMapLength;

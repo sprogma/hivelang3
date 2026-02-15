@@ -70,6 +70,7 @@ void dllExecuteWorker(struct queued_worker *worker)
         // collect all arguments to this worker
         while (data->current_index < info->inputMapLength)
         {
+            int64_t provider = info->inputMap[data->current_index].provider;
             int64_t type = info->inputMap[data->current_index].type;
             int64_t size = info->inputMap[data->current_index].param;
             if ((type & 0xF) == 0)
@@ -78,16 +79,29 @@ void dllExecuteWorker(struct queued_worker *worker)
                 
                 if (obj != 0)
                 {
-                    // request size
-                    data->waitedSize = 0;
-                    x64QueryObject(&data->waitedSize, obj, -8, 6, RETURN_STATE_DLL_ARRAY_SIZE_REQUEST, data);
+                    if (provider == PROVIDER_X64)
+                    {
+                        // request size
+                        data->waitedSize = 0;
+                        x64QueryObject(&data->waitedSize, obj, -8, 6, RETURN_STATE_DLL_ARRAY_SIZE_REQUEST, data);
 
-                    if (0) {
-                case (int64_t)RETURN_STATE_DLL_ARRAY_SIZE_REQUEST:
-                        data = worker->rbpValue;
-                        type = info->inputMap[data->current_index].type;
+                        if (0) {
+                    case (int64_t)RETURN_STATE_DLL_ARRAY_SIZE_REQUEST:
+                            data = worker->rbpValue;
+                            provider = info->inputMap[data->current_index].provider;
+                            type = info->inputMap[data->current_index].type;
+                        }
+                        size = data->waitedSize;
                     }
-                    size = data->waitedSize;
+                    else if (provider == PROVIDER_LOC)
+                    {
+                        data->waitedSize = size = ((struct object *)(obj - DATA_OFFSET(struct object)))->data_size;
+                    }
+                    else
+                    {
+                        print("Error: UNKNOWN provider %lld in DLL call\n", provider);
+                        trap;
+                    }
                 }
             }
 
@@ -104,11 +118,23 @@ void dllExecuteWorker(struct queued_worker *worker)
                     data->inputData[data->current_index].size = size;
                     void *tmp;
                     *(void **)data->currentArg = tmp = myMalloc(size);
-                    x64QueryObject(tmp, obj, 0, size, RETURN_STATE_DLL_ARGUMENT_VALUE, data);
+                    if (provider == PROVIDER_X64)
+                    {
+                        x64QueryObject(tmp, obj, 0, size, RETURN_STATE_DLL_ARGUMENT_VALUE, data);
 
-                    if (0) {
-                case (int64_t)RETURN_STATE_DLL_ARGUMENT_VALUE:
-                        data = worker->rbpValue;
+                        if (0) {
+                    case (int64_t)RETURN_STATE_DLL_ARGUMENT_VALUE:
+                            data = worker->rbpValue;
+                        }
+                    }
+                    else if (provider == PROVIDER_LOC)
+                    {
+                        memcpy(tmp, (void *)obj, size);
+                    }
+                    else
+                    {
+                        print("Error: UNKNOWN provider %lld in DLL call\n", provider);
+                        trap;
                     }
                 }
             }
@@ -193,10 +219,16 @@ void dllExecuteWorker(struct queued_worker *worker)
             info->inputMapLength,
             info->call_stack_usage
         };
+
+        int64_t prevError = GetLastError();
         
         DllCall(&cl_data, call_data, data->output);
 
-        log("returned + Error=%lld\n", (int64_t)GetLastError());
+        if (GetLastError() != 0 && prevError != GetLastError())
+        {
+            print("returned + Error=%lld [before call error was %lld] [entry=%s]\n", (int64_t)GetLastError(), prevError, info->entryName);
+            trap;
+        }
         
         // for all output parameters: set them back        
         data->current_index = 0;
@@ -204,17 +236,32 @@ void dllExecuteWorker(struct queued_worker *worker)
         while (data->current_index < info->inputMapLength)
         {
             int64_t type = info->inputMap[data->current_index].type;
+            int64_t provider = info->inputMap[data->current_index].provider;
             if (type & 0x10 && data->inputData[data->current_index].id)
             {
-                int64_t size = data->inputData[data->current_index].size;
-                void *mem = *(void **)data->currentArg;
-                // set it back, to object
-                x64PushObject(data->inputData[data->current_index].id, mem, 0, size, RETURN_STATE_DLL_SET_RESULTS, data);
+                if (provider == PROVIDER_X64)
+                {
+                    int64_t size = data->inputData[data->current_index].size;
+                    void *mem = *(void **)data->currentArg;
+                    // set it back, to object
+                    x64PushObject(data->inputData[data->current_index].id, mem, 0, size, RETURN_STATE_DLL_SET_RESULTS, data);
 
-                if (0) {
-            case (int64_t)RETURN_STATE_DLL_SET_RESULTS:
-                    data = worker->rbpValue;
-                    mem = *(void **)data->currentArg;
+                    if (0) {
+                case (int64_t)RETURN_STATE_DLL_SET_RESULTS:
+                        data = worker->rbpValue;
+                        mem = *(void **)data->currentArg;
+                    }
+                }
+                else if (provider == PROVIDER_LOC)
+                {
+                    int64_t size = data->inputData[data->current_index].size;
+                    void *mem = *(void **)data->currentArg;
+                    memcpy((void *)data->inputData[data->current_index].id, mem, size);
+                }
+                else
+                {
+                    print("Error: UNKNOWN provider %lld in DLL call\n", provider);
+                    trap;
                 }
             }
             if (data->inputData[data->current_index].id)
@@ -242,7 +289,7 @@ void dllExecuteWorker(struct queued_worker *worker)
         // free all allocated memroy
         if (data->output)
         {
-            myFree(data->output);
+            // myFree(data->output);
             data->output = 0;
         }
         myFree(data->inputTable);

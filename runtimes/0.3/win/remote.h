@@ -33,12 +33,19 @@ struct connection_context
     BYTE buffer[4096];
 };
 
+struct bufferized_socket
+{
+    SOCKET sock;
+    int64_t buffer_len;
+    BYTE buffer[1024];
+};
+
 #define INT_INFINITY 999999
 struct hive_connection
 {
     SRWLOCK lock;
     struct connection_context *ctx;
-    SOCKET outgoing;
+    struct bufferized_socket outgoing;
     int64_t local_id;
     // temporary fields, use them only then connecting (becouse address can change)
     SOCKADDR_STORAGE address;

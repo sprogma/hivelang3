@@ -31,6 +31,14 @@ static inline bool AllowInlining(const string& name)
     return name == "x64";
 }
 
+static inline bool ExistsCast(const string &from, const string &to)
+{
+    return (from == "gpu" && to == "x64") ||
+           (from == "x64" && to == "gpu") ||
+           (from == "x64" && to == "loc") ||
+           (from == "loc" && to == "x64");
+}
+
 static inline int64_t ProviderId(const string &name)
 {
     if (name == "x64")

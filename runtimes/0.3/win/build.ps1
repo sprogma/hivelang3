@@ -1,7 +1,7 @@
 param([string]$CC="clang", [switch]$Sanitize)
 $pseudoRelease = $true
 $FLAGS = "-I.","-fno-stack-protector", "-DUNICODE", "-D_UNICODE", "-DFREESTANDING", "-municode", "-ffreestanding", "-nostdlib", "-mno-stack-arg-probe", "-fms-extensions", "-Wno-microsoft"
-$LF = "-lshell32", "-lkernel32", "-lbcrypt", "-lws2_32", "-lOpenCL", "-Wl,-dynamicbase:no", "-Wl,-entry:entry" 
+$LF = "-lgdi32", "-lshell32", "-lkernel32", "-lbcrypt", "-lws2_32", "-lOpenCL", "-Wl,-dynamicbase:no", "-Wl,-entry:entry" 
 if ($Sanitize)
 {
     $FLAGS = ($FLAGS, "-fsanitize=address" | % {$_})-notmatch"nostdlib|freestanding"

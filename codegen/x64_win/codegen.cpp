@@ -1566,6 +1566,10 @@ private:
                 }
                 else
                 {
+                    if (!ExistsCast(varType(op->data[0])->provider, varType(op->data[1])->provider))
+                    {
+                        logError(ir->filename, ir->code, op->code_start, op->code_end, "Can't cast %s to %s\n", varType(op->data[0])->provider.c_str(), varType(op->data[0])->provider.c_str());
+                    }
                     // rdi=object
                     // rsi=toID | (object_type << 8)
                     // rdx=fromID | (object_type << 8)
@@ -1787,7 +1791,7 @@ private:
                     int64_t elementOffset = op->data[1];
                     if (isApiScalar(op->data[3]))
                     {
-                        printMR(op, ASM_MOV_MR, Register(op->data[0]), Register(op->data[0]), elementOffset);
+                        printMR(op, ASM_MOV_MR, Register(op->data[0]), Register(op->data[3]), elementOffset);
                     }
                     else
                     {
@@ -1938,7 +1942,7 @@ private:
                     int64_t elementOffset = op->data[2];
                     if (isApiScalar(op->data[0]))
                     {
-                        printMR(op, ASM_MOV_MR, Register(op->data[0]), Register(op->data[1]), elementOffset);
+                        printRM(op, ASM_MOV_RM, Register(op->data[0]), Register(op->data[1]), elementOffset);
                     }
                     else
                     {

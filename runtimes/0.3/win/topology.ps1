@@ -22,8 +22,8 @@ else
     $exe = "cmd"
     if ($Release)
     {
-        $ag = "/k", "type `@ & type `@ | a.exe c j3"
-        $agMain = "/k", "type `@ & type `@ | a.exe j3"
+        $ag = "/k", "type `@ & type `@ | a.exe c j2 p1000"
+        $agMain = "/k", "type `@ & type `@ | a.exe j2 p1000"
     }
     else
     {

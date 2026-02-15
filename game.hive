@@ -26,20 +26,33 @@ class player
     i32 bgcolor;
 }
 
+struct particle
+{
+    i32 x;
+    i32 y;
+    i32 t;
+}
+
 
 (i32 rect_size, player[] players, player me, rect[] map, i32 mapW, i32 mapH)Graphics(i32? endProc)
 {
+    # local particles
+    particle[]@loc particles;
+    i32 particles_len;
+    particles <- new particle[]@loc(512);
+    particles_len <- 0;
+
     endProc <- 0;
     
-    ?(0, new i16[]"Hello client!", new i16[]"Hello!", 0x40)MessageBox@dll(*);
+    # ?(0, new i16[]@loc"Hello client!", new i16[]@loc"Hello!", 0x40)MessageBox@dll(*);
     
     (0)GetModuleHandle@dll(var hInstance);
 
     i64 hwnd;
     hwnd <- ?(
         0x200,
-        new i16[]"#32770",
-        new i16[]"Polling Only - Use Arrow Keys, ESC to exit",
+        new i16[]@loc"#32770",
+        new i16[]@loc"Polling Only - Use Arrow Keys, ESC to exit",
         (0x00000000 | 0x00C00000 | 0x00080000 | 0x00040000 | 0x00020000 | 0x00010000) | 0x10000000,
         0x80000000,
         0x80000000,
@@ -54,7 +67,7 @@ class player
     match hwnd
     {
         `i64`0 {
-            ?(0, new i16[]"Failed to create window", new i16[]"Error", 0x10)MessageBox@dll(*);
+            ?(0, new i16[]@loc"Failed to create window", new i16[]@loc"Error", 0x10)MessageBox@dll(*);
         }
     }
 
@@ -62,8 +75,21 @@ class player
     screen <- ?(hwnd)GetDC@dll(*);
     allocator <- ?(screen)CreateCompatibleDC@dll(*);
 
-    i32[] clientRect;
-    clientRect <- new i32[](4);
+    match screen
+    {
+        `i64`0 {
+            ?(0, new i16[]@loc"Failed to create screen", new i16[]@loc"Error", 0x10)MessageBox@dll(*);
+        }
+    }
+    match allocator
+    {
+        `i64`0 {
+            ?(0, new i16[]@loc"Failed to create allocator", new i16[]@loc"Error", 0x10)MessageBox@dll(*);
+        }
+    }
+
+    i32[]@loc clientRect;
+    clientRect <- new i32[]@loc(4);
     ?(hwnd, clientRect)GetClientRect@dll(*);
 
     i32 width, height;
@@ -89,19 +115,19 @@ class player
         0,
         0,
         0,
-        new i16[]"Arial"
+        new i16[]@loc"Arial"
     )CreateFont@dll(*);
 
     oldFont <- ?(allocator, font)SelectObject@dll(*);
     
     i32 id;
 
-    i64 backgroundBrush, blockBrush, SkillBgBrush, SkillFgBrush, SkillReadyPen;
-    i64[] rectPen;
-    i64[] rectBrush;
+    i64 particleBrush, backgroundBrush, blockBrush, SkillBgBrush, SkillFgBrush, SkillReadyPen;
+    i64[]@loc rectPen;
+    i64[]@loc rectBrush;
 
-    rectPen <- new i64[](?players);
-    rectBrush <- new i64[](?players);
+    rectPen <- new i64[]@loc(?players);
+    rectBrush <- new i64[]@loc(?players);
     id <- 0;
     while id < `i32`?players
     {
@@ -110,34 +136,57 @@ class player
         id <- id + 1;
     }
     
+    particleBrush <- ?(0x0000FF)CreateSolidBrush@dll(*);
     backgroundBrush <- ?(0xFFFFFF)CreateSolidBrush@dll(*);
     blockBrush <- ?(0xFF8800)CreateSolidBrush@dll(*);
     SkillBgBrush <- ?(0x0000FF)CreateSolidBrush@dll(*);
     SkillFgBrush <- ?(0x00FF00)CreateSolidBrush@dll(*);
     SkillReadyPen <- ?(0, 2, 0xFF0000)CreatePen@dll(*);
 
-    i8[] msg;
+    i8[]@loc msg;
     i32 running, lastTime, frameCount, fps;
 
-    msg <- new i8[](48);
+    msg <- new i8[]@loc(48);
+    
     running <- 1;
     lastTime <- ?()GetTickCount@dll(*);
     frameCount <- fps <- 0;
 
-    i32[] rect;
-    rect <- new i32[](4);
+    i32[]@loc rect;
+    rect <- new i32[]@loc(4);
 
-    i16[] text;
-    text <- new i16[]"Text!";
+    i16[]@loc text;
+    text <- new i16[]@loc"Text!";
 
-    ?(new i16[]"open \"C:\\Windows\\Media\\onestop.mid\" type sequencer alias music", 0, 0, 0)mciSendString@dll(*);
-    ?(new i16[]"play music", 0, 0, 0)mciSendString@dll(*);
+    # ?(new i16[]@loc"open \"C:\\Windows\\Media\\onestop.mid\" type sequencer alias music", 0, 0, 0)mciSendString@dll(*);
+    # ?(new i16[]@loc"play music", 0, 0, 0)mciSendString@dll(*);
+    
+    player@loc[]@loc locPlayers;
+    locPlayers <- new player@loc[]@loc(?players);
+    rect[]@loc LocMap;
+    LocMap <- new rect[]@loc(?map);
+    id <- 0;
+    while id < `i32`?map
+    {
+        LocMap[id].x <- map[id].x;
+        LocMap[id].y <- map[id].y;
+        LocMap[id].a <- map[id].a;
+        LocMap[id].b <- map[id].b;
+        id <- id + 1;
+    }
+    
+    id <- 0;
+    while id < `i32`?locPlayers
+    {
+        locPlayers[id] <- new player@loc();
+        id <- id + 1;
+    }
 
     while running = 1
     {
         # i32 cnt;
         # cnt <- 0;
-        while ?(msg, 0, 0, 0, 1)PeekMessage@dll(*) <> 0 # && cnt < 10
+        while ?(msg, hwnd, 0, 0, 1)PeekMessage@dll(*) <> 0 # && cnt < 10
         {
             match (msg[8] = `i8`0x10 && msg[9] = `i8`0x00)
             {
@@ -169,21 +218,72 @@ class player
             }
         }
 
+        # process particles
+        id <- 0;
+        while id < particles_len
+        {
+            particles[id].y <- particles[id].y + 5;
+            particles[id].t <- particles[id].t - 1;
+            match particles[id].t < 0
+            {
+                -1 {
+                    particles_len <- particles_len - 1;
+                    particles[id].x <- particles[particles_len].x;
+                    particles[id].y <- particles[particles_len].y;
+                    particles[id].t <- particles[particles_len].t;
+                    id <- id - 1;
+                }
+            }
+            id <- id + 1;
+        }
+
+        i32 cx, cy, mex, mey;
+        mex <- me?x;
+        mey <- me?y;
+        cx <- mex - width / 2;
+        cy <- mey - height / 2;
+
+        match particles_len < `i32`?particles
+        {
+            -1 {
+                particles[particles_len].x <- mex;
+                particles[particles_len].y <- mey;
+                particles[particles_len].t <- 60;
+                particles_len <- particles_len + 1;
+            }
+        }
+        
         # draw scene
 
+        id <- 0;
+        while id < `i32`?locPlayers
+        {
+            locPlayers[id]?x <- players[id]?x;
+            locPlayers[id]?y <- players[id]?y;
+            locPlayers[id]?power <- players[id]?power;
+            id <- id + 1;
+        }
+        
         ?(allocator, clientRect, backgroundBrush)FillRect@dll(*);
-
-        i32 cx, cy;
-        cx <- me?x - width / 2;
-        cy <- me?y - height / 2;
+        
+        id <- 0;
+        while id < particles_len
+        {
+            rect[0] <- particles[id].x - cx - 5;
+            rect[1] <- particles[id].y - cy - 5;
+            rect[2] <- particles[id].x - cx + 5;
+            rect[3] <- particles[id].y - cy + 5;
+            ?(allocator, rect, particleBrush)FillRect@dll(*);
+            id <- id + 1;
+        }
 
         id <- 0;
-        while id < `i32`?map
+        while id < `i32`?LocMap
         {
-            rect[0] <- map[id].x - cx;
-            rect[1] <- map[id].y - cy;
-            rect[2] <- map[id].a - cx;
-            rect[3] <- map[id].b - cy;
+            rect[0] <- LocMap[id].x - cx;
+            rect[1] <- LocMap[id].y - cy;
+            rect[2] <- LocMap[id].a - cx;
+            rect[3] <- LocMap[id].b - cy;
             ?(allocator, rect, blockBrush)FillRect@dll(*);
             id <- id + 1;
         }
@@ -192,18 +292,19 @@ class player
         oldPen <- ?(allocator, rectPen[0])SelectObject@dll(*);
         oldBrush <- ?(allocator, ?(5)GetStockObject@dll(*))SelectObject@dll(*);
         
+        
         id <- 0;
-        while id < `i32`?players
+        while id < `i32`?locPlayers
         {
             
-            rect[0] <- players[id]?x - rect_size/2 - cx;
-            rect[1] <- players[id]?y + rect_size/2 - cy - (rect_size * players[id]?power / 1000);
-            rect[2] <- players[id]?x + rect_size/2 - cx;
-            rect[3] <- players[id]?y + rect_size/2 - cy;
+            rect[0] <- locPlayers[id]?x - rect_size/2 - cx;
+            rect[1] <- locPlayers[id]?y + rect_size/2 - cy - (rect_size * locPlayers[id]?power / 1000);
+            rect[2] <- locPlayers[id]?x + rect_size/2 - cx;
+            rect[3] <- locPlayers[id]?y + rect_size/2 - cy;
             
             ?(allocator, rect, rectBrush[id])FillRect@dll(*);
             
-            rect[1] <- players[id]?y - rect_size/2 - cy;
+            rect[1] <- locPlayers[id]?y - rect_size/2 - cy;
             
             ?(allocator, rectPen[id])SelectObject@dll(*);
 
@@ -288,8 +389,8 @@ class player
         sleep 16;
     }
 
-    ?(new i16[]"stop music", 0, 0, 0)mciSendString@dll(*);
-    ?(new i16[]"close music", 0, 0, 0)mciSendString@dll(*);
+    # ?(new i16[]@loc"stop music", 0, 0, 0)mciSendString@dll(*);
+    # ?(new i16[]@loc"close music", 0, 0, 0)mciSendString@dll(*);
 
     # TODO: update this part
     # SelectObject(allocator, oldFont);
@@ -599,6 +700,7 @@ class player
     task <- 1;
 }
 
+[on:local]
 (rect[] map, player me, i32 width, i32 height, i32 rect_size)ApplyPhysicsToPlayer(i32? task)
 {
     me?x <- me?x + me?dx;
@@ -765,7 +867,7 @@ class player
 [on:local]
 [dllimport:Kernel32.dll]
 [dllimport.entry:GetModuleHandleW]
-(i16[] moduleName)GetModuleHandle(i64? hInstance);
+(i16[]@loc moduleName)GetModuleHandle(i64? hInstance);
 
 [on:local]
 [dllimport:Kernel32.dll]
@@ -782,34 +884,38 @@ class player
 [dllimport.entry:GetAsyncKeyState]
 (i32 key)GetAsyncKeyState(i16? result);
 
+[affinity:0]
 [on:local]
 [dllimport:User32.dll]
 [dllimport.out:lpMsg]
 [dllimport.entry:PeekMessageW]
 (
-    i8[]  lpMsg,
+    i8[]@loc  lpMsg,
     i64   hWnd,
     i32   wMsgFilterMin,
     i32   wMsgFilterMax,
     i32   wRemoveMsg
 )PeekMessage(i32? handle);
 
+[affinity:0]
 [on:local]
 [dllimport:User32.dll]
 [dllimport.out:lpMsg]
 [dllimport.entry:TranslateMessage]
-(i8[] lpMsg)TranslateMessage(i32? resultCode);
+(i8[]@loc lpMsg)TranslateMessage(i32? resultCode);
+
+[affinity:0]
+[on:local]
+[dllimport:User32.dll]
+[dllimport.entry:DispatchMessageW]
+(i8[]@loc lpMsg)DispatchMessage(i32? resultCode);
 
 [on:local]
 [dllimport:User32.dll]
 [dllimport.entry:FillRect]
-(i64 allocator, i32[] rect, i64 brush)FillRect(i32? resultCode);
+(i64 allocator, i32[]@loc rect, i64 brush)FillRect(i32? resultCode);
 
-[on:local]
-[dllimport:User32.dll]
-[dllimport.entry:DispatchMessageW]
-(i8[] lpMsg)DispatchMessage(i32? resultCode);
-
+[affinity:0]
 [on:local]
 [dllimport:Gdi32.dll]
 [dllimport.entry:CreateCompatibleDC]
@@ -838,8 +944,9 @@ class player
 [on:local]
 [dllimport:Gdi32.dll]
 [dllimport.entry:TextOutW]
-(i64 allocator, i32 x, i32 y, i16[] text, i32 length)TextOut(i32? prevColor);
+(i64 allocator, i32 x, i32 y, i16[]@loc text, i32 length)TextOut(i32? prevColor);
 
+[affinity:0]
 [on:local]
 [dllimport:Gdi32.dll]
 [dllimport.entry:BitBlt]
@@ -855,6 +962,7 @@ class player
 [dllimport.entry:CreatePen]
 (i32 style, i32 width, i32 color)CreatePen(i64? handle);
 
+[affinity:0]
 [on:local]
 [dllimport:Gdi32.dll]
 [dllimport.entry:CreateCompatibleBitmap]
@@ -882,23 +990,24 @@ class player
     i32    iClipPrecision,
     i32    iQuality,
     i32    iPitchAndFamily,
-    i16[]  pszFaceName
+    i16[]@loc  pszFaceName
 )CreateFont(i64? handle);
 
 [on:local]
 [dllimport:User32.dll]
 [dllimport.out:rect]
 [dllimport.entry:GetClientRect]
-(i64 window, i32[] rect)GetClientRect(i32? resultCode);
+(i64 window, i32[]@loc rect)GetClientRect(i32? resultCode);
 
 
+[affinity:0]
 [on:local]
 [dllimport:User32.dll]
 [dllimport.entry:CreateWindowExW]
 (
     i32     dwExStyle,
-    i16[]   lpClassName,
-    i16[]   lpWindowName,
+    i16[]@loc   lpClassName,
+    i16[]@loc   lpWindowName,
     i32     dwStyle,
     i32     X,
     i32     Y,
@@ -914,10 +1023,10 @@ class player
 [on:local]
 [dllimport:User32.dll]
 [dllimport.entry:MessageBoxW]
-(i64 hwnd, i16[] text, i16[] caption, u32 type)MessageBox(i32? result);
+(i64 hwnd, i16[]@loc text, i16[]@loc caption, u32 type)MessageBox(i32? result);
 
 [affinity:0]
 [on:local]
 [dllimport:Winmm.dll]
 [dllimport.entry:mciSendStringW]
-(i16[] text, i16[] res, i32 res_size, i64 callback_hwnd)mciSendString(i32? result);
+(i16[]@loc text, i16[]@loc res, i32 res_size, i64 callback_hwnd)mciSendString(i32? result);

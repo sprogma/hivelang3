@@ -20,8 +20,8 @@ rule "_class" [
     v [Sn; "class"; S; identifer; Sn; "{"] [var_declaration; Sn; ";"] [Sn; "}"]
 ]
 rule "var_type" [
-    v [Sn; identifer] [var_type_moditifer] []
     v [Sn; identifer; "@"; identifer] [var_type_moditifer] []
+    v [Sn; identifer] [var_type_moditifer] []
 ]
 rule "var_type_moditifer" [
     v [Sn; "[]"; Sn; "@"; identifer] [] []

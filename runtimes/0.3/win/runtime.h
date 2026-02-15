@@ -7,8 +7,11 @@
 
 #ifndef NDEBUG
     #define unreachable assert(NULL == "This is unreachable code")
+    #define trap (*(int *)100 = 5)
 #else
     #define unreachable __builtin_unreachable()
+    #define trap (*(int *)100 = 5)
+    // #define trap ExitProcess(1)
 #endif
 
 #include <winsock2.h>
@@ -25,6 +28,10 @@ extern void callExample(void *);
 
 extern int64_t NUM_THREADS;
 extern int64_t CHUNK_TIME_US;
+
+extern _Atomic int64_t glbStatRemotePathMisses;
+extern _Atomic int64_t glbStatRemoteOutputRequests;
+extern _Atomic int64_t glbStatRemoteInputRequests;
 
 #define CONTEXT_SIZE (9+5)
 

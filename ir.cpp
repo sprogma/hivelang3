@@ -287,7 +287,7 @@ TypeContext *getType(BuildContext *ctx, Node *node)
     assert_type(node, "var_type");
     /* find base type */
     string baseName = Substr(ctx, node->nonTerm(0));
-    TypeContext *cur = getBaseType(ctx, baseName, (node->variant == 1 ? Substr(ctx, node->nonTerm(1)) : ctx->provider));
+    TypeContext *cur = getBaseType(ctx, baseName, (node->variant == 0 ? Substr(ctx, node->nonTerm(1)) : ctx->provider));
     if (!cur)
     {
         logError(ctx->filename, ctx->code, node->start, node->end, "Unknown base type: %s\n", baseName.c_str());

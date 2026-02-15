@@ -68,6 +68,8 @@ struct sheduler_instance_info
 };
 
 
+HANDLE hContinueEvent; 
+
 DWORD ShedulerInstance(void *vparam)
 {
     struct sheduler_instance_info *param = vparam;
@@ -76,6 +78,8 @@ DWORD ShedulerInstance(void *vparam)
     
     TlsSetValue(dwTlsIndex, lc_data);
     param->data = lc_data;
+    
+    SetEvent(hContinueEvent); 
     
     lc_data->number = (int64_t)param->number;
     lc_data->completedTasks = 0;
@@ -122,13 +126,13 @@ DWORD MasterSheduler(void *vparam)
         {
             print("       thread %02x      |", i);
         }
-        print("\n");
+        print("  Wait | Queue | RPmiss | ROreq | RIreq |\n");
         print("|");
         for (int64_t i = 0; i < NUM_THREADS; ++i)
         {
             print("  exec / done / stall |");
         }
-        print("\n");
+        print("       |       |        |       |       |\n");
     }
     // watch for all threads
     int64_t prevPrint = GetTicks();
@@ -147,7 +151,10 @@ DWORD MasterSheduler(void *vparam)
                 int64_t stall = atomic_exchange(&info->shedulers[i]->data->stalledTasks, 0);
                 print(" %7lld %6lld %5lld |", exec, done, stall);
             }
-            print("Wait|Queued %lld|%lld \n", wait_list_len, queue_size);
+            int64_t rpmiss = atomic_exchange(&glbStatRemotePathMisses, 0);
+            int64_t roreq = atomic_exchange(&glbStatRemoteOutputRequests, 0);
+            int64_t rireq = atomic_exchange(&glbStatRemoteInputRequests, 0);
+            print(" %5lld | %5lld | %6lld | %5lld | %5lld |\n", wait_list_len, queue_size, rpmiss, roreq, rireq);
             prevPrint = now;
         }
 
@@ -173,12 +180,19 @@ DWORD MasterSheduler(void *vparam)
 }
 
 
+// for debug
+struct master_sheduler_info *glbMasterInfo;
+
+
 int64_t ShedulerStart(int64_t resCodeId)
 {
     struct master_sheduler_info *masterInfo = myMalloc(sizeof(*masterInfo));
+    glbMasterInfo = masterInfo;
     masterInfo->hThreads = myMalloc(sizeof(*masterInfo->hThreads) * NUM_THREADS);
     masterInfo->shedulers = myMalloc(sizeof(*masterInfo->shedulers) * NUM_THREADS);
 
+    hContinueEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    
     for (int64_t i = 0; i < NUM_THREADS; ++i)
     {
         struct sheduler_instance_info *info = myMalloc(sizeof(*info));
@@ -193,7 +207,10 @@ int64_t ShedulerStart(int64_t resCodeId)
             print("Failed to create thread %lld\n", i);
             return 1;
         }
+        WaitForSingleObject(hContinueEvent, INFINITE);
     }
+
+    CloseHandle(hContinueEvent);
 
     // start master thread
     DWORD masterId;
