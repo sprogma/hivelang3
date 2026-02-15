@@ -12,17 +12,18 @@ using namespace std;
 #include "ast.hpp"
 #include "utils.hpp"
 
+
+
+pair<Node *, int64_t> parseAtom(Atom &atom, char *content, int64_t position);
+pair<Node *, int64_t> parseRule(Rule *rule, char *content, int64_t position);
+pair<Node *, int64_t> parseVariant(Rule *rule, int64_t variantId, RuleVariant &var, char *content, int64_t position);
+
+
+
 // rule id + position -> result + position
 map<pair<int64_t, int64_t>, pair<Node *, int64_t>> cache;
 
-struct ParsingResult
-{
-    Node *res;
-    int64_t position;
-};
 
-
-pair<Node *, int64_t> parseRule(Rule *rule, char *content, int64_t position);
 
 pair<Node *, int64_t> parseAtom(Atom &atom, char *content, int64_t position)
 {
@@ -43,52 +44,60 @@ pair<Node *, int64_t> parseAtom(Atom &atom, char *content, int64_t position)
 }
 
 
+
+tuple<int64_t, int64_t, bool> variantApplySeq(const vector<Atom> &seq, vector<Node *> &childs, char *content, int64_t position)
+{
+    int64_t max_parsed = position;
+    for (Atom x : seq)
+    {
+        auto [res, pos] = parseAtom(x, content, position);
+        max_parsed = max(max_parsed, pos);
+        if (!res) { return {max_parsed, position, false}; }
+        childs.push_back(res);
+        position = pos;
+    }
+    return {max_parsed, position, true};
+}
+
+
+
 pair<Node *, int64_t> parseVariant(Rule *rule, int64_t variantId, RuleVariant &var, char *content, int64_t position)
 {
     int64_t max_parsed = position;
+    bool ok;
     vector<Node *> childs;
+
     /* apply prefix */
-    for (Atom x : var.prefix)
+    tie(max_parsed, position, ok) = variantApplySeq(var.prefix, childs, content, position);
+    if (!ok)
     {
-        auto [res, pos] = parseAtom(x, content, position);
-        max_parsed = max(max_parsed, pos);
-        if (!res) { return {NULL, max_parsed}; }
-        childs.push_back(res);
-        position = pos;
+        return {NULL, max_parsed};
     }
+
     /* apply period */
-    int64_t start_position;
     while (var.period.size() > 0)
     {
-        start_position = position;
         vector<Node *> period;
-        for (Atom x : var.period)
+        auto [next_max, next_position, period_ok] = variantApplySeq(var.period, period, content, position);
+        max_parsed = max(max_parsed, next_max);
+        if (period.size() != var.period.size() || !period_ok)
         {
-            auto [res, pos] = parseAtom(x, content, position);
-            max_parsed = max(max_parsed, pos);
-            if (!res) { break; }
-            period.push_back(res);
-            position = pos;
-        }
-        if (period.size() == var.period.size())
-        {
-            childs.insert(childs.end(), period.begin(), period.end());
-        }
-        else
-        {
-            position = start_position;
             break;
         }
+        childs.insert(childs.end(), period.begin(), period.end());
+        position = next_position;
     }
+    
     /* apply suffix */
-    for (Atom x : var.suffix)
+    int64_t suffix_max;
+    tie(suffix_max, position, ok) = variantApplySeq(var.suffix, childs, content, position);
+    if (!ok)
     {
-        auto [res, pos] = parseAtom(x, content, position);
-        max_parsed = max(max_parsed, pos);
-        if (!res) { return {NULL, max_parsed}; }
-        childs.push_back(res);
-        position = pos;
+        return {NULL, max_parsed};
     }
+    max_parsed = max(max_parsed, suffix_max);
+
+    
     if (childs.size() == 0)
     {
         return {new Node(rule, variantId, position, position, {}), position};
