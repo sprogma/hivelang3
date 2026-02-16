@@ -1,2 +1,3 @@
 * text=auto eol=lf
 # *.flm linguist-language=
+/runtimes/0.3/win/CL/** linguist-vendored
