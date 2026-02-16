@@ -9,12 +9,9 @@ using namespace std;
 #include "ir.hpp"
 
 
-int main(int argc, char **argv)
+map<string, string> ParseComandlineArgs(int argc, char **argv)
 {
-    fclose(fopen("D:/mipt/lang3/started", "w"));
-    
     map<string, string> configs;
-
     for (int i = 1; i < argc; ++i) 
     {
         string s = argv[i];
@@ -36,14 +33,21 @@ int main(int argc, char **argv)
             }
         }
     }
+    return configs;
+}
 
 
+int main(int argc, char **argv)
+{    
+    map<string, string> configs = ParseComandlineArgs(argc, argv);
     
     const char *filename = "D:\\mipt\\lang3\\example.hive";
     if (configs.contains("input-file"))
     {
         filename = configs["input-file"].c_str();
     }
+
+    
     FILE *f = fopen(filename, "r");
     if (f == NULL)
     {
@@ -52,6 +56,8 @@ int main(int argc, char **argv)
     }
     char *code = (char *)malloc(1024 * 1024);
     code[fread(code, 1, 1024 * 1024, f)] = 0;
+    fclose(f);
+    
 
     // TODO: better comments support
     // replace all comments with spaces
@@ -62,7 +68,7 @@ int main(int argc, char **argv)
         {
             if (str)
             {
-                if (s[0] == '\\')
+                if (s[0] == '\\' && s[1] != 0)
                 {
                     s += 2;
                 }
@@ -97,51 +103,50 @@ int main(int argc, char **argv)
             }
         }
     }
-    
-    fclose(f);
 
+
+    // parse file
     grammar = generateGrammar();
-
     Rule *rule = grammarGetRule("Global");
     if (rule == NULL)
     {
         printf("Error: no rule named \"Global\"");
         return 1;
     }
-
     auto [nodes, error] = parse(filename, rule, code);
-
     if (error)
     {
         printf("Error: parsing failed\n");
         return 1;
     }
 
-    printf("Parsed\n");
-    
+
+    printf("Parsed\n");    
     printf("Convering...\n");
     /* convert to intermediate language */
 
     auto [Code, error2] = buildAst(filename, code, nodes, configs, "x64");
-
     if (error2)
     {
         printf("Error: building ast failed\n");
         return 2;
     }
+
     
     printf("Ast builded\n");
+
 
     if (configs.contains("syntax-only"))
     {
         return 0;
     }
-
+    
     for (auto &[fn, key] : Code->workers)
     {
         dumpIR(fn);
     }
 
+    /* start optimization */
     printf("Optimization layers?\n");
 
     Optimizer opt;
@@ -159,73 +164,13 @@ int main(int argc, char **argv)
         dumpIR(fn);
     }
 
-    /* generate workers for each provider */
-    FILE *o = fopen("res.bin", "wb");
-
-    BYTE *header = (BYTE *)malloc(1024 * 1024);
-    BYTE *header_start = header;
-    BYTE *body = (BYTE *)malloc(1024 * 1024);
-    BYTE *body_start = body;
-
-    /* generate prefix */
-    *header++ = 'H'; *header++ = 'I'; *header++ = 'V'; *header++ = 'E';
-    
-    *(uint64_t *)header = 3; // version 0.3
-    header += 8;
-    /* generate header */
-    *(uint64_t *)header = 0xBEBEBEBEBEBEBEBE;
-    header += 8;
-
-    /* push entry id */
-    *header++ = 80;
-    int64_t entryId = -1;
-    for (auto &[wk, id] : newCode->workers)
+    if (ExportCode(newCode))
     {
-        if (wk->attributes.contains("entry"))
-        {
-            entryId = GetExportWorkerId(newCode, id, "x64");
-        }
-    }
-    if (entryId == -1)
-    {
-        printf("Error: no entry worker\n");
-        return 1;
-    }
-    *(uint64_t *)header = entryId;
-    header += 8;
-    
-    for (auto &name : newCode->used_providers)
-    {
-        CodeAssembler *assembler;
-        
-        printf("Building for <%s>\n", name.c_str());
-        if (name == "x64")
-        { assembler = new_x64_Assembler(); }
-        else if (name == "gpu")
-        { assembler = new_gpu_Assembler(); }
-        else if (name == "dll")
-        { assembler = new_DLL_Assembler(); }
-        else
-        {
-            printf("Error: UNKNOWN PROVIDER: %s\n", name.c_str());
-            return 1;
-        }
-        tie(header, body) = assembler->Build(newCode, header, body, body - body_start);
-        delete assembler;
+        printf("Error happen while exporting code\n");
     }
 
-    /* fill header size */
-    *(uint64_t *)(header_start + 12) = header - header_start;
-
-    int64_t totalBytes = (header - header_start) + (body - body_start);
-    fwrite(header_start, 1, header - header_start, o);
-    fwrite(body_start, 1, body - body_start, o);
-
-    fclose(o);
-
-    printf("%lld bytes written\n", totalBytes);
-    printf("res.exe file generated\n");
-
+    // TODO: free(newCode)
     free(code);
+
     return 0;
 }

@@ -31,6 +31,7 @@ struct particle
     i32 x;
     i32 y;
     i32 t;
+    i32 color;
 }
 
 
@@ -122,7 +123,7 @@ struct particle
     
     i32 id;
 
-    i64 particleBrush, backgroundBrush, blockBrush, SkillBgBrush, SkillFgBrush, SkillReadyPen;
+    i64 backgroundBrush, blockBrush, SkillBgBrush, SkillFgBrush, SkillReadyPen;
     i64[]@loc rectPen;
     i64[]@loc rectBrush;
 
@@ -136,7 +137,6 @@ struct particle
         id <- id + 1;
     }
     
-    particleBrush <- ?(0x0000FF)CreateSolidBrush@dll(*);
     backgroundBrush <- ?(0xFFFFFF)CreateSolidBrush@dll(*);
     blockBrush <- ?(0xFF8800)CreateSolidBrush@dll(*);
     SkillBgBrush <- ?(0x0000FF)CreateSolidBrush@dll(*);
@@ -216,13 +216,13 @@ struct particle
             1 {
                 running <- ?(me, players)HandleKeyPresses(*);
             }
-        }
+        }                    
 
         # process particles
         id <- 0;
         while id < particles_len
         {
-            particles[id].y <- particles[id].y + 5;
+            particles[id].y <- particles[id].y + 1;
             particles[id].t <- particles[id].t - 1;
             match particles[id].t < 0
             {
@@ -231,6 +231,7 @@ struct particle
                     particles[id].x <- particles[particles_len].x;
                     particles[id].y <- particles[particles_len].y;
                     particles[id].t <- particles[particles_len].t;
+                    particles[id].color <- particles[particles_len].color;
                     id <- id - 1;
                 }
             }
@@ -243,18 +244,6 @@ struct particle
         cx <- mex - width / 2;
         cy <- mey - height / 2;
 
-        match particles_len < `i32`?particles
-        {
-            -1 {
-                particles[particles_len].x <- mex;
-                particles[particles_len].y <- mey;
-                particles[particles_len].t <- 60;
-                particles_len <- particles_len + 1;
-            }
-        }
-        
-        # draw scene
-
         id <- 0;
         while id < `i32`?locPlayers
         {
@@ -263,6 +252,24 @@ struct particle
             locPlayers[id]?power <- players[id]?power;
             id <- id + 1;
         }
+
+        id <- 0;
+        while id < `i32`?locPlayers
+        {
+            match particles_len < `i32`?particles
+            {
+                -1 {
+                    particles[particles_len].x <- locPlayers[id]?x;
+                    particles[particles_len].y <- locPlayers[id]?y;
+                    particles[particles_len].t <- 120;
+                    particles[particles_len].color <- id;
+                    particles_len <- particles_len + 1;
+                }
+            }
+            id <- id + 1;
+        }
+        
+        # draw scene
         
         ?(allocator, clientRect, backgroundBrush)FillRect@dll(*);
         
@@ -273,7 +280,7 @@ struct particle
             rect[1] <- particles[id].y - cy - 5;
             rect[2] <- particles[id].x - cx + 5;
             rect[3] <- particles[id].y - cy + 5;
-            ?(allocator, rect, particleBrush)FillRect@dll(*);
+            ?(allocator, rect, rectBrush[particles[id].color])FillRect@dll(*);
             id <- id + 1;
         }
 

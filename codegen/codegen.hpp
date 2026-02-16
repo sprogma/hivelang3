@@ -75,6 +75,7 @@ enum header_id_action
     HEADER_X64_WORKERS,
     HEADER_GPU_WORKERS,
     HEADER_STRINGS_TABLE,
+    HEADER_ENTRY_ID,
 };
 
 static inline int8_t GetHeaderId(enum header_id_action action, const string &provider="")
@@ -116,6 +117,8 @@ static inline int8_t GetHeaderId(enum header_id_action action, const string &pro
             return 18;
         case HEADER_STRINGS_TABLE:
             return 17;
+        case HEADER_ENTRY_ID:
+            return 80;
     }
     printf("Error: unsupported action: %lld on provider %s\n", (int64_t)action, provider.c_str());
     return -1;

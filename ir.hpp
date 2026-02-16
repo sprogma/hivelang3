@@ -253,5 +253,6 @@ void applyNamesTranslition(OperationBlock *block, const map<int64_t, int64_t> &t
 
 void dumpIR(WorkerDeclarationContext *worker);
 
+int64_t ExportCode(BuildResult *code);
 
 #endif
