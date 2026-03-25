@@ -1,0 +1,15 @@
+
+@x64 # select default provider, (more info in providers example)
+
+# set some tags of main function
+[export:yes] # this function is external, it's symbol will be visible from inside
+[entry:yes] # this function is entry, program will start from here
+# function declaration
+(i64[] input)main(i32? res) 
+# declaration use style (<inputs>)<name>(<outputs>);
+# in this case we declare i64[] input -> array of signed 64 bit integers.
+# result of main function is promise (kind of pointer) of type signed 32 bit integer, named res
+{ # open code block
+    res <- 179; # set into res value 179. (<- is set operator)
+} # end code block
+    

@@ -7,6 +7,7 @@
     res <- ?(25)fib(*);
 }
 
+[on:remote]
 (i32 n)fib(i32? res)
 {
     match n <= 1

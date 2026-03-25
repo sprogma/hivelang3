@@ -1,0 +1,29 @@
+
+@x64
+
+[export:yes]
+[entry:yes]
+(i64[] input)main(i32? res) 
+{
+    i64 handle;
+    handle <- ?(-11)GetStdHandle@dll(*); # get stdout handle
+    i16[] msg;
+    msg <- new i16[]"Hello World!\n"; # create message
+    res <- ?(handle, msg, `i32`?msg, `i64`0, `i64`0)WriteConsole@dll(*); # print it
+}
+
+# load winapi function from dll:
+
+[dllimport:kernel32.dll]
+[dllimport.entry:GetStdHandle]
+(i32 nStdHandle)GetStdHandle(i64? hHandle);
+
+[dllimport:kernel32.dll]
+[dllimport.entry:WriteConsoleW]
+(
+    i64     hConsoleOutput,
+    i16[]   lpBuffer,
+    i32     nNumberOfCharsToWrite,
+    i32?    lpNumberOfCharsWritten,
+    i64     lpReserved
+)WriteConsole(i32? result);

@@ -3,7 +3,23 @@
 [entry:yes]
 [export:yes]
 [integer64:yes]
-(i64[] a)dft(i32? res)
+(i64[] a)main(i32? res)
+{
+    i64[]@loc loca;
+    i64 id, sz;
+    id <- 0;
+    sz <- ?a;
+    loca <- new i64[]@loc(sz);
+    while id < sz
+    {
+        loca[id] <- a[id];
+        id <- id + 1;
+    }
+    res <- ?(loca)dft(*);
+}
+
+[integer64:yes]
+(i64[]@loc a)dft(i32? res)
 {
     i64 mod, root, root_1, root_pw;
     mod <- 7340033;

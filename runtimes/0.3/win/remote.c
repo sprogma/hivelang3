@@ -1819,7 +1819,7 @@ void start_remote_subsystem(int64_t noStdin)
 
     log("sleeping\n");
     
-    Sleep(1000);
+    Sleep(5000);
     DumpConnections();
 
     log("running threads\n");

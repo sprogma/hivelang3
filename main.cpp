@@ -41,7 +41,7 @@ int main(int argc, char **argv)
 {    
     map<string, string> configs = ParseComandlineArgs(argc, argv);
     
-    const char *filename = "D:\\mipt\\lang3\\example.hive";
+    const char *filename = "./example.hive";
     if (configs.contains("input-file"))
     {
         filename = configs["input-file"].c_str();

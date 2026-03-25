@@ -1,3 +1,4 @@
+#include "windows.h"
 #include "inttypes.h"
 #include "stdio.h"
 #include "stdlib.h"
@@ -74,6 +75,7 @@ void dft(int64_t *a, int64_t n, int64_t inv)
 int main()
 {
     int64_t t;
+    scanf("%c", (char *)&t); // ignore "R" command
     scanf("%lld", &t);
     t--;
     int64_t len = (t | (t >> 1) | (t >> 2) | (t >> 4) | (t >> 8) | (t >> 16) | (t >> 32)) + 1;
@@ -89,8 +91,19 @@ int main()
             arr[i] = 0;
         }
     }
+
+    LARGE_INTEGER frequency;
+    LARGE_INTEGER start, end;
+
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
+
     // dft(arr, len, argv[1][0] == 'i');
     dft(arr, len, 0);
+
+    QueryPerformanceCounter(&end);
+
+    printf("Program finished in %lld ms\n", (end.QuadPart - start.QuadPart) * 1000 / frequency.QuadPart);
 
     int64_t res = 0;
     

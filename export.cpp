@@ -40,7 +40,7 @@ pair<BYTE *, BYTE *> WriteEntryHeader(BuildResult *code, BYTE *header, BYTE *bod
 int64_t ExportCode(BuildResult *code)
 {
     /* generate workers for each provider */
-    FILE *o = fopen("res.bin", "wb");
+    FILE *o = fopen("./res.bin", "wb");
     
 
     BYTE *header = (BYTE *)malloc(1024 * 1024);

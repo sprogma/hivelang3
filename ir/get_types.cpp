@@ -61,7 +61,7 @@ TypeContext *getBaseType(BuildContext *ctx, const string &name, const string &pr
 
 TypeContext *getIntegerType(BuildContext *ctx, int64_t x)
 {
-    // TODO: how can i do this?
+    // TODO: make constant folding, and decomment this lines
     // if (x >= INT8_MIN && x <= INT8_MAX) return getBaseType(ctx, "i8", provider);
     // if (x >= 0 && (uint64_t)x <= UINT8_MAX) return getBaseType(ctx, "u8", provider);
     // if (x >= INT16_MIN && x <= INT16_MAX) return getBaseType(ctx, "i16", provider);

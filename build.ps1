@@ -1,9 +1,12 @@
 param(
-    [switch]$NoSanitize
+    # You can select compiler using this flag, clang++ is recommended. (need at least support of gnu++2c std from compiler)
+    [string]$CppCompiler="clang++",
+    # Enable sanitizers [strongly slows down code]
+    [switch]$Sanitize
 )
 pushd $PSScriptRoot
 mkdir obj 2>$null
-$sFlag = ($NoSanitize ? "" : "-fsanitize=address")
+$sFlag = (!$Sanitize ? "" : "-fsanitize=address")
 $FLAGS = ,"-O3"
 $f = (ls -r *.cpp)
 $need = $false
@@ -23,7 +26,7 @@ $os = $f | %{
             $first = $false
         }
         Write-Host "Builing $_" -Fore yellow
-        clang++ -c -std=gnu++2c $_ -o $o -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $FLAGS $sFlag
+        & $CppCompiler -c -std=gnu++2c $_ -o $o -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $FLAGS $sFlag
         $need = $true
     }
     $id++
@@ -40,7 +43,7 @@ if (!$first)
 if ($need)
 {
     Write-Host "Linking" -Fore yellow
-    clang++ -std=gnu++2c $os -o a.exe -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $FLAGS $sFlag
+    & $CppCompiler -std=gnu++2c $os -o a.exe -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $FLAGS $sFlag
 }
 else
 {

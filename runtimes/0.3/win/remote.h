@@ -210,8 +210,10 @@ void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const vo
             hash table to forward-linked lists
 */
 
-#define PUSH_REPEAT_TIMEOUT (20*1000)
-#define QUERY_REPEAT_TIMEOUT (20*1000)
+// #define PUSH_REPEAT_TIMEOUT (20*1000)
+// #define QUERY_REPEAT_TIMEOUT (20*1000)
+#define PUSH_REPEAT_TIMEOUT (1*1000)
+#define QUERY_REPEAT_TIMEOUT (1*1000)
 
 extern struct hashtable known_objects;
 extern struct hashtable local_objects;

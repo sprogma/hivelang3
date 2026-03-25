@@ -844,9 +844,17 @@ int wmain(void)
 
     // TODO: make better program end determination
 
+    LARGE_INTEGER frequency;
+    LARGE_INTEGER start, end;
+
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
+
     ShedulerStart(resCodeId);
     
-    print("Program finished\n");
+    QueryPerformanceCounter(&end);
+    
+    print("Program finished in %lld ms\n", (end.QuadPart - start.QuadPart) * 1000 / frequency.QuadPart);
 
     TlsFree(dwTlsIndex);
 
