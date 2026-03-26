@@ -411,7 +411,7 @@ void WinX64Assembler::BuildOperation()
         case OP_QUERY_VAR: 
         {
             // TODO: what if data[3] is not scalar?
-            assert(op->data[2] != 0 || (TypeContext *)op->data[3] != varType(op->data[0]));
+            // assert(op->data[2] != 0 || (TypeContext *)op->data[3] != varType(op->data[0]));
             // mov $0, XX PTR [rbp + $1 + $2]
             printRM(op, ASM_MOV_RM, Register(op->data[0]), {5, 8}, memTable[op->data[1]] + op->data[2]);
             // (TypeContext *)op->data[3] - type [unused for now]

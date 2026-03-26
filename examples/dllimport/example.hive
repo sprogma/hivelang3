@@ -10,8 +10,12 @@
 }
 
 
-[dllimport:User32.dll]
-[dllimport.entry:MessageBoxW]
-[dllimport.out:text,caption]
-[noinline:true]
+[dllimport:User32.dll] # Select library
+[dllimport.entry:MessageBoxW] # Select function. If enrty name is the same as Hive 
+                              # worker name, this parameter may be omitted
+                              # (if this case, worker had to be named MessageBoxW)
+[dllimport.out:text,caption] # if there is out fields, write them here, so dllimport will 
+                             # load data back to variables (overwice, it will stay in temporary buffer)
+                             # and disappear after call
+                             # (names, comma separated)
 (i64 hwnd, i16[] text, i16[] caption, u32 type)MessageBox(i32? result);

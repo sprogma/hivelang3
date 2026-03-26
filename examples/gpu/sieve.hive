@@ -1,0 +1,56 @@
+@x64
+
+[entry:yes]
+[export:yes]
+(i64[] input)main(i32? res)
+{
+    i8[] array;
+    array <- new i8[](50*1000*1000);
+
+    # 0 and 1 aren't prime
+    array[0] <- array[1] <- `i8`1;
+    # 2 is prime
+    array[2] <- `i8`0;
+    
+    i8[]@gpu tmp;
+    tmp <- `i8[]@gpu`array;
+    ?(tmp, 3, ?array, 0)get_prime@gpu(*);
+    array <- `i8[]`tmp;
+
+    i32 id, len, ans;
+    id <- 0;
+    ans <- len <- `i32`?array;
+    while id < len
+    {
+        ans <- ans - `i32`array[id];
+        id <- id + 1;
+    }
+    res <- ans;
+}
+
+@gpu
+
+[GPUxVariable:index]
+[GPUxBase:xstart]
+[GPUxSize:xend]
+[integer64:yes]
+(i8[] tmp, i64 xstart, i64 xend, i64 index)get_prime(i32?@x64 await)
+{
+    i64 val;
+    val <- 3;
+    while val < 64 && index % val <> 0
+    {
+        val <- val + 2;
+    }
+    match index % val = 0 || index % 2 = 0
+    {-1{
+        tmp[index] <- `i8`1+`i8`(index = val); # if equal -> 0 else 1
+    }0{
+        val <- index * index;
+        while val < xend
+        {
+            tmp[val] <- `i8`1;
+            val <- val + index;
+        }
+    }}
+}

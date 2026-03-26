@@ -159,7 +159,6 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                 loadFrom((struct waiting_pages *)w->state_data);
             }
             
-            int64_t new_id;
             if (!GetNewObjectId(&new_id))
             {
                 pauseIfNeeded(WK_STATE_CAST_WAIT_PAGES, struct waiting_pages)
@@ -247,7 +246,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
             }
         }
         
-        log("Know size=%lld [param=%lld]\n", known_size, known_param);
+        log("Know size=%lld [param=%lld] - id=%lld\n", known_size, known_param, new_id);
 
         // now, create new object [and fill it]
         if (to == PROVIDER_X64)

@@ -74,33 +74,40 @@ pair<vector<Operation>, int64_t> buildSetToSimpleTerm(BuildContext *ctx, Node *n
 
             auto [offset, fldType] = GetFieldOffset(ctx, node, 1, type);
 
-            /* check - if this is pushing of equal types */
-            if (is_castable(type, dataType))
+            if (type->type != TYPE_RECORD)
             {
-                if (is_convertable(type, dataType) || ctx->enabled("implicit_castes"))
+                assert(offset == 0);
+                assert(type == fldType);
+            }
+
+            /* check - if this is pushing of equal types */
+            if (is_castable(fldType, dataType))
+            {
+                if (is_convertable(fldType, dataType) || ctx->enabled("implicit_castes"))
                 {
                     if (type->type != TYPE_RECORD)
                     {
+                        assert(type == fldType);
                         append(ops, {OP_MOV, {varId, dataPos}, {}, node->start, node->end});
                     }
                     else
                     {
-                        append(ops, {OP_PUSH_VAR, {varId, offset, (int64_t)fldType, dataPos}, {}, node->start, node->end});
+                        append(ops, {OP_PUSH_VAR, {varId, offset, (int64_t)dataType, dataPos}, {}, node->start, node->end});
                     }
                     return {ops, -1};
                 }
                 else
                 {
-                    logError(ctx->filename, ctx->code, node->start, node->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(dataType).c_str(), printType(type).c_str());
+                    logError(ctx->filename, ctx->code, node->start, node->end, "can't automaticly cast this types, use <implicit_castes> flag to allow this cast: %s to %s", printType(dataType).c_str(), printType(fldType).c_str());
                     return {{}, -1};
                 }
             }
             else
             {
-                auto [xops, failed] = isPushToPipeOrPromise(ctx, node, dataPos, dataType, type, buildSimpleTerm);
+                auto [xops, failed] = isPushToPipeOrPromise(ctx, node, dataPos, dataType, fldType, buildSimpleTerm);
                 if (failed)
                 {
-                    logError(ctx->filename, ctx->code, node->start, node->end, "this types are uncastable - push is wrong: %s to %s", printType(dataType).c_str(), printType(type).c_str());
+                    logError(ctx->filename, ctx->code, node->start, node->end, "this types are uncastable - push is wrong: %s to %s", printType(dataType).c_str(), printType(fldType).c_str());
                     return {{}, -1};
                 }
                 return {xops, -1};

@@ -123,7 +123,7 @@ pair<vector<Operation>, int64_t> buildAddOperation(BuildContext *ctx, Node *node
         auto [can, resType] = operation_types(ctx->variables[pos], ctx->variables[pos2]);
         if (!can)
         {
-            logError(ctx->filename, ctx->code, node->nonTerm(id + 0)->start, node->nonTerm(id + 0)->end, "Can't implictly multiplicate %s and %s", printType(ctx->variables[pos]).c_str(), printType(ctx->variables[pos2]).c_str());
+            logError(ctx->filename, ctx->code, node->nonTerm(id + 0)->start, node->nonTerm(id + 0)->end, "Can't implictly Add %s and %s", printType(ctx->variables[pos]).c_str(), printType(ctx->variables[pos2]).c_str());
             return {{}, -1};
         }
 

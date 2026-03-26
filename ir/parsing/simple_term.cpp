@@ -215,22 +215,24 @@ pair<vector<Operation>, int64_t> buildQueryVariable(BuildContext *ctx, Node *nod
     int64_t varId = ctx->names[name];
     TypeContext *type = ctx->variables[varId];
 
-    auto [offset, fldType] = GetFieldOffset(ctx, node, 1, type);
-
     if (ctx->enabled("optimize_query_var") && type->type != TYPE_RECORD)
     {
         return {ops, varId};
     }
 
-    int64_t tmp = newTemp(ctx, type);
+    int64_t tmp = -1;
     if (type->type != TYPE_RECORD)
     {
+        tmp = newTemp(ctx, type);
         append(ops, {OP_MOV, {tmp, varId}, {}, node->start, node->end});
     }
     else
     {
+        auto [offset, fldType] = GetFieldOffset(ctx, node, 1, type);
+        tmp = newTemp(ctx, fldType);
         append(ops, {OP_QUERY_VAR, {tmp, varId, offset, (int64_t)fldType}, {}, node->start, node->end});
     }
+    assert(tmp != -1);
     return {ops, tmp};
 }
 

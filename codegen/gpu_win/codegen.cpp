@@ -354,15 +354,15 @@ private:
             case OP_SLEEP:
                 logError(ir->filename, ir->code, op->code_start, op->code_end, "slepp is unsupported in gpu provider");
                 break;
-            case OP_STORE_INPUT: 
+            case OP_STORE_INPUT:
             case OP_CALL:
                 logError(ir->filename, ir->code, op->code_start, op->code_end, "calls are unsupported in gpu provider");
                 break;
             // nothing to do
             case OP_FREE_TEMP: break;
             
-            case OP_JZ:  print("if(var_%lld==0){goto pb_%p;}", op->data[0], op->next[1]); break;
-            case OP_JNZ: print("if(var_%lld!=0){goto pb_%p;}", op->data[0], op->next[1]); break;
+            case OP_JZ:  print("if(var_%lld==0){goto lb_%p;}", op->data[0], op->next[1]); break;
+            case OP_JNZ: print("if(var_%lld!=0){goto lb_%p;}", op->data[0], op->next[1]); break;
         
             case OP_LOAD_INPUT:  print("var_%lld=input_%lld;", op->data[1], op->data[0]); break;
             

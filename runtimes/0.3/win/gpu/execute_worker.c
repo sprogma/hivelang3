@@ -34,8 +34,8 @@ void gpuExecuteWorker(struct queued_worker *worker)
     AcquireSRWLockExclusive(&info->kernel_lock);
 
     cl_uint dims = 0;
-    size_t global_offset[MAX_DIMENSIONS];
-    size_t global_size[MAX_DIMENSIONS];
+    size_t global_offset[MAX_DIMENSIONS] = {};
+    size_t global_size[MAX_DIMENSIONS] = {};
     
     // set kernel arguments
     BYTE *currentArg = inputTable;
@@ -52,10 +52,12 @@ void gpuExecuteWorker(struct queued_worker *worker)
             {
                 dims = dims < (type & 0xF) + 1 ? (type & 0xF) + 1 : dims;
                 global_size[type & 0xF] = *(int64_t *)currentArg;
+                log("Size dim %lld = %lld\n", (int64_t)(type & 0xF), global_size[type & 0xF]);
             }
             else if ((type & 0xF0) == ARGUMENT_OFFSET)
             {
                 global_offset[type & 0xF] = *(int64_t *)currentArg;
+                log("Offset dim %lld = %lld\n", (int64_t)(type & 0xF), global_offset[type & 0xF]);
             }
         }
         else
@@ -112,7 +114,7 @@ void gpuExecuteWorker(struct queued_worker *worker)
     int64_t promise = *(int64_t *)&inputTable[inputTableSize - 8];
    
     // wait for answer
-    x64PushObject(promise, &value, 0, 8, RETURN_STATE_GPU_END, NULL);
+    x64PushObject(promise, &value, 0, 1, RETURN_STATE_GPU_END, NULL);
 
     // return
 }

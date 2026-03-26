@@ -797,13 +797,13 @@ int wmain(void)
     if (!connectingToMain)
     {
         #ifdef _DEBUG
-        inputLen = argc - 1;
+        inputLen = argc - 2;
         int64_t *input = myMalloc(8 * inputLen);
         log("READING INPUT AS: ");
-        for (int i = 1; i < argc; ++i)
+        for (int i = 2; i < argc; ++i)
         {
-            input[i - 1] = myAtoll(argv[i]);
-            log("%lld ", input[i - 1]);
+            input[i - 2] = myAtoll(argv[i]);
+            log("%lld ", input[i - 2]);
         }
         log("\n");
         #else

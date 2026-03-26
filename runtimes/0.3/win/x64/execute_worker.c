@@ -31,6 +31,8 @@ int64_t x64TryStallWorker(HANDLE hThread, struct thread_data *data, int64_t runn
         struct x64_worker_data *wkinfo = Workers[data->runningId].data;
         if (ctx.Rip >= (DWORD64)wkinfo->start && ctx.Rip <= (DWORD64)wkinfo->end)
         {
+            log("Success\n");
+            
             /* save context and select next worker */
             struct queued_worker *t = myMalloc(sizeof(*t));
             t->context[0] = ctx.R8;  
