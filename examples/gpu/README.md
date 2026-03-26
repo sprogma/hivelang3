@@ -99,8 +99,8 @@ run it: in `runtimes/0.3/win` (`n` means no input is need for program)
 "r`n4`n100 100 1 5" | ./a.exe
 ```
 
-* r <run>
-* 3 <number of args>
+* r - run
+* 3 - number of args\
 args are 
 * W (100 in example)
 * H (100 in example)
