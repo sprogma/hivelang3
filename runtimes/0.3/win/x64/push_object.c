@@ -73,7 +73,7 @@ int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rd
     
     case WK_STATE_PUSH_OBJECT_WAIT_X64:
         struct wait_push_info *info = w->state_data;
-        struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&info->object_id, 8, 0);
+        struct object *obj = (void *)i64GetHashtable(&local_objects, info->object_id, 0);
         if (obj == 0)
         {
             // remote object, repeat request, with timeout
@@ -102,7 +102,7 @@ __attribute__((sysv_abi))
 void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue)
 {
     log("push to object %p\n", object_id);
-    BYTE *obj = (BYTE *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
+    BYTE *obj = (BYTE *)i64GetHashtable(&local_objects, object_id, 0);
     if (obj == 0)
     {
         struct thread_data* lc_data = TlsGetValue(dwTlsIndex);

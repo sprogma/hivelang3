@@ -88,7 +88,7 @@ DWORD ShedulerInstance(void *vparam)
         SheduleWorker(lc_data);
 
         // if resCodeId is ready - print it and return
-        struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);
+        struct object_promise *p = (void *)i64GetHashtable(&local_objects, resCodeId, 0);
         if (p != NULL)
         {
             p = (void *)((BYTE *)p - DATA_OFFSET(*p));

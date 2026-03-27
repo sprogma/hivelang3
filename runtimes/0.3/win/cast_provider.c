@@ -190,7 +190,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                     loadFrom((struct wait_query_info *)w->state_data);
                     // continue quering
                     struct wait_query_info *info = w->state_data;
-                    struct object *lc_obj = (void *)GetHashtable(&local_objects, (BYTE *)&info->ci.object, 8, 0);
+                    struct object *lc_obj = (void *)i64GetHashtable(&local_objects, info->ci.object, 0);
                     if (lc_obj == 0)
                     {
                         if (ticks > info->repeat_timeout)
@@ -209,7 +209,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                 } else {
                     log("Querying object size of %lld\n", obj);
                     // query initialization
-                    BYTE *lc_obj = (BYTE *)GetHashtable(&local_objects, (BYTE *)&obj, 8, 0);
+                    BYTE *lc_obj = (BYTE *)i64GetHashtable(&local_objects, obj, 0);
                     if (lc_obj == NULL)
                     {
                         RequestObjectGet(obj, -16, 6);
@@ -252,7 +252,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
         if (to == PROVIDER_X64)
         {
             x64NewObjectUsingPage(known_type, known_size, known_param, &new_id);
-            BYTE *lc_obj = (BYTE *)GetHashtable(&local_objects, (BYTE *)&new_id, 8, 0);
+            BYTE *lc_obj = (BYTE *)i64GetHashtable(&local_objects, new_id, 0);
             if (lc_obj == NULL)
             {
                 print("Error: local object was removed too fast :(\n");
@@ -286,7 +286,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                 
                 // continue quering
                 struct wait_query_info *info = w->state_data;
-                struct object *lc_obj = (void *)GetHashtable(&local_objects, (BYTE *)&info->ci.object, 8, 0);
+                struct object *lc_obj = (void *)i64GetHashtable(&local_objects, info->ci.object, 0);
                 if (lc_obj == 0)
                 {
                     if (ticks > info->repeat_timeout)
@@ -309,7 +309,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                 host_data = lc_obj;
             } else {
                 // query initialization
-                BYTE *lc_obj = (BYTE *)GetHashtable(&local_objects, (BYTE *)&obj, 8, 0);
+                BYTE *lc_obj = (BYTE *)i64GetHashtable(&local_objects, obj, 0);
                 if (lc_obj == NULL)
                 {
                     RequestObjectGet(obj, 0, known_size);

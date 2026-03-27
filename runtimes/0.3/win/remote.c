@@ -60,7 +60,8 @@ void b_flush(struct bufferized_socket *s) {
     }
 }
 
-#define BUFERIZATE 1
+// #define BUFERIZATE 1 // eats whole cpu kernel
+#define BUFERIZATE 0
 #define NODELAY_MODE 1
 
 #if BUFERIZATE == 1
@@ -726,7 +727,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
             int64_t query_offset = *(int64_t *)(ctx->res_buffer+8);
             int64_t query_size = *(int64_t *)(ctx->res_buffer+16);
             /* if this is local object - answer query */
-            struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
+            struct object *obj = (void *)i64GetHashtable(&local_objects, object_id, 0);
             if (obj != NULL)
             {
                 AnswerQueryObject(con, (BYTE *)obj + query_offset, object_id, query_offset, query_size);
@@ -826,7 +827,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
             log("get push object %lld\n", object_id);
             
             /* if this is local object - answer */
-            struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
+            struct object *obj = (void *)i64GetHashtable(&local_objects, object_id, 0);
             if (obj != NULL)
             {
                 log("local-pushed\n");
@@ -880,7 +881,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             BYTE *broadcast_id = ctx->res_buffer + 8;
             /* if object is our - send answers */
-            void *obj = (void *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
+            void *obj = (void *)i64GetHashtable(&local_objects, object_id, 0);
             if (obj != NULL)
             {
                 /* send answers */
@@ -902,7 +903,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             int64_t distance = *(int64_t *)(ctx->res_buffer + 8);
             /* get object - if it is local - don't update anything, and don't send answers */
-            void *loc_obj = (void *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
+            void *loc_obj = (void *)i64GetHashtable(&local_objects, object_id, 0);
             if (loc_obj != NULL)
             {
                 return 1;
@@ -1586,7 +1587,7 @@ void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *dat
 {
     log("request set object=%lld\n", object_id);
     // if this is local object - simply set it and answer [to who?]
-    struct object *loc = (void *)GetHashtable(&local_objects, (BYTE *)&object_id, 8, 0);
+    struct object *loc = (void *)i64GetHashtable(&local_objects, object_id, 0);
     if (loc != NULL)
     {
         log("local object - answer\n");
@@ -1711,13 +1712,15 @@ static DWORD StateSender(void *param)
 {
     (void)param;
     int64_t time = GetTicks();
+    #define PAUSE_SIZE 50000
     while (1)
     {
-        if (time - GetTicks() > MicrosecondsToTicks(50000))
+        if (time - GetTicks() > MicrosecondsToTicks(PAUSE_SIZE))
         {
             time = GetTicks();
             SendHiveState();
         }
+        Sleep(PAUSE_SIZE / 1000 + 1);
         #if BUFERIZATE == 1
             AcquireSRWLockShared(&connections_lock);
             for (int64_t i = 0; i < connections_len; ++i)

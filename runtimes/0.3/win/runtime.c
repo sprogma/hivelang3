@@ -62,7 +62,7 @@ _Atomic int64_t wait_list_len = 0;
 
 void RegisterObjectWithId(int64_t id, void *object)
 {
-    SetHashtable(&local_objects, (BYTE *)&id, 8, (int64_t)object);
+    i64SetHashtable(&local_objects, id, (int64_t)object);
 }
 
 int64_t GetNewObjectId(int64_t *result)
@@ -818,10 +818,43 @@ int wmain(void)
         {
             inputLen = myScanI64();
             input = myMalloc(8 * inputLen);
-            for (int64_t i = 0; i < inputLen; ++i)
-            {
-                input[i] = myScanI64();
+            /* read all stdin */
+            // ------------------------------------------------ TODO: rewrite input with more clean and fast methods
+            HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+            const DWORD BUF_SIZE = 1024 * 1024; 
+            char* buf = (char*)myMalloc(BUF_SIZE);
+            DWORD bytesInBuf = 0;
+            DWORD pos = 0;
+
+            for (int64_t i = 0; i < inputLen; ++i) {
+                int64_t val = 0;
+                char c;
+                while (1) {
+                    if (pos >= bytesInBuf) {
+                        if (!ReadFile(hStdin, buf, BUF_SIZE, &bytesInBuf, NULL) || bytesInBuf == 0) {
+                            c = -1; break;
+                        }
+                        pos = 0;
+                    }
+                    c = buf[pos++];
+                    if (c >= '0' && c <= '9') break; 
+                    if (c == '-') break;             
+                }
+                int isNeg = 0;
+                if (c == '-') { isNeg = 1; c = '0'; } 
+                while (c >= '0' && c <= '9') {
+                    val = val * 10 + (c - '0');
+                    if (pos >= bytesInBuf) {
+                        if (!ReadFile(hStdin, buf, BUF_SIZE, &bytesInBuf, NULL) || bytesInBuf == 0) {
+                            c = -1; break;
+                        }
+                        pos = 0;
+                    }
+                    c = buf[pos++];
+                }
+                input[i] = isNeg ? -val : val;
             }
+            myFree(buf);
         }
         #endif
 
@@ -858,7 +891,7 @@ int wmain(void)
 
     TlsFree(dwTlsIndex);
 
-    struct object_promise *p = (void *)GetHashtable(&local_objects, (BYTE *)&resCodeId, 8, 0);
+    struct object_promise *p = (void *)i64GetHashtable(&local_objects, resCodeId, 0);
     if (p == NULL)
     {
         print("Result promise not found on machine\n");

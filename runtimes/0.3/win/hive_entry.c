@@ -16,7 +16,7 @@ int64_t StartInitialProcess(int64_t entryWorker, int64_t *cmdArgs, int64_t cmdAr
         Sleep(10);
     }
 
-    struct object *obj = (void *)GetHashtable(&local_objects, (BYTE *)&inputId, 8, 0);
+    struct object *obj = (void *)i64GetHashtable(&local_objects, inputId, 0);
     if (obj == 0)
     {
         print("Error: allocated array isn't local\n");

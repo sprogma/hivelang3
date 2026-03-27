@@ -115,6 +115,7 @@ struct known_hive
     int64_t distance;
 };
 
+
 struct hashtable_node
 {
     struct hashtable_node *next;
@@ -123,7 +124,6 @@ struct hashtable_node
     BYTE bytes[];
 };
 
-
 struct hashtable
 {
     SRWLOCK lock;
@@ -131,6 +131,39 @@ struct hashtable
     int64_t len;
     int64_t alloc;
 };
+
+
+
+// #define NOT_USE_I64HASHTABLE
+
+#ifdef NOT_USE_I64HASHTABLE
+#define i64hashtable_node hashtable_node
+#define i64hashtable hashtable
+#else
+
+#define STATE_FREE 0
+#define STATE_BUSY 1
+#define STATE_READY 2
+
+struct i64hashtable_node
+{
+    _Atomic int64_t key;
+    _Atomic int64_t value;
+    _Atomic int64_t state;
+};
+
+struct i64hashtable
+{
+    _Atomic int64_t updating;
+    struct i64hashtable * _Atomic prev;
+    struct i64hashtable_node *table;
+    _Atomic int64_t len;
+    int64_t alloc;
+};
+#endif
+
+
+
 
 // TODO: remove 1024 as constant
 extern SRWLOCK connections_lock;
@@ -152,6 +185,11 @@ int64_t GetHashtable(struct hashtable *h, BYTE *address, int64_t address_length,
 int64_t GetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_length, int64_t default_value);
 void SetHashtable(struct hashtable *h, BYTE *address, int64_t address_length, int64_t new_value);
 void SetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_length, int64_t new_value);
+
+int64_t i64GetHashtable(struct i64hashtable * _Atomic *h, int64_t key, int64_t default_value);
+int64_t i64GetHashtableNoLock(struct i64hashtable * _Atomic *h, int64_t key, int64_t default_value);
+void i64SetHashtable(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value);
+void i64SetHashtableNoLock(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value);
 
 void RequestObjectGet(int64_t object, int64_t offset, int64_t size);
 void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data);
@@ -216,10 +254,11 @@ void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const vo
 #define QUERY_REPEAT_TIMEOUT (1*1000)
 
 extern struct hashtable known_objects;
-extern struct hashtable local_objects;
 extern struct hashtable query_requests;
 extern struct hashtable push_requests;
 extern struct hashtable known_hives; // global_id -> local_id
+
+extern struct i64hashtable * _Atomic local_objects;
 
 
 // ------------- other -----------

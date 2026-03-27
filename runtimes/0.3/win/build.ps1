@@ -17,7 +17,7 @@ $jobs = @()
 $jobs += Start-ThreadJob {   
     fasm runtime.asm obj/asm.o
     $z = @()
-    $Speed = $null # "-O3"
+    $Speed = "-O3", "-mavx2"
     $using:files | % {
         $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
         $o = "obj/$o"

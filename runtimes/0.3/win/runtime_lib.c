@@ -3,6 +3,7 @@
 
 #include "windows.h"
 #include "stdarg.h"
+#include "immintrin.h"
 #include "inttypes.h"
 
 #include "runtime_lib.h"
@@ -22,12 +23,31 @@ void *memset(void *_dst, int value, size_t size)
 
 void *memcpy(void *_dst, const void *_src, size_t size)
 {
+    if (size == 4) { *(int32_t *)_dst = *(int32_t *)_src; return _dst;}
+    if (size == 8) { *(int64_t *)_dst = *(int64_t *)_src; return _dst;}
     BYTE *dst = _dst, *src = (void *)_src;
+    #ifdef __AVX2__
+        while (size >= 32)
+        {
+            __m256i ymm0 = _mm256_loadu_si256((void *)src);
+            _mm256_storeu_si256((void *)dst, ymm0);
+            src += 32;
+            dst += 32;
+            size -= 32;
+        }
+    #endif
+    while (size >= 8)
+    {
+        *(int64_t *)dst = *(int64_t *)src;
+        src += 8;
+        dst += 8;
+        size -= 8;
+    }
     while (size--)
     {
         *dst++ = *src++;
     }
-    return dst;
+    return _dst;
 }
 #endif
 

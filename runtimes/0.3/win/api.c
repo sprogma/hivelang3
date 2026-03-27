@@ -21,10 +21,15 @@ struct hashtable known_page_broadcasts;
 struct hashtable known_path_broadcasts;
 struct hashtable known_path_id_broadcasts;
 struct hashtable known_objects;
-struct hashtable local_objects;
 struct hashtable query_requests;
 struct hashtable push_requests;
 struct hashtable known_hives;
+
+struct i64hashtable * _Atomic local_objects;
+
+
+/// ------------------------------------------------------------- open hash table
+
 
 int64_t equal_bytes(BYTE *a, BYTE *b, int64_t len)
 {
@@ -155,8 +160,179 @@ void SetHashtable(struct hashtable *h, BYTE *address, int64_t address_length, in
     ReleaseSRWLockExclusive(&h->lock);
 }
 
+
+/// ------------------------------------------------------------------------ closed hash
+
+#ifdef NOT_USE_I64HASHTABLE
+int64_t i64GetHashtableNoLock(struct i64hashtable * _Atomic *h, int64_t key, int64_t default_value)
+{
+    return GetHashtableNoLock(*h, (BYTE *)&key, 8, default_value);
+}
+
+void i64SetHashtableNoLock(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value)
+{    
+    return SetHashtableNoLock(*h, (BYTE *)&key, 8, new_value);
+}
+
+int64_t i64GetHashtable(struct i64hashtable * _Atomic *h, int64_t key, int64_t default_value)
+{
+    return GetHashtable(*h, (BYTE *)&key, 8, default_value);
+}
+
+void i64SetHashtable(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value)
+{
+    SetHashtable(*h, (BYTE *)&key, 8, new_value);
+}
+
+#else
+
+
+static inline uint64_t i64GetKnownHiveHash(int64_t key)
+{
+    key += 1ULL;
+    key ^= key >> 33ULL;
+    key *= 0xff51afd7ed558ccdULL;
+    key ^= key >> 33ULL;
+    key *= 0xc4ceb9fe1a85ec53ULL;
+    key ^= key >> 33ULL;
+    return key;
+}
+
+static inline int64_t i64_raw_update(struct i64hashtable *h, int64_t key, int64_t new_value)
+{    
+    int64_t alloc = h->alloc;
+    uint64_t hash = i64GetKnownHiveHash(key) % alloc;
+
+    while (1)
+    {
+        uint64_t idx = hash;
+        struct i64hashtable_node *node = &h->table[idx];
+
+        int64_t state = atomic_load(&node->state);
+        if (state != STATE_FREE) 
+        {
+            while (atomic_load(&node->state) == STATE_BUSY)
+            {
+                // wait
+            }
+            if (atomic_load(&node->key) == key) 
+            {
+                atomic_store(&node->value, new_value);
+                return 1;
+            }
+            hash = (hash + 1 == (uint64_t)alloc ? 0 : hash + 1);
+            continue;
+        }
+        int64_t expected = STATE_FREE;
+        if (atomic_compare_exchange_strong(&node->state, &expected, STATE_BUSY)) 
+        {
+            atomic_store(&node->key, key);
+            atomic_store(&node->value, new_value);
+            atomic_store(&node->state, STATE_READY);
+            atomic_fetch_add(&h->len, 1);
+            return 1;
+        }
+        hash = (hash + 1 == (uint64_t)alloc ? 0 : hash + 1);
+    }
+    return 0;
+}
+
+int64_t i64_get(struct i64hashtable *h, int64_t key, int64_t default_value)
+{
+    int64_t alloc = h->alloc;
+    uint64_t hash = i64GetKnownHiveHash(key) % alloc;
+
+    while (1)
+    {
+        struct i64hashtable_node *node = &h->table[hash];
+        int64_t state = atomic_load(&node->state);
+
+        if (state == STATE_FREE) break;
+        
+        while (atomic_load(&node->state) == STATE_BUSY)
+        {
+            // wait
+        }
+
+        if (atomic_load(&node->key) == key) 
+        {
+            return atomic_load(&node->value);
+        }
+
+        hash = ((int64_t)(hash + 1) == alloc ? 0 : hash + 1);
+    }
+
+    if (h->prev) 
+    {
+        int64_t val = i64_get(h->prev, key, default_value);
+        if (val != default_value) 
+        {
+            i64_raw_update(h, key, val);
+        }
+        return val;
+    }
+
+    return default_value;
+}
+
+int64_t i64GetHashtableNoLock(struct i64hashtable * _Atomic *ph, int64_t key, int64_t default_value)
+{
+    return i64_get(atomic_load(ph), key, default_value);
+}
+
+void i64SetHashtableNoLock(struct i64hashtable * _Atomic *ph, int64_t key, int64_t new_value)
+{    
+    struct i64hashtable *h = atomic_load(ph);
+    int64_t inserted = i64_raw_update(h, key, new_value);
+    
+    // need 4 becouse data will be copied from prev versions 
+    if (inserted && atomic_load(&h->len) > h->alloc / 4) 
+    {
+        int64_t expected = 0;
+        if (atomic_compare_exchange_strong(&h->updating, &expected, 1)) 
+        {
+            struct i64hashtable *nt = myMalloc(sizeof(struct i64hashtable));
+            nt->len = 0; // h->len // 0 to not count was/not was, etc.
+            nt->updating = 0;
+            nt->alloc = 2 * h->alloc;
+            nt->table = myMalloc(sizeof(*nt->table) * nt->alloc);
+            nt->prev = h;
+            
+            atomic_store(ph, nt);
+        }
+    }
+}
+
+int64_t i64GetHashtable(struct i64hashtable * _Atomic *h, int64_t key, int64_t default_value)
+{
+    return i64GetHashtableNoLock(h, key, default_value);
+}
+
+void i64SetHashtable(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value)
+{
+    i64SetHashtableNoLock(h, key, new_value);
+}
+#endif
+
+
+
+/// ---------------------------------------------------------------------- initialization
+
 void InitInternalStructures()
 {
+    #ifdef NOT_USE_I64HASHTABLE
+        #define INIT_HASHTABLE64 INIT_HASHTABLE
+    #else
+    #define INIT_HASHTABLE64(h) \
+        h = myMalloc(sizeof(*h)); \
+        h->len = 0; \
+        h->updating = 0; \
+        h->prev = NULL; \
+        h->alloc = 1024; \
+        h->table = myMalloc(sizeof(*h->table) * h->alloc); \
+        memset(h->table, 0, sizeof(*h->table) * h->alloc);
+    #endif
+        
     #define INIT_HASHTABLE(h) \
         h.lock = (SRWLOCK)SRWLOCK_INIT; \
         h.len = 0; \
@@ -168,9 +344,10 @@ void InitInternalStructures()
     INIT_HASHTABLE(known_page_broadcasts);
     INIT_HASHTABLE(known_path_broadcasts);
     INIT_HASHTABLE(known_path_id_broadcasts);
-    INIT_HASHTABLE(local_objects);
     INIT_HASHTABLE(known_objects);
     INIT_HASHTABLE(query_requests);
     INIT_HASHTABLE(push_requests);
     INIT_HASHTABLE(known_hives);
+    
+    INIT_HASHTABLE64(local_objects);
 }
