@@ -164,7 +164,7 @@ int main(int argc, char **argv)
         dumpIR(fn);
     }
 
-    if (ExportCode(newCode))
+    if (ExportCode(newCode, configs))
     {
         printf("Error happen while exporting code\n");
     }

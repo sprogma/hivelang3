@@ -176,7 +176,7 @@ void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
     t->rdiValue = rdi_value;
     memcpy(t->context, w->context, sizeof(t->context));
     log("Worker enqueued [id=%lld, data=%p]\n", t->id, t->data);
-    queue_enqueue(t);
+    scheduler_enqueue(&glb_scheduler, 32, t);
 }
 
 void UpdateWaitingWorkers()
@@ -245,7 +245,7 @@ void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
     int64_t rnd = 0;
     BCryptGenRandom(NULL, (BYTE *)&rnd, 8, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
     rnd = myAbs(rnd);
-    int64_t random_confirm = (rnd & 0x80000000) && (rnd % 100 < 5 * (wait_list_len + queue_size));
+    int64_t random_confirm = (rnd & 0x80000000) && (rnd % 100 < 5 * (int64_t)(wait_list_len + glb_scheduler.len));
     if (((random_confirm || global_id != 0) && global_id != 1) || global_id == 2)
     {
         /* select random connection */
@@ -722,7 +722,7 @@ int wmain(void)
 
     // cmdargs
     
-    int64_t inputLen = 0, connectingToMain = 0;
+    int64_t inputLen = 0, connectingToMain = 0, localInput = 0;
     int64_t resCodeId = 0, hangAfterEnd = 0, noStdin = 0;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -737,6 +737,11 @@ int wmain(void)
         {
             hangAfterEnd = 1;
             print("This hive will not stop execution\n");
+        }
+        else if (argv[1][0] == 'l')
+        {
+            localInput = 1;
+            print("Input will be local array\n");
         }
         else if (argv[1][0] == 'j')
         {
@@ -788,7 +793,7 @@ int wmain(void)
     ////////////////////////// running stage
 
     InitInternalStructures();
-    queue_init();
+    scheduler_init(&glb_scheduler, NUM_THREADS);
     start_remote_subsystem(noStdin);
 
     // run first worker with comand line arguments as i64 array    
@@ -797,7 +802,7 @@ int wmain(void)
     if (!connectingToMain)
     {
         #ifdef _DEBUG
-        inputLen = argc - 2;
+        inputLen = ((int64_t)argc - 2 < 0 ? 0 : (int64_t)argc - 2);
         int64_t *input = myMalloc(8 * inputLen);
         log("READING INPUT AS: ");
         for (int i = 2; i < argc; ++i)
@@ -860,7 +865,7 @@ int wmain(void)
 
         log("Entry worker id=%lld\n", entryWorker);
 
-        resCodeId = StartInitialProcess(entryWorker, input, inputLen);
+        resCodeId = StartInitialProcess(entryWorker, input, inputLen, localInput);
 
         log("result promise %p %lld\n", resCodeId);
     }

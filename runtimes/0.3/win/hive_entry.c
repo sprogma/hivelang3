@@ -2,27 +2,38 @@
 #include "runtime_api.h"
 #include "remote.h"
 #include "x64/x64.h"
+#include "loc/loc.h"
 
-
-int64_t StartInitialProcess(int64_t entryWorker, int64_t *cmdArgs, int64_t cmdArgsLen)
+int64_t StartInitialProcess(int64_t entryWorker, int64_t *cmdArgs, int64_t cmdArgsLen, int64_t localInput)
 {
     int64_t inputId = 0, resCodeId = 0;
     
     print("waiting startup pages\n");
 
-    while (inputId == 0)
+    if (localInput)
     {
-        inputId = x64NewObject(3, 8 * cmdArgsLen, 8, 0, NULL, NULL);
-        Sleep(10);
+        while (inputId == 0)
+        {
+            locNewObjectUsingPage(OBJECT_ARRAY, 8 * cmdArgsLen, 8, &inputId);
+            Sleep(10);
+        }
+        memcpy((void *)inputId, cmdArgs, 8 * cmdArgsLen);
     }
-
-    struct object *obj = (void *)i64GetHashtable(&local_objects, inputId, 0);
-    if (obj == 0)
+    else
     {
-        print("Error: allocated array isn't local\n");
-    }
-    memcpy(obj, cmdArgs, 8 * cmdArgsLen);
+        while (inputId == 0)
+        {
+            inputId = x64NewObject(3, 8 * cmdArgsLen, 8, 0, NULL, NULL);
+            Sleep(10);
+        }
 
+        struct object *obj = (void *)i64GetHashtable(&local_objects, inputId, 0);
+        if (obj == 0)
+        {
+            print("Error: allocated array isn't local\n");
+        }
+        memcpy(obj, cmdArgs, 8 * cmdArgsLen);
+    }
 
     while (resCodeId == 0)
     {

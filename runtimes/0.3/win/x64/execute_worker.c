@@ -56,7 +56,7 @@ int64_t x64TryStallWorker(HANDLE hThread, struct thread_data *data, int64_t runn
 
             log("Paused worker %lld [stall]: next address: %p, depth=%lld\n", data->runningId, ctx.Rip, t->depth);
 
-            queue_enqueue(t);
+            scheduler_enqueue(&glb_scheduler, 32, t);
             
             ctx.Rip = (DWORD64)longjmpUN;
             ctx.Rcx = (DWORD64)&data->ShedulerBuffer;

@@ -2,3 +2,4 @@
 [switch] implicit_castes
 [switch] optimize_query_var
 [switch] syntax-only
+[switch] no-output

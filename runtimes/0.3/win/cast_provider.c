@@ -369,7 +369,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
         
         // cast applied
         *rdiValue = new_id;
-        print("Return: %lld\n", new_id);
+        log("Return: %lld\n", new_id);
         if (w)
         {
             myFree(w->state_data);
@@ -385,7 +385,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
 __attribute__((sysv_abi))
 int64_t anyCastProvider(void *obj, int64_t to, int64_t from, int64_t object_size, void *returnAddress, void *rbpValue)
 {
-    print("convert %p [types %lld -> %lld]\n", obj, from, to);
+    log("convert %p [types %lld -> %lld]\n", obj, from, to);
     if (((from & 0xFF) == PROVIDER_X64 && (to & 0xFF) == PROVIDER_GPU) || 
         ((from & 0xFF) == PROVIDER_GPU && (to & 0xFF) == PROVIDER_X64))
     {

@@ -63,7 +63,7 @@ int64_t frequency;
     void *mem = HeapAlloc(hHeap, HEAP_ZERO_MEMORY, size);
     if (mem == NULL)
     {
-        print("Error: failed to allocate memory: %lld\n", (int64_t)GetLastError());
+        print("Error: failed to allocate %lld bytes of memory: %lld\n", size, (int64_t)GetLastError());
     }
     return mem;
 }
@@ -73,7 +73,7 @@ int64_t frequency;
     mem = HeapReAlloc(hHeap, HEAP_ZERO_MEMORY, mem, size);
     if (mem == NULL)
     {
-        print("Error: failed to reallocate memory: %lld\n", (int64_t)GetLastError());
+        print("Error: failed to reallocate %lld bytes of memory: %lld\n", size, (int64_t)GetLastError());
     }
     return mem;
 }

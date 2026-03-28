@@ -213,7 +213,7 @@ static inline int64_t i64_raw_update(struct i64hashtable *h, int64_t key, int64_
         {
             while (atomic_load(&node->state) == STATE_BUSY)
             {
-                // wait
+                _mm_pause();
             }
             if (atomic_load(&node->key) == key) 
             {
@@ -251,7 +251,7 @@ int64_t i64_get(struct i64hashtable *h, int64_t key, int64_t default_value)
         
         while (atomic_load(&node->state) == STATE_BUSY)
         {
-            // wait
+            _mm_pause();
         }
 
         if (atomic_load(&node->key) == key) 

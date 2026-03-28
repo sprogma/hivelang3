@@ -1647,7 +1647,7 @@ void SendHiveState()
     AcquireSRWLockShared(&wait_list_lock);
     int64_t this_wait_list_len = wait_list_len;
     ReleaseSRWLockShared(&wait_list_lock);
-    int64_t this_queue_len = queue_size;
+    int64_t this_queue_len = glb_scheduler.len;
     // TODO: create better idle time getter
     int64_t this_idle_time = 0;
     
@@ -1822,7 +1822,7 @@ void start_remote_subsystem(int64_t noStdin)
 
     log("sleeping\n");
     
-    Sleep(5000);
+    Sleep(1000);
     DumpConnections();
 
     log("running threads\n");

@@ -3,7 +3,7 @@
 [export:yes]
 [entry:yes]
 [integer64:yes]
-(i64[] a)main(i32? res)
+(i64[]@loc a)main(i32? res)
 {
     ?(a, 0, ?a)quick_sort(*);
     i64 x, sum;
@@ -18,7 +18,7 @@
  
 
 [integer64:yes]
-(i64[] arr, i64 l, i64 r)insertion_sort(i32? res)
+(i64[]@loc arr, i64 l, i64 r)insertion_sort(i32? res)
 {
     i64 i, j, pivot, val;
     i <- l;
@@ -38,7 +38,7 @@
 }
 
 [integer64:yes]
-(i64[] arr, i64 pivot_index, i64 l, i64 r)split(i64? left, i64? right)
+(i64[]@loc arr, i64 pivot_index, i64 l, i64 r)split(i64? left, i64? right)
 {
     i64 pivot, i, j, tmp;
     pivot <- arr[pivot_index];
@@ -82,11 +82,11 @@
 }
 
 [integer64:yes]
-(i64[] arr, i64 l, i64 r)quick_sort(i32? res)
+(i64[]@loc arr, i64 l, i64 r)quick_sort(i32? res)
 {
-    i32?[] calls;
+    i32?[]@loc calls;
     i64 calls_cnt;
-    calls <- new i32?[](32);
+    calls <- new i32?[]@loc(32);
     calls_cnt <- 0;
     while r - l > 128
     {

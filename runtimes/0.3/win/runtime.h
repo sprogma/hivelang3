@@ -171,16 +171,19 @@ extern _Atomic int64_t wait_list_len;
 
 extern struct defined_array *defined_arrays;
 
+struct scheduler
+{
+    struct scheduler_queue *workers;
+    size_t workers_len;
+    _Atomic size_t len;
+    uint64_t rnd_state;
+};
+extern struct scheduler glb_scheduler;
 
-
-
-extern _Atomic int64_t queue_size;
-
-void queue_init();
-void queue_enqueue(struct queued_worker *wk);
-struct queued_worker *queue_extract(int64_t threadId);
-
-
+void scheduler_init(struct scheduler *s, size_t workers_len);
+void scheduler_enqueue(struct scheduler *s, int priority, struct queued_worker *wk);
+void scheduler_enqueue_with_affinity(struct scheduler *s, size_t affinity, int priority, struct queued_worker *wk);
+struct queued_worker*scheduler_dequeue(struct scheduler *s, size_t worker_id);
 
 
 /*
@@ -212,7 +215,7 @@ void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset,
 void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value);
 void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable);
 
-int64_t StartInitialProcess(int64_t entryWorker, int64_t *cmdArgs, int64_t cmdArgsLen);
+int64_t StartInitialProcess(int64_t entryWorker, int64_t *cmdArgs, int64_t cmdArgsLen, int64_t localInput);
 int64_t ShedulerStart(int64_t resCodeId);
 
 #endif

@@ -37,10 +37,14 @@ pair<BYTE *, BYTE *> WriteEntryHeader(BuildResult *code, BYTE *header, BYTE *bod
 
 
 
-int64_t ExportCode(BuildResult *code)
+int64_t ExportCode(BuildResult *code, map<string, string> &configs)
 {
     /* generate workers for each provider */
-    FILE *o = fopen("./res.bin", "wb");
+    FILE *o = NULL;
+    if (!configs.contains("no-output"))
+    {
+        o = fopen("./res.bin", "wb");
+    }
     
 
     BYTE *header = (BYTE *)malloc(1024 * 1024);
@@ -90,17 +94,19 @@ int64_t ExportCode(BuildResult *code)
     /* fill header size */
     *header_size_writeback = header - header_start;
 
-    int64_t totalBytes = (header - header_start) + (body - body_start);
-    fwrite(header_start, 1, header - header_start, o);
-    fwrite(body_start, 1, body - body_start, o);
-
-
-    fclose(o);
+    if (!configs.contains("no-output"))
+    {
+        int64_t totalBytes = (header - header_start) + (body - body_start);
+        fwrite(header_start, 1, header - header_start, o);
+        fwrite(body_start, 1, body - body_start, o);
+        fclose(o);
+        
+        printf("%lld bytes written\n", totalBytes);
+        printf("res.bin file generated\n");
+    }
+    
     free(header_start);
     free(body_start);
-
-    printf("%lld bytes written\n", totalBytes);
-    printf("res.bin file generated\n");
 
     return 0;
 }

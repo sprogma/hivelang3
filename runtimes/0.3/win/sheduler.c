@@ -30,7 +30,7 @@ void SheduleWorker(struct thread_data *lc_data)
 
     // call next worker
 
-    struct queued_worker *curr = queue_extract(lc_data->number);
+    struct queued_worker *curr = scheduler_dequeue(&glb_scheduler, lc_data->number);
     if (curr)
     {
         lc_data->executedTasks++;
@@ -49,7 +49,10 @@ void SheduleWorker(struct thread_data *lc_data)
         myFree(curr->rbpValue - 1024);
         myFree(curr);
     }
-    UpdateWaitingWorkers();
+    if (!curr || (int64_t)curr / 24724 % 10 < 2)
+    {
+        UpdateWaitingWorkers();
+    }
 }
 
 struct master_sheduler_info
@@ -154,7 +157,7 @@ DWORD MasterSheduler(void *vparam)
             int64_t rpmiss = atomic_exchange(&glbStatRemotePathMisses, 0);
             int64_t roreq = atomic_exchange(&glbStatRemoteOutputRequests, 0);
             int64_t rireq = atomic_exchange(&glbStatRemoteInputRequests, 0);
-            print(" %5lld | %5lld | %6lld | %5lld | %5lld |\n", wait_list_len, queue_size, rpmiss, roreq, rireq);
+            print(" %5lld | %5lld | %6lld | %5lld | %5lld |\n", wait_list_len, glb_scheduler.len, rpmiss, roreq, rireq);
             prevPrint = now;
         }
 

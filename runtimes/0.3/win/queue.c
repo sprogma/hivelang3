@@ -8,164 +8,183 @@
 
 #include "runtime_lib.h"
 #include "runtime.h"
+#include "stdatomic.h"
 
-_Atomic int64_t queue_size;
+#define RING_SIZE 1024
+#define RING_MASK (RING_SIZE - 1)
 
-struct queue_t
+struct task_queue 
 {
-    SRWLOCK queue_lock;
-    int64_t size;
-    int64_t alloc;
-    struct queued_worker **data;
+    _Atomic(void*) buffer[RING_SIZE];
+    _Atomic int64_t head;
+    _Atomic int64_t tail;
 };
 
-// ! without this doesn't work
-// #define USE_ARRAY
-
-#define SHARED_QUEUE ((sizeof(queues) / sizeof(*queues)) - 1)
-struct queue_t queues[32];
-
-
-static inline int p(int x)
+static void queue_init(struct task_queue *q) 
 {
-    return (x - 1) / 2;
+    memset(q->buffer, 0, sizeof(q->buffer));
+    q->head = q->tail = 0;
 }
 
-
-int64_t is_less(struct queued_worker *w1, struct queued_worker *w2)
+static void queue_push(struct task_queue *q, void *data) 
 {
-    return w1->depth < w2->depth;
+    int64_t t = atomic_fetch_add_explicit(&q->tail, 1, memory_order_relaxed);
+    atomic_store_explicit(&q->buffer[t & RING_MASK], data, memory_order_release);
 }
 
+static void* queue_pop(struct task_queue *q) 
+{
+    int64_t h = atomic_load_explicit(&q->head, memory_order_relaxed);
 
-void push_up(int64_t queueId, int64_t x)
-{   
-    struct queued_worker **a = queues[queueId].data;
-    while (x != 0 && is_less(a[p(x)], a[x]))
+    while (1) 
     {
-        void *tmp = a[x];
-        a[x] = a[p(x)];
-        a[p(x)] = tmp;
-        x = p(x);
-    }
-}
-
-
-void push_down(int64_t queueId, int64_t x)
-{
-    struct queued_worker **a = queues[queueId].data;
-    int64_t n = queues[queueId].size;
-    while (x < n)
-    {
-        int64_t l = 2 * x + 1;
-        int64_t r = 2 * x + 2;
-        if (r < n)
+        int64_t t = atomic_load_explicit(&q->tail, memory_order_acquire);
+        if (h >= t) // empty
         {
-            if (is_less(a[l], a[r]))
-            {
-                l = r;
-            }
-            if (is_less(a[x], a[l]))
-            {
-                void *tmp = a[l];
-                a[l] = a[x];
-                a[x] = tmp;
-                x = l;
-                continue;
-            }
+            return NULL;
         }
-        else if (l < n)
+        // take next cell
+        if (atomic_compare_exchange_weak_explicit(&q->head, &h, h + 1, 
+                                                 memory_order_relaxed, 
+                                                 memory_order_relaxed)) 
         {
-            if (is_less(a[x], a[l]))
+            // wait for data
+            void *data;
+            while ((data = atomic_load_explicit(&q->buffer[h & RING_MASK], memory_order_acquire)) == NULL) 
             {
-                void *tmp = a[l];
-                a[l] = a[x];
-                a[x] = tmp;
-                x = l;
-                continue;
+                _mm_pause();
             }
+            
+            // clear data
+            atomic_store_explicit(&q->buffer[h & RING_MASK], NULL, memory_order_release);
+            return data;
         }
-        return;
     }
 }
 
 
-void queue_init()
-{   
-    for (int i = 0; i < (int)(sizeof(queues)/sizeof(*queues)); ++i)
-    {
-        queues[i].size = 0;
-        queues[i].alloc = 1024*16;
-        queues[i].data = myMalloc(sizeof(*queues[i].data) * queues[i].alloc);
-        queues[i].queue_lock = (SRWLOCK)SRWLOCK_INIT;
-    }
-    queue_size = 0;
-}
-
-void queue_enqueue(struct queued_worker *wk)
+struct scheduler_queue
 {
-    queue_size++;
-    int64_t queue_id = SHARED_QUEUE;
+    struct task_queue queues[64];
+    _Atomic uint64_t active_mask;
+    _Atomic int64_t size;
+};
+
+static void scheduler_queue_init(struct scheduler_queue *s) 
+{
+    for (int i = 0; i < 64; i++) 
+    {
+        queue_init(&s->queues[i]);
+    }
+    s->active_mask = s->size, 0;
+}
+
+static void scheduler_queue_push(struct scheduler_queue *s, int priority, void *data) 
+{
+    assert(priority >= 0 && priority <= 64);
+    assert(data);
+
+    queue_push(&s->queues[priority], data);
+    
+    atomic_fetch_or_explicit(&s->active_mask, (1ULL << (uint64_t)priority), memory_order_release);
+    atomic_fetch_add_explicit(&s->size, 1, memory_order_relaxed);
+}
+
+static void* scheduler_queue_pop(struct scheduler_queue *s) 
+{
+    uint64_t mask = atomic_load_explicit(&s->active_mask, memory_order_acquire);
+
+    while (mask != 0) 
+    {
+        int priority = (mask == 0 ? 0 : 63 - __builtin_clzll(mask));
+
+        void *data = queue_pop(&s->queues[priority]);
+        if (data) 
+        {
+            atomic_fetch_sub_explicit(&s->size, 1, memory_order_relaxed);
+            return data;
+        }
+
+        // this is empty bucket - clear it
+        atomic_fetch_and_explicit(&s->active_mask, ~(1ULL << (uint64_t)priority), memory_order_release);
+        mask = atomic_load_explicit(&s->active_mask, memory_order_acquire);
+    }
+
+    return NULL;
+}
+
+static inline uint64_t scheduler_rnd(uint64_t *state) 
+{
+    uint64_t x = *state;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    return *state = x;
+}
+
+void scheduler_init(struct scheduler *s, size_t workers_len)
+{
+    s->len = 0;
+    s->workers_len = workers_len;
+    s->rnd_state = GetTickCount64();
+    s->workers = myMalloc(sizeof(*s->workers) * s->workers_len);
+
+    for (size_t i = 0; i < s->workers_len; ++i)
+    {
+        scheduler_queue_init(&s->workers[i]);
+    }
+}
+
+void scheduler_enqueue_with_affinity(struct scheduler *s, size_t affinity, int priority, struct queued_worker *wk) 
+{
+    s->len++;
+    scheduler_queue_push(&s->workers[affinity % s->workers_len], priority, wk);
+}
+
+void scheduler_enqueue(struct scheduler *s, int priority, struct queued_worker *wk) 
+{
     if (Workers[wk->id].affinity != -1)
     {
-        queue_id = Workers[wk->id].affinity % NUM_THREADS;
+        scheduler_enqueue_with_affinity(s, Workers[wk->id].affinity, priority, wk);
+        return;
     }
-    AcquireSRWLockExclusive(&queues[queue_id].queue_lock);
-    #ifdef USE_ARRAY    
-    if (queues[queue_id].size > 0 && is_less(wk, queues[queue_id].data[queues[queue_id].size-1]))
-    {
-        queues[queue_id].data[queues[queue_id].size++] = queues[queue_id].data[0];
-        queues[queue_id].data[0] = wk;
-    }
-    else
-    {
-        queues[queue_id].data[queues[queue_id].size++] = wk;
-    }
-    // swap if priority
-    #else
-    queues[queue_id].data[queues[queue_id].size] = wk;
-    push_up(queue_id, queues[queue_id].size);
-    queues[queue_id].size++;
-    #endif
-    ReleaseSRWLockExclusive(&queues[queue_id].queue_lock);
+    size_t i = (size_t)scheduler_rnd(&s->rnd_state) % s->workers_len;
+    size_t j = (size_t)scheduler_rnd(&s->rnd_state) % s->workers_len;
+
+    int64_t si = atomic_load_explicit(&s->workers[i].size, memory_order_relaxed);
+    int64_t sj = atomic_load_explicit(&s->workers[j].size, memory_order_relaxed);
+
+    size_t target = (si < sj) ? i : j;
+    scheduler_queue_push(&s->workers[target], priority, wk);
+    s->len++;
 }
 
-struct queued_worker *queue_extract(int64_t threadId)
+struct queued_worker *scheduler_dequeue(struct scheduler *s, size_t worker_id) 
 {
-    AcquireSRWLockExclusive(&queues[threadId].queue_lock);
-    if (queues[threadId].size != 0)
+    void *data = scheduler_queue_pop(&s->workers[worker_id]);
+    if (data) 
     {
-        queue_size--;
-        #ifdef USE_ARRAY
-        void *res = queues[threadId].data[--queues[threadId].size];
-        #else
-        void *res = queues[threadId].data[0];
-        queues[threadId].size--;
-        queues[threadId].data[0] = queues[threadId].data[queues[threadId].size];
-        push_down(threadId, 0);
-        #endif
-        ReleaseSRWLockExclusive(&queues[threadId].queue_lock);
-        return res;
+        s->len--;
+        return data;
     }
-    ReleaseSRWLockExclusive(&queues[threadId].queue_lock);
-    
-    // use thread queues[SHARED_QUEUE], if it is empty - use shared queues[SHARED_QUEUE]
-    
-    AcquireSRWLockExclusive(&queues[SHARED_QUEUE].queue_lock);
-    if (queues[SHARED_QUEUE].size == 0)
+
+    // steal data from another worker
+    size_t victim_id = worker_id;
+    for (size_t n = 0; n < s->workers_len; n++) 
     {
-        ReleaseSRWLockExclusive(&queues[SHARED_QUEUE].queue_lock);
-        return NULL;
+        victim_id = (victim_id + 1 >= s->workers_len ? 0 : victim_id + 1);
+        
+        if (atomic_load_explicit(&s->workers[victim_id].active_mask, memory_order_acquire) != 0) 
+        {
+            data = scheduler_queue_pop(&s->workers[victim_id]);
+            if (data) 
+            {
+                s->len--;
+                return data;
+            }
+        }
     }
-    queue_size--;
-    #ifdef USE_ARRAY
-    void *res = queues[SHARED_QUEUE].data[--queues[SHARED_QUEUE].size];
-    #else
-    void *res = queues[SHARED_QUEUE].data[0];
-    queues[SHARED_QUEUE].size--;
-    queues[SHARED_QUEUE].data[0] = queues[SHARED_QUEUE].data[queues[SHARED_QUEUE].size];
-    push_down(threadId, 0);
-    #endif
-    ReleaseSRWLockExclusive(&queues[SHARED_QUEUE].queue_lock);
-    return res;
+    return NULL;
 }
+
+struct scheduler glb_scheduler;
