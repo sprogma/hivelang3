@@ -20,7 +20,7 @@ struct x64_worker_data
 
 
 void x64ExecuteWorker(struct queued_worker *obj);
-void x64PauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data);
+struct waiting_worker *x64PauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data);
 int64_t x64UpdateWaitingWorker(struct waiting_worker *wk, int64_t ticks, int64_t *rdiValue);
 void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t *remote_id);
 int64_t x64QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue);

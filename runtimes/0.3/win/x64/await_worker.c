@@ -10,7 +10,7 @@
 
 #include "x64.h"
 
-void x64PauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
+struct waiting_worker *x64PauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
 {
     /* save context and select next worker */
     struct waiting_worker *t = myMalloc(sizeof(*t));
@@ -28,4 +28,6 @@ void x64PauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state 
     log("Paused worker %lld [cause %lld]\n", lc_data->runningId, (int64_t)state);
 
     WaitListWorker(t);
+
+    return t;
 }

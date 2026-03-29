@@ -56,8 +56,7 @@ struct hive_provider_info Providers[] = {
 
 DWORD dwTlsIndex;
 
-SRWLOCK wait_list_lock = SRWLOCK_INIT;
-struct waiting_worker *wait_list[100000];
+struct wait_list_node * _Atomic wait_list = NULL;
 _Atomic int64_t wait_list_len = 0;
 
 void RegisterObjectWithId(int64_t id, void *object)
@@ -89,18 +88,16 @@ int64_t GetNewObjectId(int64_t *result)
 }
 
 
-void universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
+struct waiting_worker *universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
 {
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
     switch (Workers[lc_data->runningId].provider)
     {
         case PROVIDER_X64:
-            x64PauseWorker(returnAddress, rbpValue, state, state_data);
-            break;
-        case PROVIDER_GPU:
-            print("Error: gpu worker doen't support universal pause\n");
-            ExitProcess(1);
+            return x64PauseWorker(returnAddress, rbpValue, state, state_data);
     }
+    print("Error: this worker doen't support universal pause\n");    
+    ExitProcess(1);
 }
 
 void universalUpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source)
@@ -158,40 +155,72 @@ void PrintObject(struct object *object_ptr)
 }
 
 
+void WaitListNode(struct wait_list_node *node)
+{
+    struct wait_list_node *old_head = atomic_load_explicit(&wait_list, memory_order_acquire);
+    do 
+    {
+        node->next = old_head;
+    } 
+    while (!atomic_compare_exchange_weak(&wait_list, &old_head, node));
+
+    atomic_fetch_add_explicit(&wait_list_len, 1, memory_order_relaxed);
+}
+
 void WaitListWorker(struct waiting_worker *t)
 {
-    AcquireSRWLockExclusive(&wait_list_lock);
-    wait_list[wait_list_len++] = t;
+    struct wait_list_node *node = myMalloc(sizeof(*node));
+    node->worker = t;
+    WaitListNode(node);
     log("Worker add to wait list [id=%lld data=%p]\n", t->id, t->data);
-    ReleaseSRWLockExclusive(&wait_list_lock);
 }
 
 void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
 {
-    struct queued_worker *t = myMalloc(sizeof(*t));
-    t->id = w->id;
-    t->depth = w->depth;
-    t->data = w->data;
-    t->rbpValue = w->rbpValue;
-    t->rdiValue = rdi_value;
-    memcpy(t->context, w->context, sizeof(t->context));
-    log("Worker enqueued [id=%lld, data=%p]\n", t->id, t->data);
-    scheduler_enqueue(&glb_scheduler, 32, t);
+    int64_t old = 0;
+    if (atomic_compare_exchange_strong(&w->queued, &old, 1)) // to lock it only once
+    {
+        struct queued_worker *t = myMalloc(sizeof(*t));
+        t->id = w->id;
+        t->depth = w->depth;
+        t->data = w->data;
+        t->rbpValue = w->rbpValue;
+        t->rdiValue = rdi_value;
+        memcpy(t->context, w->context, sizeof(t->context));
+        log("Worker enqueued [id=%lld, data=%p]\n", t->id, t->data);
+        scheduler_enqueue(&glb_scheduler, 32, t);
+    }
 }
 
 void UpdateWaitingWorkers()
 {
     int64_t ticks;
     QueryPerformanceCounter((void *)&ticks);
-    if (!TryAcquireSRWLockExclusive(&wait_list_lock))
+
+    // take all workers
+    struct wait_list_node *data = NULL;
+    data = atomic_exchange(&wait_list, data);
+
+
+    // work with them:
+    // reverse list
     {
-        return;
+        struct wait_list_node *curr = data, *prev = NULL, *tmp = NULL;
+        while (curr)
+        {
+            tmp = curr->next;
+            curr->next = prev;
+            prev = curr;
+            curr = tmp;
+        }
+        data = prev;
     }
-    BYTE rnd;
-    BCryptGenRandom(NULL, &rnd, 1, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-    for (int i = rnd % 16; i < wait_list_len; i += 16)
+
+    for (struct wait_list_node *curr = data, *nxt = data ? data->next : data; curr; curr = nxt, nxt = nxt ? nxt->next : nxt)
     {
-        struct waiting_worker *w = wait_list[i];
+        struct waiting_worker *w = curr->worker;
+        if (!w) continue;
+        
         int64_t res = 0;
         int64_t rdiValue = 0;
         // print("wait for %lld\n", w->state);
@@ -230,13 +259,16 @@ void UpdateWaitingWorkers()
         if (res)
         {
             EnqueueWorkerFromWaitList(w, rdiValue);
-            myFree(w);
-            wait_list[i] = wait_list[--wait_list_len];
-            i--;
-            break;
+            // myFree(w); // TODO: add label counts and etc.
+            myFree(curr);
+            continue;
+        }
+        else
+        {
+            WaitListNode(curr);
+            continue;
         }
     }
-    ReleaseSRWLockExclusive(&wait_list_lock);
 }
 
 void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)

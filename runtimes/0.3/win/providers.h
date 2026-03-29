@@ -37,7 +37,7 @@ enum
     PROVIDER_LOC=3,
 };
 
-void universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data);
+struct waiting_worker *universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data);
 void universalUpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);
 
 

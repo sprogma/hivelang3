@@ -23,10 +23,43 @@
 
 
 
-void SheduleWorker(struct thread_data *lc_data)
+DWORD WaitListUpdateWorker(void *data)
+{
+    volatile int *waitForExit = data;
+    while (!waitForExit)
+    {
+        UpdateWaitingWorkers();
+    }
+    return 0;
+}
+
+
+struct master_sheduler_info
+{
+    HANDLE *hThreads;
+    struct sheduler_instance_info **shedulers;
+    int64_t resCodeId;
+    volatile int64_t waitForExit;
+};
+
+struct sheduler_instance_info
+{
+    int64_t number;
+    struct master_sheduler_info *masterInfo;
+    struct thread_data *data;
+    volatile int64_t waitForExit;
+};
+
+
+void SheduleWorker(struct thread_data *lc_data, struct sheduler_instance_info *info)
 {
     setjmpUN(&lc_data->ShedulerBuffer);
     lc_data->stallable = 0;
+    
+    if (info->waitForExit)
+    {
+        return;
+    }
 
     // call next worker
 
@@ -49,26 +82,12 @@ void SheduleWorker(struct thread_data *lc_data)
         myFree(curr->rbpValue - 1024);
         myFree(curr);
     }
-    if (!curr || (int64_t)curr / 24724 % 10 < 2)
+    else
     {
+        // if there is no tasks - try to find some new tasks
         UpdateWaitingWorkers();
     }
 }
-
-struct master_sheduler_info
-{
-    HANDLE *hThreads;
-    struct sheduler_instance_info **shedulers;
-    volatile int64_t waitForExit;
-};
-
-struct sheduler_instance_info
-{
-    int64_t number;
-    int64_t resCodeId;
-    struct master_sheduler_info *masterInfo;
-    struct thread_data *data;
-};
 
 
 HANDLE hContinueEvent; 
@@ -77,7 +96,6 @@ DWORD ShedulerInstance(void *vparam)
 {
     struct sheduler_instance_info *param = vparam;
     struct thread_data *lc_data = myMalloc(sizeof(*lc_data));
-    int64_t resCodeId = param->resCodeId;
     
     TlsSetValue(dwTlsIndex, lc_data);
     param->data = lc_data;
@@ -86,22 +104,9 @@ DWORD ShedulerInstance(void *vparam)
     
     lc_data->number = (int64_t)param->number;
     lc_data->completedTasks = 0;
-    while (1)
+    while (!param->waitForExit)
     {
-        SheduleWorker(lc_data);
-
-        // if resCodeId is ready - print it and return
-        struct object_promise *p = (void *)i64GetHashtable(&local_objects, resCodeId, 0);
-        if (p != NULL)
-        {
-            p = (void *)((BYTE *)p - DATA_OFFSET(*p));
-            if (p->ready)
-            {
-                print("ShedulerInstance completed\n");
-                return 0;
-            }
-            // print("promise not set\n");
-        }
+        SheduleWorker(lc_data, param);
     }
     myFree(lc_data);
     return 0;
@@ -140,6 +145,7 @@ DWORD MasterSheduler(void *vparam)
     // watch for all threads
     int64_t prevPrint = GetTicks();
     int64_t chunk_time_ticks = MicrosecondsToTicks(CHUNK_TIME_US);
+    int64_t sent = 0;
     while (!info->waitForExit)
     {
         // do we need to display progress counters?
@@ -161,6 +167,28 @@ DWORD MasterSheduler(void *vparam)
             prevPrint = now;
         }
 
+        // check is there promise ready?        
+        // if resCodeId is ready - print it and return
+        if (!sent)
+        {
+            struct object_promise *p = (void *)i64GetHashtable(&local_objects, info->resCodeId, 0);
+            if (p != NULL)
+            {
+                p = (void *)((BYTE *)p - DATA_OFFSET(*p));
+                if (p->ready)
+                {
+                    sent = 1;
+                    print("Program calculation end.\n");
+                    // send sign to all workers to stop
+                    for (int64_t i = 0; i < NUM_THREADS; ++i)
+                    {
+                        info->shedulers[i]->waitForExit = 1;
+                    }
+                }
+                // print("promise not set\n");
+            }
+        }
+   
         // check all threads - to swap them, if they are too long
         for (int64_t i = 0; i < NUM_THREADS; ++i)
         {
@@ -176,7 +204,7 @@ DWORD MasterSheduler(void *vparam)
                 }
             }
         }
-        UpdateWaitingWorkers();
+        
         Sleep(10);
     }
     return 0;
@@ -193,6 +221,8 @@ int64_t ShedulerStart(int64_t resCodeId)
     glbMasterInfo = masterInfo;
     masterInfo->hThreads = myMalloc(sizeof(*masterInfo->hThreads) * NUM_THREADS);
     masterInfo->shedulers = myMalloc(sizeof(*masterInfo->shedulers) * NUM_THREADS);
+    masterInfo->resCodeId = resCodeId;
+    masterInfo->waitForExit = 0;
 
     hContinueEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     
@@ -200,8 +230,8 @@ int64_t ShedulerStart(int64_t resCodeId)
     {
         struct sheduler_instance_info *info = myMalloc(sizeof(*info));
         info->number = i;
-        info->resCodeId = resCodeId;
         info->masterInfo = masterInfo;
+        info->waitForExit = 0;
         masterInfo->shedulers[i] = info;
         DWORD threadId;
         masterInfo->hThreads[i] = CreateThread(NULL, 0, ShedulerInstance, info, 0, &threadId);
@@ -215,6 +245,11 @@ int64_t ShedulerStart(int64_t resCodeId)
 
     CloseHandle(hContinueEvent);
 
+    // start WaitWorker thread
+    DWORD updaterId;
+    int64_t end;
+    HANDLE hUpdater = CreateThread(NULL, 0, WaitListUpdateWorker, &end, 0, &updaterId);
+
     // start master thread
     DWORD masterId;
     HANDLE hMaster = CreateThread(NULL, 0, MasterSheduler, masterInfo, 0, &masterId);
@@ -222,7 +257,9 @@ int64_t ShedulerStart(int64_t resCodeId)
     DWORD waitResult;
     waitResult = WaitForMultipleObjects(NUM_THREADS, masterInfo->hThreads, TRUE, INFINITE);
     masterInfo->waitForExit = 1;
+    end = 1;
     waitResult = WaitForSingleObject(hMaster, INFINITE);
+    waitResult = WaitForSingleObject(hUpdater, INFINITE);
     (void)waitResult;
 
     return 0;

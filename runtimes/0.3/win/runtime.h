@@ -17,6 +17,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include "windows.h"
+#include "stdatomic.h"
 
 #include "state.h"
 #include "runtime_lib.h"
@@ -41,6 +42,8 @@ extern int64_t setjmpUN(struct jmpbuf *);
 
 struct waiting_worker
 {
+    // lock
+    _Atomic int64_t queued;
     // object waiting data
     int64_t state;
     void *state_data;
@@ -165,8 +168,13 @@ struct hive_provider_info
 };
 extern struct hive_provider_info Providers[];
 
-extern SRWLOCK wait_list_lock;
-extern struct waiting_worker *wait_list[];
+
+struct wait_list_node
+{
+    struct waiting_worker * _Atomic worker;
+    struct wait_list_node *next;
+};
+extern struct wait_list_node * _Atomic wait_list;
 extern _Atomic int64_t wait_list_len;
 
 extern struct defined_array *defined_arrays;

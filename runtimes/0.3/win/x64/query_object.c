@@ -125,7 +125,6 @@ int64_t x64QueryObject(void *destination, int64_t object_id, int64_t offset, int
         RequestObjectGet(object_id, offset, myAbs(size));
     }
     
-    
     /* shedule query */
     struct wait_query_info *query = myMalloc(sizeof(*query));
     *query = (struct wait_query_info){

@@ -110,8 +110,8 @@ void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size
         
         void *data = myMalloc(myAbs(size));
         memcpy(data, (size < 0 ? &source : source), myAbs(size));
-        /* shedule query */
-        RequestObjectSet(object_id, offset, myAbs(size), data);
+        
+        /* pause worker */
         struct wait_push_info *info = myMalloc(sizeof(*info));
         *info = (struct wait_push_info){
             .object_id = object_id,
@@ -121,7 +121,10 @@ void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size
             .repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT),
         };
         BCryptGenRandom(NULL, info->id, BROADCAST_ID_LENGTH, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-        universalPauseWorker(returnAddress, rbpValue, WK_STATE_PUSH_OBJECT_WAIT_X64, info);
+        struct waiting_worker *wait = universalPauseWorker(returnAddress, rbpValue, WK_STATE_PUSH_OBJECT_WAIT_X64, info);
+        
+        /* shedule query */
+        RequestObjectSet(object_id, offset, myAbs(size), data, wait);
     
         longjmpUN(&lc_data->ShedulerBuffer, 1);
     }
