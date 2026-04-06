@@ -1,7 +1,10 @@
 */a
 test.txt
 *.exe
+*.ilk
+*.pdb
 *.o
+*.a
 *.dll
 *.d
 *.so
