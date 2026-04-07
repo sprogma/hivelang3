@@ -3,8 +3,8 @@
 #include <vector>
 #include <map>
 
-#include "../utils.hpp"
-#include "../ir.hpp"
+#include "../headers/utils.hpp"
+#include "../headers/ir.hpp"
 
 
 class StripUnusedFunctionsLayer : public OptimizationLayer

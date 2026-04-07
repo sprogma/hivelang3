@@ -8,9 +8,9 @@
 
 using namespace std;
 
-#include "logger.hpp"
-#include "ast.hpp"
-#include "utils.hpp"
+#include "../headers/logger.hpp"
+#include "../headers/ast.hpp"
+#include "../headers/utils.hpp"
 
 
 

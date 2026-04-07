@@ -10,7 +10,7 @@
 using namespace std;
 
 
-#include "../ir.hpp"
+#include "../headers/ir.hpp"
 #include "../optimization/optimizer.hpp"
 #include "codegen.hpp"
 #include "registerAllocator.hpp"

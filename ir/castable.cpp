@@ -1,5 +1,5 @@
+#include "../headers/ir.hpp"
 #include "utils.hpp"
-#include "../ir.hpp"
 
 
 // from t2 to t1

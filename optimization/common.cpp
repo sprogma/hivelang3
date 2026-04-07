@@ -3,7 +3,7 @@
 #include <vector>
 #include <map>
 
-#include "../ir.hpp"
+#include "../headers/ir.hpp"
 #include "optimizer.hpp"
 
 

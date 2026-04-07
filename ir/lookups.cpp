@@ -1,5 +1,5 @@
+#include "../headers/ir.hpp"
 #include "utils.hpp"
-#include "../ir.hpp"
 
 void applyNamesTranslition(OperationBlock *op, const map<int64_t, int64_t> &translition)
 {

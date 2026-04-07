@@ -17,9 +17,9 @@ using namespace std;
 
 #include "../optimization/optimizer.hpp"
 #include "../codegen/codegen.hpp"
-#include "../logger.hpp"
-#include "../ast.hpp"
-#include "../ir.hpp"
+#include "../headers/logger.hpp"
+#include "../headers/ast.hpp"
+#include "../headers/ir.hpp"
 
 /* pre-intermediate representation */
 struct Operation

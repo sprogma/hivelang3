@@ -2,7 +2,7 @@
 #include <vector>
 #include <map>
 using namespace std;
-#include "ast.hpp"
+#include "../headers/ast.hpp"
 Rule *grammar;
 int64_t grammar_len;
 Rule *generateGrammar()

@@ -1,7 +1,7 @@
 #ifndef MEMORY_ALLOCATOR
 #define MEMORY_ALLOCATOR
 
-#include "../ir.hpp"
+#include "../headers/ir.hpp"
 
 class ISpreadMemory
 {

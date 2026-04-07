@@ -1,5 +1,5 @@
+#include "../../headers/ir.hpp"
 #include "../utils.hpp"
-#include "../../ir.hpp"
 
 
 void registerStructure(BuildContext *ctx, TypeContextType type, Node *node)

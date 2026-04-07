@@ -14,8 +14,8 @@
 using namespace std;
 
 
-#include "../../ir.hpp"
-#include "../../logger.hpp"
+#include "../../headers/ir.hpp"
+#include "../../headers/logger.hpp"
 #include "../../optimization/optimizer.hpp"
 #include "../../analysis/analizators.hpp"
 #include "../codegen.hpp"

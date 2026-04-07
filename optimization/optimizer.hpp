@@ -6,7 +6,7 @@
 
 using namespace std;
 
-#include "../ir.hpp"
+#include "../headers/ir.hpp"
 
 class OptimizationLayer
 {

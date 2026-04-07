@@ -4,7 +4,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include "inttypes.h"
-#include "../ir.hpp"
+#include "../headers/ir.hpp"
 
 class RegisterAnalizator
 {

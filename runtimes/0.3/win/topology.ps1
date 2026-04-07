@@ -45,17 +45,18 @@ else
 
 $h1 = Start-Hive -Executable $exe -ArgumentList $agMain
 $h2 = Start-Hive -Executable $exe -ArgumentList $ag
-$h3 = Start-Hive -Executable $exe -ArgumentList $ag
-$h4 = Start-Hive -Executable $exe -ArgumentList $ag
-$h5 = Start-Hive -Executable $exe -ArgumentList $ag
+# $h3 = Start-Hive -Executable $exe -ArgumentList $ag
+# $h4 = Start-Hive -Executable $exe -ArgumentList $ag
+# $h5 = Start-Hive -Executable $exe -ArgumentList $ag
 
 Connect-Hive $h1 $h2
-Connect-Hive $h2 $h3
-Connect-Hive $h3 $h4
-Connect-Hive $h4 $h5
-Connect-Hive $h1 $h5
+# Connect-Hive $h2 $h3
+# Connect-Hive $h3 $h4
+# Connect-Hive $h4 $h5
+# Connect-Hive $h1 $h5
 
-$h1, $h2, $h3, $h4, $h5 | Deploy-System
+$h1, $h2 | Deploy-System
+# $h1, $h2, $h3, $h4, $h5 | Deploy-System
 
 # $h1 = Start-Hive -Executable $exe -ArgumentList $agMain
 # $h2 = Start-Hive -Executable $exe -ArgumentList $ag

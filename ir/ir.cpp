@@ -15,9 +15,9 @@ using namespace std;
 #include "utils.hpp"
 #include "../optimization/optimizer.hpp"
 #include "../codegen/codegen.hpp"
-#include "../logger.hpp"
-#include "../ast.hpp"
-#include "../ir.hpp"
+#include "../headers/logger.hpp"
+#include "../headers/ast.hpp"
+#include "../headers/ir.hpp"
 
 
 pair<vector<OperationBlock *>, map<OperationBlock *, int64_t>> OpsToBlocks(const vector<Operation> &ops)

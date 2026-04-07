@@ -4,7 +4,7 @@
 
 using namespace std;
 
-#include "logger.hpp"
+#include "../headers/logger.hpp"
 
 
 void vlogError(const char *filename, const char *content, int64_t start, int64_t end, const char *format, va_list args)

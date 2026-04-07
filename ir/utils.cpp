@@ -1,5 +1,5 @@
+#include "../headers/ir.hpp"
 #include "utils.hpp"
-#include "../ir.hpp"
 
 
 string Substr(BuildContext *ctx, Node *node)

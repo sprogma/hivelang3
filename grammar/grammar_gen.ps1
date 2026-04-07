@@ -74,7 +74,7 @@ let code = "// this sourse file was generated using grammar.fsx\n\
             #include <vector>\n\
             #include <map>\n\
             using namespace std;\n\
-            #include \"ast.hpp\"\n\
+            #include \"../headers/ast.hpp\"\n\
             Rule *grammar;\n\
             int64_t grammar_len;\n\
             Rule *generateGrammar()\n\

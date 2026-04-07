@@ -3,10 +3,10 @@
 using namespace std;
 
 
-#include "ast.hpp"
-#include "optimization/optimizer.hpp"
-#include "codegen/codegen.hpp"
-#include "ir.hpp"
+#include "../headers/ast.hpp"
+#include "../optimization/optimizer.hpp"
+#include "../codegen/codegen.hpp"
+#include "../headers/ir.hpp"
 
 
 map<string, string> ParseComandlineArgs(int argc, char **argv)

@@ -4,8 +4,8 @@
 #include <map>
 
 #include "../codegen/codegen.hpp"
-#include "../utils.hpp"
-#include "../ir.hpp"
+#include "../headers/utils.hpp"
+#include "../headers/ir.hpp"
 
 
 class InlineLayer : public OptimizationLayer

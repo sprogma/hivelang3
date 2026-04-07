@@ -3,7 +3,7 @@
 
 #include "inttypes.h"
 
-#include "../ir.hpp"
+#include "../headers/ir.hpp"
 
 typedef uint8_t BYTE;
 

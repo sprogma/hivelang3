@@ -15,7 +15,7 @@
 using namespace std;
 
 
-#include "../ir.hpp"
+#include "../headers/ir.hpp"
 #include "../optimization/optimizer.hpp"
 #include "../analysis/analizators.hpp"
 #include "codegen.hpp"

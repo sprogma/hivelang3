@@ -5,7 +5,7 @@
 
 using namespace std;
 
-#include "ast.hpp"
+#include "../headers/ast.hpp"
 
 pair<Node *, int64_t>grammar_fn_spaces(char *content, int64_t position)
 {
