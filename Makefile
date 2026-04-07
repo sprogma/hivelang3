@@ -26,7 +26,7 @@ $(TARGET): $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $(TARGET)
 
 obj/%.o: %.cpp $(HEADERS)
-	@mkdir -p obj
+	@mkdir -p $(dir $@)
 	@echo -e "$(YELLOW)Building $<...$(NC)"
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
