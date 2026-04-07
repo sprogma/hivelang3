@@ -3,6 +3,9 @@
 #include <vector>
 #include <map>
 
+// Why is isn't work without this?
+template class std::vector<int64_t>;
+
 #include "../headers/ir.hpp"
 #include "optimizer.hpp"
 
