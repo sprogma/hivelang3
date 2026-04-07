@@ -5,10 +5,11 @@ test.txt
 *.pdb
 *.o
 *.out
+*.so
 *.a
 *.dll
+*.lib
 *.d
-*.so
 *.xml
 *.gcov
 *.gcda

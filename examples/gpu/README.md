@@ -91,7 +91,7 @@ W and H is input of program.
 
 Compile it: in root of project
 ```
-./a.exe --input-file=./examples/gpu/sieve.hive
+./a.exe --input-file=./examples/gpu/life.hive
 ```
 
 run it: in `runtimes/0.3/win` (`n` means no input is need for program)
