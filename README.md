@@ -18,13 +18,36 @@ it contains
         * local provider (x64)
         * dllimport provider (win/x64)
 
-(last runtime version is located at `runtimes/0.3/win`)
 
-## Build
+(last runtime version is located at `runtimes/0.3/win` and `runtimes/0.3/lin`)
 
-To build you need clang, supporting c++ of version `gnu++2c`, targeting msvc stdlib, and fasm.
 
-use pwsh of latest version, run build files in root, and in runtimes/0.3/win directory.
+## Build compiler
+
+To build compiler, you need clang, supporting c++ of version `gnu++2c`.
+
+On windows prefer running `.\build.ps1` in root:
+```pwsh
+.\build.ps1
+```
+(you need powershell of version 7+, default installed doesn't works).
+
+Or, you can use linux way using make analogues? (don't officially supported)
+
+----
+On linux, use makefile in root.
+
+----
+
+Both variants uses precompiled grammar (see info in `grammar` directory).
+And also source code uses `utils/quoter.ps1` (usually in runtime).
+
+
+## Build runtime
+
+To build runtime you need clang, supporting c of version `gnu2y`, targeting msvc stdlib, and fasm.
+
+use pwsh of latest version, run in runtimes/0.3/win directory:
 ```pwsh
 ./build.ps1
 ```
