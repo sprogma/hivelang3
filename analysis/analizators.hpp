@@ -3,6 +3,7 @@
 
 #include <unordered_set>
 #include <unordered_map>
+#include <cmath>
 #include "inttypes.h"
 #include "../headers/ir.hpp"
 

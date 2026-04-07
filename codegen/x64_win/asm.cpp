@@ -635,8 +635,8 @@ void WinX64Assembler::printRC(OperationBlock *node, asm_operation2rc op, pair<in
             {
                 pbyte((r1.second == 1 ? 0x80 : 0x81));
                 pbyte(0xC0 | (r1.first & 7));
-                memcpy(assemblyEnd, &value, min(4LL, r1.second));
-                assemblyEnd += min(4LL, r1.second);
+                memcpy(assemblyEnd, &value, min<int64_t>(4LL, r1.second));
+                assemblyEnd += min<int64_t>(4LL, r1.second);
             }
             else
             {

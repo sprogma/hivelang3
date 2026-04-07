@@ -1,4 +1,5 @@
 #include <vector>
+#include <cstdlib>
 #include <errno.h>
 #include <string.h>
 #include <ctype.h>

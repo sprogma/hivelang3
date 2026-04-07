@@ -72,6 +72,7 @@ let codegen =
 
 let code = "// this sourse file was generated using grammar.fsx\n\
             #include <vector>\n\
+            #include <cstdlib>\n\
             #include <map>\n\
             using namespace std;\n\
             #include \"../headers/ast.hpp\"\n\

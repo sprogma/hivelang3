@@ -1,5 +1,6 @@
 // this sourse file was generated using grammar.fsx
 #include <vector>
+#include <cstdlib>
 #include <map>
 using namespace std;
 #include "../headers/ast.hpp"

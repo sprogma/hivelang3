@@ -1,14 +1,14 @@
 // this file was generated using grammar_gen.ps1
 
-let prefix = "<RULE:1115310864>"
+let prefix = "<RULE:251338332>"
 
+let identifer_or_number = prefix + "identifer_or_number"
+let S = prefix + "S"
+let identifer = prefix + "identifer"
+let Sn = prefix + "Sn"
+let float = prefix + "float"
 let quotedstring = prefix + "quotedstring"
 let integer = prefix + "integer"
-let identifer = prefix + "identifer"
-let identifer_or_number = prefix + "identifer_or_number"
-let float = prefix + "float"
-let Sn = prefix + "Sn"
-let S = prefix + "S"
 let Global = prefix + "Global"
 let _using = prefix + "_using"
 let _record = prefix + "_record"
@@ -256,7 +256,7 @@ let keyToIndexMap inputMap =
     |> Seq.mapi (fun i (k, _) -> (k, i + 20))
     |> Map.ofSeq
 
-let indexMap = keyToIndexMap grammar  |> Map.add "quotedstring" 7  |> Map.add "integer" 5  |> Map.add "identifer" 3  |> Map.add "identifer_or_number" 4  |> Map.add "float" 6  |> Map.add "Sn" 2  |> Map.add "S" 1
+let indexMap = keyToIndexMap grammar  |> Map.add "identifer_or_number" 4  |> Map.add "S" 1  |> Map.add "identifer" 3  |> Map.add "Sn" 2  |> Map.add "float" 6  |> Map.add "quotedstring" 7  |> Map.add "integer" 5
 
 let printTerm = function 
     | Terminal s -> sprintf "\"%s\"" s 
@@ -272,9 +272,10 @@ let codegen =
 
 let code = "// this sourse file was generated using grammar.fsx\n\
             #include <vector>\n\
+            #include <cstdlib>\n\
             #include <map>\n\
             using namespace std;\n\
-            #include \"ast.hpp\"\n\
+            #include \"../headers/ast.hpp\"\n\
             Rule *grammar;\n\
             int64_t grammar_len;\n\
             Rule *generateGrammar()\n\
