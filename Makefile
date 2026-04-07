@@ -2,7 +2,7 @@ CXX := clang++
 
 SHELL := /bin/bash
 
-CXXFLAGS := -std=gnu++2c -O3 -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE
+CXXFLAGS := -std=gnu++2c -O3 -g -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -Wno-format
 
 SOURCES := $(shell find . -name "*.cpp")
 HEADERS := $(shell find . -name "*.hpp")
