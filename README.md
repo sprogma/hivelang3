@@ -1,4 +1,6 @@
-# This is hive lang repo
+# Hive Lang
+
+![bees](./logo.png)
 
 it contains
 
