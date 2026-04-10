@@ -20,7 +20,7 @@ obj/asm.o: runtime.asm
 	@mkdir -p obj
 	$(AS) -f elf64 $< -o $@
 
-obj/asm_dbg.o: runtime_dbg.asm
+obj/asm-dbg.o: runtime_dbg.asm
 	@mkdir -p obj
 	$(AS) $< $@
 
@@ -28,14 +28,14 @@ obj/%.o:
 	@mkdir -p obj
 	$(CC) -c $(subst -,/,$(patsubst obj/%.o,%.c,$@)) -o $@ $(FLAGS) $(RLS_FLAGS)
 
-obj/dbg_%.o:
+obj/dbg-%.o:
 	@mkdir -p obj
 	$(CC) -c $(subst -,/,$(patsubst obj/dbg-%.o,%.c,$@)) -o $@ $(FLAGS) $(DBG_FLAGS)
 
 a.out: $(RLS_OBJS) obj/asm.o
 	$(CC) $^ -o $@ $(FLAGS) $(RLS_FLAGS) $(LDFLAGS)
 
-d.out: $(DBG_OBJS) obj/asm_dbg.o
+d.out: $(DBG_OBJS) obj/asm-dbg.o
 	$(CC) $^ -o $@ $(FLAGS) $(DBG_FLAGS) $(LDFLAGS)
 
 clean:
