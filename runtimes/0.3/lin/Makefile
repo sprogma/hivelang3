@@ -22,7 +22,7 @@ obj/asm.o: runtime.asm
 
 obj/asm-dbg.o: runtime_dbg.asm
 	@mkdir -p obj
-	$(AS) $< $@
+	$(AS) -f elf64 $< -o $@
 
 obj/%.o:
 	@mkdir -p obj
