@@ -1,7 +1,7 @@
 CC = clang
 AS = nasm
 
-FLAGS = -I. -fno-stack-protector -fno-pie -mno-stack-arg-probe -D_GNU_SOURCE -std=gnu2y -fms-extensions -Wno-microsoft
+FLAGS = -flto -I. -fno-stack-protector -fno-pie -mno-stack-arg-probe -D_GNU_SOURCE -std=gnu2y -fms-extensions -Wno-microsoft
 LIBS = -lOpenCL -lpthread
 LDFLAGS = -Wl,-e,entry $(LIBS)
 
