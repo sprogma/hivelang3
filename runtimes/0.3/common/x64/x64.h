@@ -1,0 +1,30 @@
+#ifndef X64_PROVIDER_H
+#define X64_PROVIDER_H
+
+#include "../system.h"
+
+#include "../runtime_lib.h"
+#include "../remote.h"
+#include "../runtime.h"
+
+
+struct x64_worker_data
+{
+    void *start;
+    void *end;
+};
+
+
+void x64ExecuteWorker(struct queued_worker *obj);
+struct waiting_worker *x64PauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data);
+int64_t x64UpdateWaitingWorker(struct waiting_worker *wk, int64_t ticks, int64_t *rdiValue);
+void x64NewObjectUsingPage(int64_t type, int64_t size, int64_t param, int64_t *remote_id);
+int64_t x64QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue);
+void x64UpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);
+int64_t x64TryStallWorker(thread_t hThread, struct thread_data *data, int64_t runnedTicks);
+void x64StartNewLocalWorker(int64_t workerId, BYTE *inputTable);
+
+__attribute__((sysv_abi))
+void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue);
+
+#endif
