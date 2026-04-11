@@ -418,6 +418,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
         //             return 18;
         //         case HEADER_STRINGS_TABLE:
         //             return 17;
+        //         case HEADER_ENTRY_ID:
+        //             return 80;
         //     }
         //     printf("Error: unsupported action: %lld on provider %s\n", (int64_t)action, provider.c_str());
         //     return -1;

@@ -370,7 +370,8 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
         }
         return 1;
     }
-    
+
+    log("- got in state %lld\n", w->state);
     unreachable;
 }
 

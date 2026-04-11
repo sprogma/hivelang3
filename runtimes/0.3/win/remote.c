@@ -330,11 +330,11 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
                 switch (w->state)
                 {
                 //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regPush\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*8)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t, int64_t);"}})-join"`n"
-                int64_t x64OnPushObject(struct waiting_worker *, int64_t, int64_t, int64_t);
+        int64_t x64OnPushObject(struct waiting_worker *, int64_t, int64_t, int64_t);
                 //<<--QuoteEnd-->>
                 //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regPush\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"        case $($_.a):"};"            res = $($n.Name)(w, object_id, offset, size); break;"})-join"`n"
-                case WK_STATE_PUSH_OBJECT_WAIT_X64:
-                    res = x64OnPushObject(w, object_id, offset, size); break;
+        case WK_STATE_PUSH_OBJECT_WAIT_X64:
+            res = x64OnPushObject(w, object_id, offset, size); break;
                 //<<--QuoteEnd-->>
                 }
                 if (res == 1)
@@ -809,16 +809,16 @@ static int64_t HandleApiCall(struct hive_connection *con)
                         switch (w->state)
                         {
                         //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regQuery\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*16)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);"}})-join"`n"
-                        int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
-                        int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
-                        int64_t x64OnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
+                int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
+                int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
+                int64_t x64OnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
                         //<<--QuoteEnd-->>
                         //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regQuery\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*16)case $($_.a):"};"$(" "*20)res = $($n.Name)(w, object_id, query_offset, query_size, data, &rdiValue); break;"})-join"`n"
-                        case WK_STATE_GET_OBJECT_SIZE:
-                        case WK_STATE_GET_OBJECT_DATA:
-                            res = castOnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
-                        case WK_STATE_QUERY_OBJECT_WAIT_X64:
-                            res = x64OnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
+                case WK_STATE_GET_OBJECT_SIZE:
+                case WK_STATE_GET_OBJECT_DATA:
+                    res = castOnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
+                case WK_STATE_QUERY_OBJECT_WAIT_X64:
+                    res = x64OnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
                         //<<--QuoteEnd-->>
                         }
                         if (res)
