@@ -723,7 +723,7 @@ int main(int argc, char **argv)
     #endif
 
     #ifdef _WIN32
-    HANDLE hFile = CreateFile(
+    HANDLE hFile = CreateFileW(
         L"../../../res.bin",
         GENERIC_READ,
         FILE_SHARE_READ,
@@ -800,6 +800,7 @@ int main(int argc, char **argv)
     int64_t inputLen = 0, connectingToMain = 0, localInput = 0;
     int64_t resCodeId = 0, hangAfterEnd = 0, noStdin = 0;
     #ifdef _WIN32
+    int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     #endif
     while (argc > 1)

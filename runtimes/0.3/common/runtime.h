@@ -44,11 +44,11 @@ extern int64_t setjmpUN(struct jmpbuf *);
 
 struct waiting_worker
 {
-    // lock
-    _Atomic int64_t queued;
     // object waiting data
     int64_t state;
     void *state_data;
+    // lock
+    _Atomic int64_t queued;
     // worker id
     int64_t id;
     int64_t depth;

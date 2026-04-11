@@ -1,4 +1,5 @@
 param([string]$CC="clang", [switch]$Sanitize)
+pushd $PSScriptRoot
 $pseudoRelease = $true
 $FLAGS = "-I.","-fno-stack-protector", "-DUNICODE", "-D_UNICODE", "-DFREESTANDING", "-municode", "-ffreestanding", "-nostdlib", "-mno-stack-arg-probe", "-fms-extensions", "-Wno-microsoft"
 $LF = "-lgdi32", "-lshell32", "-lkernel32", "-lbcrypt", "-lws2_32", "-lOpenCL", "-Wl,-dynamicbase:no", "-Wl,-entry:entry" 
@@ -12,8 +13,9 @@ $rlsLF = ,"-flto", "-fuse-ld=lld"
 $rlsFF = ,"-fno-unwind-tables", "-fno-asynchronous-unwind-tables"
 $rlsDef = , "-DNDEBUG"
 $dbgDef = , "-D_DEBUG"
-$files = (ls -r *.c)
+$files = @(ls -r *.c) + @(ls ../common/*.c -r)
 $jobs = @()
+[void](mkdir obj -Force)
 $jobs += Start-ThreadJob {   
     fasm runtime.asm obj/asm.o
     $z = @()
@@ -38,3 +40,4 @@ $jobs += Start-ThreadJob {
     & $using:CC $z obj/asm_dbg.o -g -o d.exe "-Wl,/subsystem:console" "-Wl,/MAP:debug.map" $using:LF $using:FLAGS $using:dbgLF  || Write-Host "Error in compilation" # -fsanitize=address
 }
 $jobs | Wait-Job | Receive-Job
+popd
