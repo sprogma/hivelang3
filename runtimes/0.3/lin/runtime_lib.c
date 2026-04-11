@@ -4,7 +4,7 @@
 #include "immintrin.h"
 #include "inttypes.h"
 
-#include "runtime_lib.h"
+#include "../common/runtime_lib.h"
 
 // for generated
 #ifdef FREESTANDING

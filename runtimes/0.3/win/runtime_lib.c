@@ -1,12 +1,15 @@
 #define UNICODE 1
 #define _UNICODE 1
 
-#include "windows.h"
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+            
 #include "stdarg.h"
 #include "immintrin.h"
 #include "inttypes.h"
 
-#include "runtime_lib.h"
+#include "../common/runtime_lib.h"
 
 // for generated
 #ifdef FREESTANDING

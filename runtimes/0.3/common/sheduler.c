@@ -307,7 +307,7 @@ int64_t ShedulerStart(int64_t resCodeId)
     pthread_create(&hMaster, NULL, MasterSheduler, masterInfo);
     #endif
 
-    #ifdef _WIN
+    #ifdef _WIN32
     DWORD waitResult;
     waitResult = WaitForMultipleObjects(NUM_THREADS, masterInfo->hThreads, TRUE, INFINITE);
     masterInfo->waitForExit = 1;
