@@ -71,6 +71,12 @@ section .text
 %endmacro
 
 %macro EnterCCode 0
+    push r8
+    push r9
+    push r10
+    push r11
+    push r12
+    
     push rbx
     push rbp
     push r12
@@ -86,18 +92,30 @@ section .text
     pop r12
     pop rbp
     pop rbx
+    
+    pop r12
+    pop r11
+    pop r10
+    pop r9
+    pop r8
 %endmacro
 
 %macro CWrapper 1
     mov rax, rbp
     sub rax, 1024
     StoreContext rax
-    
-    mov r8, [rsp]
-    mov r9, rbp
+
+    mov rax, [rsp]
     
     EnterCCode
+    
+    mov r8, rax
+    mov r9, rbp
+    
     call %1
+    
+    mov rdi, rax
+    
     LeaveCCode
     ret
 %endmacro
@@ -125,6 +143,9 @@ x64AsmExecuteWorker:
     push rbx
     push rbp
 
+    push 0
+    push rdi
+
     mov r12, rdi
     mov rbp, rdx
     mov rdi, rsi
@@ -132,7 +153,9 @@ x64AsmExecuteWorker:
     
     LoadExtraContext rsi
     
-    call r12
+    call [rsp]
+
+    add rsp, 16
 
     pop rbp
     pop rbx

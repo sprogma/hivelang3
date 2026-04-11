@@ -48,9 +48,12 @@ int64_t myAbs(int64_t);
     int64_t myAtoll(wchar_t *number);
     #define print(f, ...) myPrintf(L ## f, __VA_ARGS__)
 #else
-    void myPrintf(const char *format_string, ...);
+    #ifdef FREESTANDING
+        #error Cant build freestanding library under linux
+    #endif
+    #define myPrintf printf;
+    #define print(f, ...) printf(f __VA_OPT__(,) __VA_ARGS__)
     int64_t myAtoll(const char *number);
-    #define print(f, ...) myPrintf(f __VA_OPT__(,) __VA_ARGS__)
 #endif
 
 

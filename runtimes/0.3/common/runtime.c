@@ -707,6 +707,7 @@ int main(int argc, char **argv)
 #endif
 #endif
 {
+    log("starting...\n");
     ////////////////////////// loading stage
     init_lib();
     if (init_gpu_subsystem())

@@ -330,14 +330,6 @@ void myPrintf(const wchar_t *format, ...)
     WriteConsoleW(hOutput, buf, d - buf, &written, NULL);
 }
 
-#else
-
-void myPrintf(const char *format, ...)
-{
-    (void)format;
-    exit(0);
-}
-
 #endif
 
 [[noreturn]] void assertion_failure(const char* file, int64_t line, const char* func, const char* expr) 
@@ -346,12 +338,12 @@ void myPrintf(const char *format, ...)
     print("File: %s, Line: %lld, Function: %s\n", file, line, func);
     #ifdef FREESTANDING
     #ifdef _WIN32
-    ExitProcess(0x0);
+    ExitProcess(0x1);
     #else
     #error unable compile without stdlib on linux
     #endif
     #else
-    exit(0);
+    exit(1);
     #endif
 }
 

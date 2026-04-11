@@ -1,9 +1,9 @@
 CC = clang
 AS = nasm
 
-FLAGS = -flto -I. -fno-stack-protector -fno-pie -mno-stack-arg-probe -D_GNU_SOURCE -std=gnu2y -fms-extensions -Wno-microsoft
+FLAGS = -flto -I. -fno-stack-protector -fno-pie -mno-stack-arg-probe -D_GNU_SOURCE -std=gnu2y -fms-extensions -Wno-microsoft -Wno-format
 LIBS = -lOpenCL -lpthread
-LDFLAGS = -Wl,-e,entry $(LIBS)
+LDFLAGS = $(LIBS)
 
 RLS_FLAGS = -O3 -mavx2 -flto -DNDEBUG -fno-unwind-tables -fno-asynchronous-unwind-tables
 DBG_FLAGS = -g -D_DEBUG
