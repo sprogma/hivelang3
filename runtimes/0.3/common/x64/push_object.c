@@ -57,6 +57,7 @@ int64_t x64OnPushObject(struct waiting_worker *w, int64_t object, int64_t offset
             myFree(info);
             return 1;
         }
+        WaitListWorker(w);
         return 0;
         
     }
@@ -75,10 +76,11 @@ int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rd
         if (obj == 0)
         {
             // remote object, repeat request, with timeout
+            struct wait_list_node *newNode = WaitListWorker(w);
             log("waiting for remote push %lld/%lld for obj=%lld\n", ticks, info->repeat_timeout, info->object_id);
             if (ticks > info->repeat_timeout)
             {
-                RequestObjectSet(info->object_id, info->offset, myAbs(info->size), info->data, w);
+                RequestObjectSet(info->object_id, info->offset, myAbs(info->size), info->data, newNode);
                 info->repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT);
             }
             return 0;
@@ -89,8 +91,7 @@ int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rd
             myFree(info);
             return 1;
         }
-        return 0;
-        
+        unreachable;
     }
     unreachable;
 }
@@ -119,7 +120,7 @@ void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size
             .repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT),
         };
         SECURE_RANDOM(info->id, BROADCAST_ID_LENGTH);
-        struct waiting_worker *wait = universalPauseWorker(returnAddress, rbpValue, WK_STATE_PUSH_OBJECT_WAIT_X64, info);
+        struct wait_list_node *wait = universalPauseWorker(returnAddress, rbpValue, WK_STATE_PUSH_OBJECT_WAIT_X64, info);
         
         /* shedule query */
         RequestObjectSet(object_id, offset, myAbs(size), data, wait);

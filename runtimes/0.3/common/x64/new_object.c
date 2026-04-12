@@ -119,6 +119,7 @@ int64_t x64NewObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rdi
             myFree(info);
             return 1;
         }
+        WaitListWorker(w);
         return 0;
     }
     

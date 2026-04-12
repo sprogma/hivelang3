@@ -14,6 +14,7 @@ $rlsFF = ,"-fno-unwind-tables", "-fno-asynchronous-unwind-tables"
 $rlsDef = , "-DNDEBUG"
 $dbgDef = , "-D_DEBUG"
 $files = @(ls -r *.c) + @(ls ../common/*.c -r)
+$h = @(ls -r *.h) + @(ls ../common/*.h -r)
 $jobs = @()
 [void](mkdir obj -Force)
 $jobs += Start-ThreadJob {   
@@ -24,7 +25,15 @@ $jobs += Start-ThreadJob {
         $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
         $o = "obj/$o"
         $z += $o
-        & $using:CC $_ -c -o $o $Speed -g $using:rlsDef -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS $using:rlsFF || Write-Host "Error in compilation"
+        if ((@($_.LastWriteTime) + ($using:h).LastWriteTime) -gt (gi $o 2>$null).LastWriteTime)
+        {
+            Write-Host "becouse of $((@($_) + ($using:h)) | ? {$_.LastWriteTime -gt $o.LastWriteTime} | % N*) rebuild $_"
+            & $using:CC $_ -c -o $o $Speed -g $using:rlsDef -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS $using:rlsFF || Write-Host "Error in compilation"
+        }
+        else
+        {
+            Write-Host "skip building $_"
+        }
     }
     & $using:CC $z obj/asm.o -g -o a.exe $Speed "-Wl,/subsystem:console" "-Wl,/MAP:release.map" $using:LF $using:FLAGS $using:rlsLF $using:rlsFF || Write-Host "Error in compilation"
 }
@@ -35,9 +44,17 @@ $jobs += Start-ThreadJob {
         $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
         $o = "obj/dbg_$o"
         $z += $o
-        & $using:CC $_ -c -o $o -g $using:dbgDef -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS  || Write-Host "Error in compilation" # -fsanitize=address
+        if ((@($_.LastWriteTime) + ($using:h).LastWriteTime) -gt (gi $o 2>$null).LastWriteTime)
+        {
+            Write-Host "becouse of $((@($_) + ($using:h)) | ? {$_.LastWriteTime -gt $o.LastWriteTime} | % N*) rebuild $_"
+            & $using:CC $_ -c -o $o -g $using:dbgDef -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS  || Write-Host "Error in compilation" # -fsanitize=address
+        }
+        else
+        {
+            Write-Host "skip building $_"
+        }
     }
     & $using:CC $z obj/asm_dbg.o -g -o d.exe "-Wl,/subsystem:console" "-Wl,/MAP:debug.map" $using:LF $using:FLAGS $using:dbgLF  || Write-Host "Error in compilation" # -fsanitize=address
 }
-$jobs | Wait-Job | Receive-Job
+$jobs | Receive-Job -Wait
 popd

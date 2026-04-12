@@ -82,7 +82,7 @@ int64_t GetNewObjectId(int64_t *result)
 }
 
 
-struct waiting_worker *universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
+struct wait_list_node *universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
 {
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
     switch (Workers[lc_data->runningId].provider)
@@ -149,7 +149,7 @@ void PrintObject(struct object *object_ptr)
 }
 
 
-void WaitListNode(struct wait_list_node *node)
+struct wait_list_node *WaitListNode(struct wait_list_node *node)
 {
     struct wait_list_node *old_head = atomic_load_explicit(&wait_list, memory_order_acquire);
     do 
@@ -159,14 +159,16 @@ void WaitListNode(struct wait_list_node *node)
     while (!atomic_compare_exchange_weak(&wait_list, &old_head, node));
 
     atomic_fetch_add_explicit(&wait_list_len, 1, memory_order_relaxed);
+
+    return node;
 }
 
-void WaitListWorker(struct waiting_worker *t)
+struct wait_list_node *WaitListWorker(struct waiting_worker *t)
 {
     struct wait_list_node *node = myMalloc(sizeof(*node));
     node->worker = t;
-    WaitListNode(node);
     log("Worker add to wait list [id=%lld data=%p]\n", t->id, t->data);
+    return WaitListNode(node);
 }
 
 void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
@@ -212,14 +214,13 @@ void UpdateWaitingWorkers()
     for (struct wait_list_node *curr = data, *nxt = data ? data->next : data; curr; curr = nxt, nxt = nxt ? nxt->next : nxt)
     {
         struct waiting_worker *w = curr->worker;
-        if (!w) continue;
         
         int64_t res = 0;
         int64_t rdiValue = 0;
-        // print("wait for %lld\n", w->state);
+        log("worker [data=%p]: wait for %lld\n", w, w->state);
         switch (w->state)
         {
-            // delarations
+            // declarations
             //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@reg\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*12)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t *);"}})-join"`n"
             int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
             int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
@@ -254,12 +255,6 @@ void UpdateWaitingWorkers()
             EnqueueWorkerFromWaitList(w, rdiValue);
             // myFree(w); // TODO: add label counts and etc.
             myFree(curr);
-            continue;
-        }
-        else
-        {
-            WaitListNode(curr);
-            continue;
         }
     }
 }

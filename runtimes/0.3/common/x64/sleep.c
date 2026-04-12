@@ -29,6 +29,7 @@ int64_t x64SleepStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValu
             myFree(info);
             return 1;
         }
+        WaitListWorker(w);
         return 0;
     }
     unreachable;

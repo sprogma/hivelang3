@@ -76,7 +76,7 @@ struct queued_worker
 
 
 
-void WaitListWorker(struct waiting_worker *t);
+struct wait_list_node *WaitListWorker(struct waiting_worker *t);
 
 
 
@@ -173,7 +173,7 @@ extern struct hive_provider_info Providers[];
 
 struct wait_list_node
 {
-    struct waiting_worker * _Atomic worker;
+    struct waiting_worker *worker;
     struct wait_list_node *next;
 };
 extern struct wait_list_node * _Atomic wait_list;

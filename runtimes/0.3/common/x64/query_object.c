@@ -55,6 +55,7 @@ int64_t x64OnQueryObject(struct waiting_worker *w, int64_t object, int64_t offse
             myFree(info);
             return 1;
         }
+        WaitListWorker(w);        
         return 0;
     }
         
@@ -74,11 +75,12 @@ int64_t x64QueryObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *r
         struct object *obj = (void *)i64GetHashtable(&local_objects, info->object_id, 0);
         if (obj == 0)
         {
+            struct wait_list_node *newNode = WaitListWorker(w);
             // remote object, repeat request, with timeout
             log("waiting for remote query %lld/%lld\n", ticks, info->repeat_timeout);
             if (ticks > info->repeat_timeout)
             {                   
-                RequestObjectGet(info->object_id, info->offset, myAbs(info->size), NULL); // todo: fix this !!!
+                RequestObjectGet(info->object_id, info->offset, myAbs(info->size), newNode);
                 info->repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT);
             }
             return 0;
@@ -117,12 +119,6 @@ int64_t x64QueryObject(void *destination, int64_t object_id, int64_t offset, int
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
     lc_data->stallable = 0;
     
-    if (obj == NULL)
-    {
-        // send request
-        RequestObjectGet(object_id, offset, myAbs(size), NULL); // todo: fix this !!!
-    }
-    
     /* shedule query */
     struct wait_query_info *query = myMalloc(sizeof(*query));
     *query = (struct wait_query_info){
@@ -133,7 +129,10 @@ int64_t x64QueryObject(void *destination, int64_t object_id, int64_t offset, int
         .repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT),
     };
     SECURE_RANDOM(query->id, BROADCAST_ID_LENGTH);
-    universalPauseWorker(returnAddress, rbpValue, WK_STATE_QUERY_OBJECT_WAIT_X64, query);
+    struct wait_list_node *worker = universalPauseWorker(returnAddress, rbpValue, WK_STATE_QUERY_OBJECT_WAIT_X64, query);
+    
+    // send request
+    RequestObjectGet(object_id, offset, myAbs(size), worker);
 
     longjmpUN(&lc_data->ShedulerBuffer, 1);
 }

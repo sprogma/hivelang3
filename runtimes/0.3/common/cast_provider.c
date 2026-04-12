@@ -87,6 +87,7 @@ int64_t castOnQueryObject(struct waiting_worker *w, int64_t object, int64_t offs
         w->state_data = info;
         return anyCastStates(w, GetTicks(), rdiValue);
     }
+    WaitListWorker(w);
     return 0;
 }
 
@@ -106,6 +107,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
     int64_t known_param;
     int64_t known_type;
     int64_t new_id;
+    struct wait_list_node *waitNode = NULL;
     #define loadFrom(s) { \
         obj = (s)->ci.object; \
         to = (s)->ci.to; from = (s)->ci.from; \
@@ -114,7 +116,6 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
         known_type = (s)->ci.known_type; \
         new_id = (s)->ci.new_id; \
     }
-    #define EXTRA_INIT
     #define pauseIfNeeded(s, T, ...) { \
         T *info = myMalloc(sizeof(*info)); \
         *info = (T){.ci = { \
@@ -127,13 +128,15 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
             .new_id=new_id} __VA_OPT__(,) __VA_ARGS__}; \
         EXTRA_INIT \
         if (w == NULL) { \
-            universalPauseWorker(running->returnAddress, running->rbpValue, s, info); \
+            waitNode = universalPauseWorker(running->returnAddress, running->rbpValue, s, info); \
             struct thread_data* lc_data = TlsGetValue(dwTlsIndex); \
+            REQUEST_CODE; \
             longjmpUN(&lc_data->ShedulerBuffer, 1); \
         } else { \
             myFree(w->state_data); \
             w->state_data = info; \
             w->state = s; \
+            waitNode = WaitListWorker(w); \
         } \
     }
     
@@ -155,7 +158,11 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
             
             if (!GetNewObjectId(&new_id))
             {
+                #define EXTRA_INIT
+                #define REQUEST_CODE
                 pauseIfNeeded(WK_STATE_CAST_WAIT_PAGES, struct waiting_pages)
+                #undef EXTRA_INIT
+                #undef REQUEST_CODE
                 return 0;
             }
 
@@ -187,15 +194,17 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                     struct object *lc_obj = (void *)i64GetHashtable(&local_objects, info->ci.object, 0);
                     if (lc_obj == 0)
                     {
+                        struct wait_list_node *newNode = WaitListWorker(w);
                         if (ticks > info->repeat_timeout)
                         {                   
-                            RequestObjectGet(info->ci.object, info->offset, myAbs(info->size), w);
+                            RequestObjectGet(info->ci.object, info->offset, myAbs(info->size), newNode);
                             info->repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT);
                         }
                         return 0;
                     }
                     if (x64QueryLocalObject(&known_size, lc_obj, -16, 6, NULL) == 0)
                     {
+                        WaitListWorker(w);
                         return 0;
                     }
                     log("got local size answer\n");
@@ -206,22 +215,21 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                     BYTE *lc_obj = (BYTE *)i64GetHashtable(&local_objects, obj, 0);
                     if (lc_obj == NULL)
                     {
-                        RequestObjectGet(obj, -16, 6, w);
-                        
                         /* shedule query */
-                        #undef EXTRA_INIT
                         #define EXTRA_INIT SECURE_RANDOM(info->id, BROADCAST_ID_LENGTH);
+                        #define REQUEST_CODE RequestObjectGet(obj, -16, 6, waitNode);
                         pauseIfNeeded(WK_STATE_GET_OBJECT_SIZE, struct wait_query_info, 
                             .offset = -16,
                             .size = 6,
                             .repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT)
                         )
                         #undef EXTRA_INIT
-                        #define EXTRA_INIT
+                        #undef REQUEST_CODE
                         return 0;
                     }
                     if (x64QueryLocalObject(&known_size, lc_obj, -8, 6, NULL) == 0)
                     {
+                        WaitListWorker(w);
                         return 0;
                     }
                     log("got local size answer\n");
@@ -283,9 +291,10 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                 struct object *lc_obj = (void *)i64GetHashtable(&local_objects, info->ci.object, 0);
                 if (lc_obj == 0)
                 {
+                    struct wait_list_node *newNode = WaitListWorker(w);
                     if (ticks > info->repeat_timeout)
                     {                   
-                        RequestObjectGet(info->ci.object, info->offset, myAbs(info->size), w);
+                        RequestObjectGet(info->ci.object, info->offset, myAbs(info->size), newNode);
                         info->repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT);
                     }
                     return 0;
@@ -296,6 +305,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                     struct object_promise *p = (struct object_promise *)(lc_obj - DATA_OFFSET(*p));
                     if (!p->ready)
                     {
+                        WaitListWorker(w);
                         return 0;
                     }
                 }
@@ -306,18 +316,16 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                 BYTE *lc_obj = (BYTE *)i64GetHashtable(&local_objects, obj, 0);
                 if (lc_obj == NULL)
                 {
-                    RequestObjectGet(obj, 0, known_size, w);
-                    
                     /* shedule query */
-                    #undef EXTRA_INIT
                     #define EXTRA_INIT SECURE_RANDOM(info->id, BROADCAST_ID_LENGTH);
+                    #define REQUEST_CODE RequestObjectGet(obj, 0, known_size, waitNode);     
                     pauseIfNeeded(WK_STATE_GET_OBJECT_DATA, struct wait_query_info, 
                         .offset = 0,
                         .size = known_size,
                         .repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT)
                     )
                     #undef EXTRA_INIT
-                    #define EXTRA_INIT
+                    #undef REQUEST_CODE
                     return 0;
                 }
 
@@ -326,6 +334,7 @@ int64_t anyCastStates(struct waiting_worker *w, int64_t ticks, int64_t *rdiValue
                     struct object_promise *p = (struct object_promise *)(lc_obj - DATA_OFFSET(*p));
                     if (!p->ready)
                     {
+                        WaitListWorker(w);
                         return 0;
                     }
                 }

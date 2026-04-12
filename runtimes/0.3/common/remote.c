@@ -358,19 +358,78 @@ static void *ConnectionListnerWorker(void *param)
     return 0;
 }
 
+void UpdateWaitingQuery(int64_t object_id, int64_t query_offset, int64_t query_size, BYTE *data)
+{    
+    /* for each local_id requesting this query - answer */
+    lock_write(&query_requests.lock);
+    struct query_object_request key = { object_id, query_offset, query_size, NULL, NULL };
+    struct query_object_request *q = (void *)GetHashtableNoLock(&query_requests, (BYTE *)&key, QUERY_HASHING_BYTES, 0);
+    struct linked_node *cur = NULL;
+    struct linked_node *wlt = NULL;
+    if (q != NULL)
+    {
+        cur = atomic_exchange(&q->local_ids, NULL);
+        wlt = atomic_exchange(&q->wait_list, NULL);
+    }
+    unlock_write(&query_requests.lock);
+
+    /* redirect answer */
+    while (cur)
+    {
+        AnswerQueryObject(GetConnectionById(cur->local_id, NULL), data, object_id, query_offset, query_size);
+        void *tmp = cur;
+        cur = cur->next;
+        myFree(tmp);
+    }
+
+    /**/
+    while (wlt)
+    {
+        /* update wait list */
+        {
+            struct wait_list_node *node = (void *)wlt->local_id;
+            struct waiting_worker *w = node->worker;
+            log("update worker: %p\n", w);
+            int64_t res = 0, rdiValue;
+            switch (w->state)
+            {
+            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regQuery\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*16)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);"}})-join"`n"
+    int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
+    int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
+    int64_t x64OnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
+            //<<--QuoteEnd-->>
+            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regQuery\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*16)case $($_.a):"};"$(" "*20)res = $($n.Name)(w, object_id, query_offset, query_size, data, &rdiValue); break;"})-join"`n"
+    case WK_STATE_GET_OBJECT_SIZE:
+    case WK_STATE_GET_OBJECT_DATA:
+        res = castOnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
+    case WK_STATE_QUERY_OBJECT_WAIT_X64:
+        res = x64OnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
+            //<<--QuoteEnd-->>
+            }
+            if (res)
+            {
+                EnqueueWorkerFromWaitList(w, rdiValue);
+                // myFree(w); // TODO: fix allocation
+            }
+        }
+        void *tmp = wlt;
+        wlt = wlt->next;
+        myFree(tmp);
+    }
+}
+
 void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
 {
     /* for each local_id requesting this query - answer */
     lock_read(&push_requests.lock);
-    struct query_object_request key = { object_id, offset, size, NULL, NULL };
-    struct query_object_request *p = (void *)GetHashtableNoLock(&push_requests, (BYTE *)&key, PUSH_HASHING_BYTES, 0);
+    struct push_object_request key = { object_id, offset, size, NULL, NULL };
+    struct push_object_request *p = (void *)GetHashtableNoLock(&push_requests, (BYTE *)&key, PUSH_HASHING_BYTES, 0);
     struct linked_node *cur = NULL;
     struct linked_node *wlt = NULL;
     if (p != NULL)
     {
-        cur = p->local_ids;
-        wlt = p->wait_list;
-        p->local_ids = NULL;
+        cur = atomic_exchange(&p->local_ids, NULL);
+        wlt = atomic_exchange(&p->wait_list, NULL);
     }
     unlock_read(&push_requests.lock);
 
@@ -388,29 +447,23 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
         /* update wait list */
         {
             struct wait_list_node *node = (void *)wlt->local_id;
-            struct waiting_worker *w = atomic_exchange(&node->worker, NULL);
-            if (w != NULL)
+            struct waiting_worker *w = node->worker;
+            log("update worker: %p\n", w);
+            int64_t res = 0;
+            switch (w->state)
             {
-                int64_t res = 0;
-                switch (w->state)
-                {
-                //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regPush\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*8)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t, int64_t);"}})-join"`n"
-        int64_t x64OnPushObject(struct waiting_worker *, int64_t, int64_t, int64_t);
-                //<<--QuoteEnd-->>
-                //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regPush\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"        case $($_.a):"};"            res = $($n.Name)(w, object_id, offset, size); break;"})-join"`n"
-        case WK_STATE_PUSH_OBJECT_WAIT_X64:
-            res = x64OnPushObject(w, object_id, offset, size); break;
-                //<<--QuoteEnd-->>
-                }
-                if (res == 1)
-                {
-                    EnqueueWorkerFromWaitList(w, 0);
-                    // myFree(w); // TODO: fix allocations?
-                }
-                else
-                {
-                    WaitListWorker(w);
-                }
+            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regPush\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*8)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t, int64_t);"}})-join"`n"
+    int64_t x64OnPushObject(struct waiting_worker *, int64_t, int64_t, int64_t);
+            //<<--QuoteEnd-->>
+            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regPush\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"        case $($_.a):"};"            res = $($n.Name)(w, object_id, offset, size); break;"})-join"`n"
+    case WK_STATE_PUSH_OBJECT_WAIT_X64:
+        res = x64OnPushObject(w, object_id, offset, size); break;
+            //<<--QuoteEnd-->>
+            }
+            if (res == 1)
+            {
+                EnqueueWorkerFromWaitList(w, 0);
+                // myFree(w); // TODO: fix allocations?
             }
         }
         void *tmp = wlt;
@@ -824,10 +877,17 @@ static int64_t HandleApiCall(struct hive_connection *con)
                 SetHashtableNoLock(&query_requests, (BYTE *)q, QUERY_HASHING_BYTES, (int64_t)q);
             }
             /* update q's linked list */
-            new_node->next = q->local_ids;
-            q->local_ids = new_node;
+            struct linked_node *old_head = q->local_ids;
+            do 
+            {
+                new_node->next = old_head;
+            } 
+            while (!atomic_compare_exchange_weak(&q->local_ids, &old_head, new_node));
             
             unlock_write(&query_requests.lock);
+
+            /* repeat request */            
+            RequestObjectGet(object_id, query_offset, query_size, NULL);
             
             return 1;
         }
@@ -837,70 +897,11 @@ static int64_t HandleApiCall(struct hive_connection *con)
             int64_t query_offset = *(int64_t *)(ctx->res_buffer+8);
             int64_t query_size = *(int64_t *)(ctx->res_buffer+16);
             BYTE *data = ctx->res_buffer+24;
-
-            /* for each local_id requesting this query - answer */
-            lock_write(&query_requests.lock);
-            struct query_object_request key = { object_id, query_offset, query_size, NULL, NULL };
-            struct query_object_request *q = (void *)GetHashtableNoLock(&query_requests, (BYTE *)&key, QUERY_HASHING_BYTES, 0);
-            struct linked_node *cur = NULL;
-            struct linked_node *wlt = NULL;
-            if (q != NULL)
-            {
-                cur = q->local_ids;
-                wlt = q->wait_list;
-                q->local_ids = NULL;
-            }
-            unlock_write(&query_requests.lock);
-
-            /* redirect answer */
-            while (cur)
-            {
-                AnswerQueryObject(GetConnectionById(cur->local_id, NULL), data, object_id, query_offset, query_size);
-                void *tmp = cur;
-                cur = cur->next;
-                myFree(tmp);
-            }
-
-            /**/
-            while (wlt)
-            {
-                /* update wait list */
-                {
-                    struct wait_list_node *node = (void *)wlt->local_id;
-                    struct waiting_worker *w = atomic_exchange(&node->worker, NULL);
-                    if (w != NULL)
-                    {
-                        int64_t res = 0, rdiValue;
-                        switch (w->state)
-                        {
-                        //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regQuery\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*16)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);"}})-join"`n"
-                int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
-                int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
-                int64_t x64OnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
-                        //<<--QuoteEnd-->>
-                        //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regQuery\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*16)case $($_.a):"};"$(" "*20)res = $($n.Name)(w, object_id, query_offset, query_size, data, &rdiValue); break;"})-join"`n"
-                case WK_STATE_GET_OBJECT_SIZE:
-                case WK_STATE_GET_OBJECT_DATA:
-                    res = castOnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
-                case WK_STATE_QUERY_OBJECT_WAIT_X64:
-                    res = x64OnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
-                        //<<--QuoteEnd-->>
-                        }
-                        if (res)
-                        {
-                            EnqueueWorkerFromWaitList(w, rdiValue);
-                            // myFree(w); // TODO: fix allocation
-                        }
-                        else
-                        {
-                            WaitListWorker(w);
-                        }
-                    }
-                }
-                void *tmp = wlt;
-                wlt = wlt->next;
-                myFree(tmp);
-            }
+            
+            /* for each program in waiting list - continue if this is it's request */
+            /* for each waiting local_id - answer */
+            UpdateWaitingQuery(object_id, query_offset, query_size, data);
+            
             return 1;
         }
         case API_PUSH_OBJECT:
@@ -939,8 +940,12 @@ static int64_t HandleApiCall(struct hive_connection *con)
                 SetHashtableNoLock(&push_requests, (BYTE *)p, PUSH_HASHING_BYTES, (int64_t)p);
             }
             /* update p's linked list */
-            new_node->next = p->local_ids;
-            p->local_ids = new_node;
+            struct linked_node *old_head = p->local_ids;
+            do 
+            {
+                new_node->next = old_head;
+            } 
+            while (!atomic_compare_exchange_weak(&p->local_ids, &old_head, new_node));
             unlock_write(&push_requests.lock);
             
             /* and forward this push futher */
@@ -1674,11 +1679,8 @@ void RequestPathToIDBroadcast(int64_t global_id, int64_t except_this_local_id)
 }
 
 
-void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiting_worker *worker)
+void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct wait_list_node *worker)
 {
-    (void)worker;
-    glbStatRemoteOutputRequests++;
-    
     // find object in object table
     struct known_object *obj = (void *)GetHashtable(&known_objects, (BYTE *)&object, 8, 0);
     if (obj == NULL || obj->local_id == -1)
@@ -1690,6 +1692,34 @@ void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiti
         // now, we can't resolve request
         return;
     }
+
+    // add worker as waiting for request
+    if (worker)
+    {
+        log("Wait hashtable list insert %p worker [read]\n", worker);
+        struct linked_node *new_node = myMalloc(sizeof(*new_node));
+        new_node->local_id = (int64_t)worker;
+        
+        lock_write(&query_requests.lock);
+        struct push_object_request key = { object, offset, size, NULL, NULL };
+        struct push_object_request *p = (void *)GetHashtableNoLock(&query_requests, (BYTE *)&key, PUSH_HASHING_BYTES, 0);
+        if (p == NULL)
+        {
+            p = myMalloc(sizeof(*p));
+            *p = key;
+            SetHashtableNoLock(&query_requests, (BYTE *)p, PUSH_HASHING_BYTES, (int64_t)p);
+        }
+        /* update p's linked list */
+        struct linked_node *old_head = p->wait_list;
+        do
+        {
+            new_node->next = old_head;
+        } 
+        while (!atomic_compare_exchange_weak(&p->wait_list, &old_head, new_node));
+        unlock_write(&query_requests.lock);
+    }
+
+    glbStatRemoteOutputRequests++;
     
     // now, we know which hive handles object - request it from him
     struct hive_connection *connection = GetConnectionById(obj->local_id, NULL);
@@ -1703,7 +1733,7 @@ void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiti
     unlock_write(&connection->lock);
 }
 
-void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data, struct waiting_worker *worker)
+void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data, struct wait_list_node *worker)
 {
     log("request set object=%lld\n", object_id);
     // if this is local object - simply set it and answer [to who?]
@@ -1721,6 +1751,7 @@ void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *dat
     // add worker as waiting for push
     if (worker)
     {
+        log("Wait hashtable list insert %p worker [write]\n", worker);
         struct linked_node *new_node = myMalloc(sizeof(*new_node));
         new_node->local_id = (int64_t)worker;
         
@@ -1734,8 +1765,12 @@ void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *dat
             SetHashtableNoLock(&push_requests, (BYTE *)p, PUSH_HASHING_BYTES, (int64_t)p);
         }
         /* update p's linked list */
-        new_node->next = p->wait_list;
-        p->local_ids = new_node;
+        struct linked_node *old_head = p->wait_list;
+        do 
+        {
+            new_node->next = old_head;
+        } 
+        while (!atomic_compare_exchange_weak(&p->wait_list, &old_head, new_node));
         unlock_write(&push_requests.lock);
     }
 

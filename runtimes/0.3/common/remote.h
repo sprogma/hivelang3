@@ -9,9 +9,8 @@
 #include "stdatomic.h"
 #include "runtime_lib.h"
 
-#include "runtime.h"
-
 struct waiting_worker;
+struct wait_list_node;
 
 // --------------------------------- network api -------------------------------
 
@@ -99,8 +98,8 @@ struct query_object_request
     int64_t object_id;
     int64_t offset;
     int64_t size;
-    struct linked_node *local_ids;
-    struct linked_node *wait_list;
+    struct linked_node * _Atomic local_ids;
+    struct linked_node * _Atomic wait_list;
 };
 #define PUSH_HASHING_BYTES 24
 struct push_object_request
@@ -108,8 +107,8 @@ struct push_object_request
     int64_t object_id;
     int64_t offset;
     int64_t size;
-    struct linked_node *local_ids;
-    struct linked_node *wait_list;
+    struct linked_node * _Atomic local_ids;
+    struct linked_node * _Atomic wait_list;
 };
 
 #define INFINITY_DISTANCE 999999
@@ -200,8 +199,8 @@ int64_t i64GetHashtableNoLock(struct i64hashtable * _Atomic *h, int64_t key, int
 void i64SetHashtable(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value);
 void i64SetHashtableNoLock(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value);
 
-void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiting_worker *worker);
-void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data, struct waiting_worker *worker);
+void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct wait_list_node *worker);
+void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data, struct wait_list_node *worker);
 void StartNewWorkerRemote(struct hive_connection *con, int64_t worker_id, int64_t global_id, void *inputTable);
 void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const void *source);
 
