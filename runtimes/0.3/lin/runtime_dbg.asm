@@ -1,1 +1,3 @@
-./runtime.asm
+%define DEBUG
+
+%include "runtime.asm"

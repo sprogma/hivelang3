@@ -1,0 +1,176 @@
+@x64
+
+[entry:yes]
+[export:yes]
+(i64[] input)main(i32? res)
+{
+    i64 W, H, size, era_count;
+    i32 count;
+    W <- input[0];
+    H <- input[1];
+    era_count <- input[2];
+    count <- `i32`input[3];
+    size <- W * H;
+
+    i8[] buffer;
+    buffer <- new i8[](size);
+
+    i8[] output_buffer;
+    output_buffer <- new i8[]((W + `i64`1) * H * `i64`2 + `i64`16);
+
+    ?(buffer, W, H, count)Init(*);
+
+    i8[]@gpu gpu_tmp;
+    i8[]@gpu gpu_A;
+    i8[]@gpu gpu_B;
+    gpu_A <- `i8[]@gpu`buffer;
+    gpu_B <- `i8[]@gpu`buffer;
+
+    i32 step, max_steps;
+    step <- 0;
+    max_steps <- 100000;
+
+    ?(output_buffer, W, H, buffer)Draw(*);
+
+    while step < max_steps
+    {
+        i64 id;
+        id <- `i64`0;
+        while id < era_count && step < max_steps
+        {
+            ?(gpu_A, gpu_B, W, H, `i64`0, `i64`0)life_step@gpu(*);
+            gpu_tmp <- gpu_A;
+            gpu_A <- gpu_B;
+            gpu_B <- gpu_tmp;
+            step <- step + 1;
+            id <- id + `i64`1;
+        }
+
+        # draw state
+        buffer <- `i8[]`gpu_A;
+        ?(output_buffer, W, H, buffer)Draw(*);
+
+        sleep 50;
+    }
+
+    # final draw
+    buffer <- `i8[]`gpu_A;
+    ?(output_buffer, W, H, buffer)Draw(*);
+    
+    res <- 0;
+}
+
+(i8[] output_buffer, i64 W, i64 H, i8[] buffer)Draw(i32? res)
+{
+    i64 pos;
+    pos <- 0;
+
+    output_buffer[pos] <- `i8`27; pos <- pos + `i64`1;
+    output_buffer[pos] <- `i8`91; pos <- pos + `i64`1;   # '['
+    output_buffer[pos] <- `i8`72; pos <- pos + `i64`1;   # 'H'
+
+    i64 x, y;
+    y <- `i64`0;
+    while y < H
+    {
+        x <- `i64`0;
+        while x < W
+        {
+            match `i32`buffer[y*W + x]
+            {
+                0 {
+                    output_buffer[pos] <- `i8`32;
+                    output_buffer[pos+`i64`1] <- `i8`32;
+                    pos <- pos + `i64`2;
+                } 1 {
+                    output_buffer[pos] <- `i8`91;
+                    output_buffer[pos+`i64`1] <- `i8`93;
+                    pos <- pos + `i64`2;
+                }
+            }
+            x <- x + `i64`1;
+        }
+        output_buffer[pos] <- `i8`10;
+        pos <- pos + `i64`1;
+        y <- y + `i64`1;
+    }
+
+    ?(`i32`1, output_buffer, pos)write@dll(*);
+    res <- 0;
+}
+
+(i8[] buffer, i64 W, i64 H, i32 count)Init(i32? res)
+{
+    i64 size;
+    size <- (W + H)/20 + `i64`2;
+
+    i32 cnt;
+    u64 p;
+    p <- ?(`i64`0)time@dll(*);
+
+    cnt <- 0;
+    while cnt < count
+    {
+
+        i64 x, y, sx, sy;
+        sx <- `i64`(p/`u64`59811%`u64`W);
+        sy <- y <- `i64`(p/`u64`24812%`u64`H);
+        while y < sy+size
+        {
+            x <- sx;
+            while x < sx+size
+            {
+                buffer[(y%H)*W + (x%W)] <- `i8`-(p / `u64`1000000009 % `u64`100 < `u64`23); # 23% live cells
+                p <- p * `u64`998244353 + `u64`57;
+                x <- x + `i64`1;
+            }
+            y <- y + `i64`1;
+        }
+        
+        cnt <- cnt + 1;
+    }
+    res <- 0;
+}
+
+@gpu
+
+[GPUxVariable:x]
+[GPUyVariable:y]
+[GPUxSize:W]
+[GPUySize:H]
+[integer64:yes]
+(i8[] src, i8[] dst, i64 W, i64 H, i64 x, i64 y)life_step(i32?@x64 await)
+{
+    i64 nx, ny, live, dy, dx;
+    i8 current_state;
+    
+    current_state <- src[y*W + x];
+    live <- -`i64`current_state;
+    
+    dy <- H-1;
+    while dy <= H+1 
+    {
+        dx <- W-1;
+        while dx <= W+1 
+        {
+            ny <- (y + dy) % H;
+            nx <- (x + dx) % W;
+            live <- live + `i64`src[ny*W + nx];
+            dx <- dx + 1;
+        }
+        dy <- dy + 1;
+    }
+
+
+    dst[y*W + x] <- `i8`(-(live = 3 || (live = 2 && current_state = `i8`1)));
+}
+
+@x64
+
+# --- Linux libc imports ---
+
+[dllimport:libc.so]
+(i32 fd, i8[] buf, i64 count)write(i64? result);
+
+[dllimport:libc.so]
+(i64 zero)time(u64? time);

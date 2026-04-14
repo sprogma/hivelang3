@@ -15,6 +15,8 @@
 #include "dll/dll.h"
 #include "loc/loc.h"
 
+int printStats = 1;
+
 int64_t NUM_THREADS = 1;
 int64_t CHUNK_TIME_US = 50000;
 struct defined_array *defined_arrays;
@@ -191,15 +193,18 @@ void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
 void UpdateWaitingWorkers()
 {
     int64_t ticks = GetTicks();
+
+    log("Update waiting workers\n");
     
     // take all workers
     struct wait_list_node *data = NULL;
     data = atomic_exchange(&wait_list, data);
-
+    wait_list_len = 0; // this can be not right, but it is ok
 
     // work with them:
     // reverse list
     {
+        int64_t count = 0;
         struct wait_list_node *curr = data, *prev = NULL, *tmp = NULL;
         while (curr)
         {
@@ -207,9 +212,13 @@ void UpdateWaitingWorkers()
             curr->next = prev;
             prev = curr;
             curr = tmp;
+            count++;
         }
         data = prev;
+        log("Got %lld workers to update\n", count);
+        Sleep(1);
     }
+    
 
     for (struct wait_list_node *curr = data, *nxt = data ? data->next : data; curr; curr = nxt, nxt = nxt ? nxt->next : nxt)
     {
@@ -543,10 +552,35 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                 data->output_size = output_size;
                 data->inputMapLength = inputs_len;
                 data->inputMap = inputs;
-                data->call_stack_usage = 32 + 16 * (inputs_len < 4 ? 0 : (inputs_len - 4 + 1) / 2);
+
+                data->call_stack_usage = 0;
+                for (int64_t i = 0, count = 6; i < inputs_len; ++i)
+                {
+                    if (inputs[i].size > 16)
+                    {
+                        data->call_stack_usage += (inputs[i].size + 7) / 8 * 8;
+                        count = 0;
+                        continue;
+                    }
+                    if (inputs[i].size <= 8 * count)
+                    {
+                        count -= (inputs[i].size + 7) / 8;
+                        continue;
+                    }
+                    data->call_stack_usage += (inputs[i].size + 7) / 8 * 8;
+                }
+                data->call_stack_usage = (data->call_stack_usage + 15) / 16 * 16;
+
                 memcpy(data->entryName, entry, entryLen + 1);
                 Workers[id] = (struct worker_info){PROVIDER_DLL, data, totalSize, affinity};
                 #endif
+
+                if (data->entry == NULL)
+                {
+                    print("Error: can't load dll function <%s> from library <%s>\n", entry, lib_name);
+                    ExitProcess(1);
+                }
+                
                 // log data
                 log("worker %lld is dll call of library %s %s -> result function is %p\n", id, lib_name, entry, data->entry);
                 log("stack usage: %lld\n", data->call_stack_usage);
@@ -816,6 +850,11 @@ int main(int argc, char **argv)
         {
             localInput = 1;
             print("Input will be local array\n");
+        }
+        else if (argv[1][0] == 'q')
+        {
+            printStats = 0;
+            print("Will not print table with information\n");
         }
         else if (argv[1][0] == 'j')
         {

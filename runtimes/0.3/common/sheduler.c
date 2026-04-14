@@ -170,21 +170,24 @@ thread_result_t MasterSheduler(void *vparam)
     {
         // do we need to display progress counters?
         int64_t now = GetTicks();
-        if (now - prevPrint > MicrosecondsToTicks(100000))
+        if (printStats)
         {
-            print("|");
-            for (int64_t i = 0; i < NUM_THREADS; ++i)
+            if (now - prevPrint > MicrosecondsToTicks(100000))
             {
-                int64_t exec = atomic_exchange(&info->shedulers[i]->data->executedTasks, 0);
-                int64_t done = atomic_exchange(&info->shedulers[i]->data->completedTasks, 0);
-                int64_t stall = atomic_exchange(&info->shedulers[i]->data->stalledTasks, 0);
-                print(" %7lld %6lld %5lld |", exec, done, stall);
+                print("|");
+                for (int64_t i = 0; i < NUM_THREADS; ++i)
+                {
+                    int64_t exec = atomic_exchange(&info->shedulers[i]->data->executedTasks, 0);
+                    int64_t done = atomic_exchange(&info->shedulers[i]->data->completedTasks, 0);
+                    int64_t stall = atomic_exchange(&info->shedulers[i]->data->stalledTasks, 0);
+                    print(" %7lld %6lld %5lld |", exec, done, stall);
+                }
+                int64_t rpmiss = atomic_exchange(&glbStatRemotePathMisses, 0);
+                int64_t roreq = atomic_exchange(&glbStatRemoteOutputRequests, 0);
+                int64_t rireq = atomic_exchange(&glbStatRemoteInputRequests, 0);
+                print(" %5lld | %5lld | %6lld | %5lld | %5lld |\n", wait_list_len, glb_scheduler.len, rpmiss, roreq, rireq);
+                prevPrint = now;
             }
-            int64_t rpmiss = atomic_exchange(&glbStatRemotePathMisses, 0);
-            int64_t roreq = atomic_exchange(&glbStatRemoteOutputRequests, 0);
-            int64_t rireq = atomic_exchange(&glbStatRemoteInputRequests, 0);
-            print(" %5lld | %5lld | %6lld | %5lld | %5lld |\n", wait_list_len, glb_scheduler.len, rpmiss, roreq, rireq);
-            prevPrint = now;
         }
 
         // check is there promise ready?        

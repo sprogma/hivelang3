@@ -194,47 +194,112 @@ longjmpUN:
 .not_zero:
     jmp [rdi + 56]
 
-; DllCall(data, input_data, promise)
-; rdi=data, rsi=input_data, rdx=promise
+; DllCall(data, input_data, output_promise)
+; rdi = data, rsi = input_data, rdx = output_promise
 DllCall:
+    push rbp
+    mov rbp, rsp
+    push rbx
     push r12
     push r13
     push r14
     push r15
-    push rbx
 
-    mov r12, [rdi + 24]
-    mov r13, rdx
-    mov r14, [rdi + 8]
-    mov r15, [rdi + 16]
+    mov rbx, [rdi]          ; entry
+    mov r14, [rdi + 8]      ; output_size
+    mov r15, [rdi + 16]     ; inputMapLength
+    mov r12, [rdi + 24]     ; call_stack_usage
+    mov r13, [rdi + 32]     ; inputMap
+
+    push rdx                ; save output_promise
+
+    sub rsp, 6*8 ; space for temporary registers
     
-    mov rbx, [rdi]
-    mov rax, rsi
+    %ifdef DEBUG
+    xor eax, eax
+    mov [rsp], rax
+    mov [rsp+8], rax
+    mov [rsp+16], rax
+    mov [rsp+24], rax
+    mov [rsp+32], rax
+    mov [rsp+40], rax
+    %endif
 
-    sub rsp, r12
+    sub rsp, r12 ; stack
 
-    ; move all other arguments to stack
-    cmp r15, 4
-    jle .L1e
-.L1:
-    sub r15, 1
-    mov rcx, [rdi + 8 * r15]
-    mov [rsp + 8 * r15], rcx
-    cmp r15, 4
-    jg .L1
-.L1e:
-    
-    mov rdi, [rax + 0]
-    mov rsi, [rax + 8]
-    mov rdx, [rax + 16]
-    mov rcx, [rax + 24]
-    mov r8,  [rax + 32]
-    mov r9,  [rax + 40]
+    ; stack
+    ; [rsp]                - args
+    ; [rsp + r12]          - temporary registers
+    ; [rsp + r12 + 48]     - output_promise
+    ; [rsp + r12 + 48 + 8] - rbp...
+
+    xor r8d, r8d ; stack used
+    xor r9d, r9d ; index
+    xor r11d, r11d ; used registers
+    lea rdi, [rsp + r12]
+
+.arg_loop:
+    cmp r9, r15
+    jge .args_done
+
+    mov r10, [r13 + r9*8 + 8] ; size
+    mov rax, [rsi + r9*8] ; pointer
+
+    cmp r10, 16
+    ja .to_stack
+
+    cmp r10, 8
+    jbe .try_register
+    cmp r11, 5
+    jg .to_stack
+    mov rcx, [rax]
+    mov [rdi + r11*8], rcx
+    mov rcx, [rax + 8]
+    mov [rdi + r11*8 + 8], rcx
+    add r11, 2
+    jmp .next_arg
+
+.try_register:
+    cmp r11, 6
+    jge .to_stack
+    mov rcx, [rax]
+    mov [rdi + r11*8], rcx
+    add r11, 1
+    jmp .next_arg
+
+.to_stack:
+    push rdi
+    push rsi
+    lea rdi, [rsp + r8]
+    mov rsi, rax
+    mov rcx, r10
+    add rcx, 7
+    shr rcx, 3
+    lea r8, [r8 + rcx * 8]
+    rep movsq
+    pop rsi
+    pop rdi
+
+.next_arg:
+    inc r9
+    jmp .arg_loop
+
+
+.args_done:
+    mov rdi, [rsp + r12]
+    mov rsi, [rsp + r12 + 8]
+    mov rdx, [rsp + r12 + 16]
+    mov rcx, [rsp + r12 + 24]
+    mov r8,  [rsp + r12 + 32]
+    mov r9,  [rsp + r12 + 40]
+
+    mov r13, [rsp + r12 + 48] ; load rdx - output promise
 
     call rbx
 
+    ; save result
     test r13, r13
-    jz .noRet
+    jz .no_ret
     cmp r14, 1
     je .size1
     cmp r14, 2
@@ -242,20 +307,23 @@ DllCall:
     cmp r14, 4
     je .size4
     mov [r13], rax
-    jmp .noRet
-.size1: 
+    jmp .no_ret
+.size1:
     mov [r13], al
-    jmp .noRet
-.size2: 
+    jmp .no_ret
+.size2:
     mov [r13], ax
-    jmp .noRet
-.size4: 
+    jmp .no_ret
+.size4:
     mov [r13], eax
-.noRet:
-    add rsp, r12
-    pop rbx
+.no_ret:
+
+    lea rsp, [rsp + r12 + 48+8]
     pop r15
     pop r14
     pop r13
     pop r12
+    pop rbx
+    mov rsp, rbp
+    pop rbp
     ret

@@ -26,6 +26,7 @@
 #include "remote.h"
 #include "providers.h"
 
+extern int printStats;
 
 extern void callExample(void *);
 

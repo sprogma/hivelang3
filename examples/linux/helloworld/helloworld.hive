@@ -1,0 +1,16 @@
+
+@x64
+
+[export:yes]
+[entry:yes]
+(i64[] input)main(i32? res) 
+{
+    i8[] msg;
+    msg <- new i8[]"Hello World!\n";
+    res <- `i32`?(1, msg, ?msg)write@dll(*);
+}
+
+# use libc to load write function
+
+[dllimport:libc]
+(i32 file, i8[] text, i64 len)write(i64? hHandle);

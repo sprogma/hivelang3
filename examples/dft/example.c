@@ -1,4 +1,9 @@
+#ifdef _WIN32
 #include "windows.h"
+#else
+#include "time.h"
+#endif
+
 #include "inttypes.h"
 #include "stdio.h"
 #include "stdlib.h"
@@ -92,18 +97,31 @@ int main()
         }
     }
 
+    #ifdef _WIN32
     LARGE_INTEGER frequency;
     LARGE_INTEGER start, end;
 
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&start);
+    #else
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    #endif
 
     // dft(arr, len, argv[1][0] == 'i');
     dft(arr, len, 0);
 
+    #ifdef _WIN32
     QueryPerformanceCounter(&end);
 
     printf("Program finished in %lld ms\n", (end.QuadPart - start.QuadPart) * 1000 / frequency.QuadPart);
+    #else
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    long seconds = end.tv_sec - start.tv_sec;
+    long nanoseconds = end.tv_nsec - start.tv_nsec;
+    printf("Program finished in %.2f ms\n", (seconds * 1000.0) + (nanoseconds / 1e6));
+    #endif
+
 
     int64_t res = 0;
     

@@ -5,17 +5,12 @@
 [integer64:yes]
 (i64[] args)main(i64? resultCode)
 {
-    resultCode <- ?args;
-    # i64[]@loc x;
-    # x <- new i64[]@loc(32);
-    # i64 i;
-    # x[0] <- 0;
-    # x[1] <- 1;
-    # i <- 2;
-    # while i < ?x
-    # {
-    #     x[i] <- x[i - 1] + x[i - 2];
-    #     i <- i + 1;
-    # }
-    # resultCode <- x[?x - 1];
+    i8[] msg;
+    msg <- new i8[]"Hello world!\n";
+    ?(1, msg, ?msg)write@dll(*);
+    resultCode <- 0;
 }
+
+[dllimport:libc.so]
+[dllimport.entry:write]
+(i32 file, i8[] text, i64 size)write(i32? result);

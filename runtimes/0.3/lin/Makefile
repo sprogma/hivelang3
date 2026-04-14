@@ -1,9 +1,14 @@
 CC = clang
 AS = nasm
 
-FLAGS = -flto -I../common -I. -fno-stack-protector -fno-pie -mno-stack-arg-probe -D_GNU_SOURCE -std=gnu2y -fms-extensions -Wno-microsoft -Wno-format
+CFLAGS = -flto -I../common -I. -fno-stack-protector -fno-pie -mno-stack-arg-probe -D_GNU_SOURCE -std=gnu2y -fms-extensions -Wno-microsoft -Wno-format
 LIBS = -lOpenCL -lpthread
 LDFLAGS = $(LIBS)
+
+ifeq ($(SANITIZE),1)
+    CFLAGS += -fsanitize=address
+    LDFLAGS += -fsanitize=address
+endif
 
 RLS_FLAGS = -O3 -mavx2 -flto -DNDEBUG -fno-unwind-tables -fno-asynchronous-unwind-tables
 DBG_FLAGS = -g -D_DEBUG
@@ -20,23 +25,23 @@ obj/asm.o: runtime.asm
 	@mkdir -p obj
 	$(AS) -f elf64 $< -o $@
 
-obj/asm-dbg.o: runtime_dbg.asm
+obj/asm-dbg.o: runtime_dbg.asm runtime.asm
 	@mkdir -p obj
 	$(AS) -f elf64 $< -o $@
 
 obj/%.o:
 	@mkdir -p obj
-	$(CC) -c $(subst -,/,$(patsubst obj/%.o,%.c,$@)) -o $@ $(FLAGS) $(RLS_FLAGS)
+	$(CC) -c $(subst -,/,$(patsubst obj/%.o,%.c,$@)) -o $@ $(CFLAGS) $(RLS_FLAGS)
 
 obj/dbg-%.o:
 	@mkdir -p obj
-	$(CC) -c $(subst -,/,$(patsubst obj/dbg-%.o,%.c,$@)) -o $@ $(FLAGS) $(DBG_FLAGS)
+	$(CC) -c $(subst -,/,$(patsubst obj/dbg-%.o,%.c,$@)) -o $@ $(CFLAGS) $(DBG_FLAGS)
 
 a.out: $(RLS_OBJS) obj/asm.o
-	$(CC) $^ -o $@ $(FLAGS) $(RLS_FLAGS) $(LDFLAGS)
+	$(CC) $^ -o $@ $(CFLAGS) $(RLS_FLAGS) $(LDFLAGS)
 
 d.out: $(DBG_OBJS) obj/asm-dbg.o
-	$(CC) $^ -o $@ $(FLAGS) $(DBG_FLAGS) $(LDFLAGS)
+	$(CC) $^ -o $@ $(CFLAGS) $(DBG_FLAGS) $(LDFLAGS) $(DBG_FLAGS)
 
 clean:
 	rm -rf obj a.out d.out
