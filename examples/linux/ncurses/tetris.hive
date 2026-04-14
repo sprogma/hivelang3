@@ -4,62 +4,63 @@
 [export:true]
 (i64[] input)main(i32? result)
 {
-    i64 handle;
-    i32 game_width, game_height;
-    i32 key, timer, posy;
-
-    handle <- ?()initscr@dll(*);
-    ?()noecho@dll(*);
-    ?()cbreak@dll(*);
-    ?(0)curs_set@dll(*);
-    ?(handle, 1)keypad@dll(*);
-    ?(handle, 1)nodelay@dll(*);
-    
-    game_width <- ?(handle)getmaxx@dll(*);
-    game_height <- ?(handle)getmaxy@dll(*);
-    
-    timer <- 0;
-    posy <- 2;
-
-    while (key <- ?(handle)wgetch@dll(*)) <> 113
-    {
-        # ?(new i8[]"!!!")puts@dll(*);
-        ?(new i8[]">%d<\n", key)printd@dll(*);
-        match key
-        {
-            260 { # left
-                
-            }
-
-            271 { # right
-                
-            }
-
-            258 { # down
-                posy <- posy + 1;
-            }
-        }
-
-        timer <- timer + 1;
-        match timer
-        {
-            10 {
-                posy <- posy + 1;
-                timer <- 0;
-            }
-        }
-
-        ?(handle)wclear@dll(*);
-        ?(handle, game_width, game_height)draw_frame(*);
-        
-        # ?(handle, posy, 5, `i64`35)mvwaddch@dll(*);
-        
-        ?(handle)wrefresh@dll(*);
-        sleep 50;
-    }
-
-    ?()endwin@dll(*);
+    ?(new i8[]"%d %d %d\n", 100, 200, 300)printd3@dll(*);
     result <- 0;
+# 
+#     i64 handle;
+#     i32 game_width, game_height;
+#     i32 key, timer, posy;
+# 
+#     handle <- ?()initscr@dll(*);
+#     ?()noecho@dll(*);
+#     ?()cbreak@dll(*);
+#     ?(0)curs_set@dll(*);
+#     ?(handle, 1)keypad@dll(*);
+#     ?(handle, 1)nodelay@dll(*);
+#     
+#     game_width <- ?(handle)getmaxx@dll(*);
+#     game_height <- ?(handle)getmaxy@dll(*);
+#     
+#     timer <- 0;
+#     posy <- 2;
+# 
+#     while (key <- ?(handle)wgetch@dll(*)) <> 113
+#     {
+#         match key
+#         {
+#             260 { # left
+#                 
+#             }
+# 
+#             271 { # right
+#                 
+#             }
+# 
+#             258 { # down
+#                 posy <- posy + 1;
+#             }
+#         }
+# 
+#         timer <- timer + 1;
+#         match timer
+#         {
+#             10 {
+#                 posy <- posy + 1;
+#                 timer <- 0;
+#             }
+#         }
+# 
+#         ?(handle)werase@dll(*);
+#         ?(handle, game_width, game_height)draw_frame(*);
+#         
+#         ?(handle, posy, 5, 35)mvwaddch@dll(*);
+#         
+#         ?(handle)wrefresh@dll(*);
+#         sleep 50;
+#     }
+# 
+#     ?()endwin@dll(*);
+#     result <- 0;
 }
 
 
@@ -69,14 +70,15 @@
     i <- 0;
     while i < h
     {
-        # ?(handle, i, 0, `i64`124)mvwaddch@dll(*);
-        # ?(handle, i, w - 1, `i64`124)mvwaddch@dll(*);
+        ?(handle, i, 0, 124)mvwaddch@dll(*);
+        ?(handle, i, w - 1, 124)mvwaddch@dll(*);
         i <- i + 1;
     }
     i <- 0;
     while i < w
     {
-        # ?(handle, h - 1, i, `i64`45)mvwaddch@dll(*);
+        ?(handle, h - 1, i, 45)mvwaddch@dll(*);
+        i <- i + 1;
     }
     result <- 0;
 }
@@ -101,10 +103,10 @@
 (i64 handle, i32 bool)nodelay(i32? result);
 
 [dllimport:libncursesw.so]
-(i64 handle, i32 y, i32 x, i64 char)mvwaddch(i32? result);
+(i64 handle, i32 y, i32 x, i32 char)mvwaddch(i32? result);
 
 [dllimport:libncursesw.so]
-(i64 handle)wclear(i32? result);
+(i64 handle)werase(i32? result);
 
 [dllimport:libncursesw.so]
 (i64 handle)wgetch(i32? result);
@@ -130,3 +132,7 @@
 [dllimport:libc.so]
 [dllimport.entry:printf]
 (i8[] format, i32 value)printd(u32? res);
+
+[dllimport:libc.so]
+[dllimport.entry:printf]
+(i8[] format, i32 value, i32 value, i32 value)printd3(u32? res);

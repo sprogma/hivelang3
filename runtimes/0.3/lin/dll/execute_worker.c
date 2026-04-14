@@ -194,7 +194,7 @@ void dllExecuteWorker(struct queued_worker *worker)
         log("calling dllimport worker\n");
         for (int64_t i = 0; i < info->inputMapLength; ++i)
         {
-            log("ARG[%lld] = %lld\n", i, call_data[i]);
+            log("ARG[%lld] = %lld with value %p of size %d\n", i, call_data[i], *(int64_t *)call_data[i], (int)info->inputMap[i].size);
         }
         log("output is %p [->to promise %lld]\n", data->output, result_promise_id);
 
@@ -210,13 +210,13 @@ void dllExecuteWorker(struct queued_worker *worker)
         
         DllCall(&cl_data, call_data, data->output);
 
+        #ifndef NDEBUG
         if (GetLastError() != 0 && prevError != GetLastError())
         {
             print("WARING: returned + Error=%lld [before call error was %lld] [entry=%s]\n", (int64_t)GetLastError(), prevError, info->entryName);
-            #ifndef NDEBUG
             trap;
-            #endif
         }
+        #endif
         
         // for all output parameters: set them back        
         data->current_index = 0;

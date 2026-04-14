@@ -251,12 +251,12 @@ DllCall:
     cmp r10, 8
     jbe .try_register
     cmp r11, 5
-    jg .to_stack
-    mov rcx, [rax]
-    mov [rdi + r11*8], rcx
-    mov rcx, [rax + 8]
-    mov [rdi + r11*8 + 8], rcx
-    add r11, 2
+    jae .to_stack
+    ; mov rcx, [rax]
+    ; mov [rdi + r11*8], rcx
+    ; mov rcx, [rax + 8]
+    ; mov [rdi + r11*8 + 8], rcx
+    ; add r11, 2
     jmp .next_arg
 
 .try_register:
@@ -268,17 +268,17 @@ DllCall:
     jmp .next_arg
 
 .to_stack:
-    push rdi
-    push rsi
-    lea rdi, [rsp + r8]
-    mov rsi, rax
-    mov rcx, r10
-    add rcx, 7
-    shr rcx, 3
-    lea r8, [r8 + rcx * 8]
-    rep movsq
-    pop rsi
-    pop rdi
+    ; push rdi
+    ; push rsi
+    ; lea rdi, [rsp + r8 + 16]
+    ; mov rsi, rax
+    ; mov rcx, r10
+    ; add rcx, 7
+    ; shr rcx, 3
+    ; lea r8, [r8 + rcx * 8]
+    ; rep movsq
+    ; pop rsi
+    ; pop rdi
 
 .next_arg:
     inc r9
