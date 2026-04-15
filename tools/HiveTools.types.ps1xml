@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Configuration>
+    <ViewDefinitions>
+        <View>
+            <Name>Hivex64CodeSpanView</Name>
+            <ViewSelectedBy><TypeName>Hivex64CodeSpanView</TypeName></ViewSelectedBy>
+            <CustomControl>
+                <CustomEntries>
+                    <CustomEntry>
+                        <CustomItem>
+                            <ExpressionBinding>
+                                <ScriptBlock>
+                                    $s = $PSStyle
+                                    $db = $_.Database.database
+                                    $out = ""
+                                    
+                                    $fileId = "$($db.file)_$($db.time)"
+                                    $out += "`n  $($s.Foreground.Cyan)File     : $($db.file)$($s.Reset)`n"
+                                    $out += "  $($s.Foreground.DarkGray)Generated: $([datetime]$db.time)$($s.Reset)`n`n"
+
+                                    $sourceLines = $db.source.'#cdata-section' -split "`r?`n"
+
+                                    for ($i = $_.StartLine - 1; $i -le $_.EndLine + 1; $i++) {
+                                        if ($i -le 0 -or $i -gt $sourceLines.Count) { continue; }
+                                        $line = $sourceLines[$i-1]
+
+                                        $tokens = @(Get-ColorTokens $line)
+                                        
+                                        if ($i -ge $_.StartLine -and $i -le $_.EndLine)
+                                        {
+                                            $from = if ($i -eq $_.StartLine) { $_.StartColumn - 1 } else { 0 }
+                                            $to   = if ($i -eq $_.EndLine)   { $_.EndColumn } else { $line.Length }
+
+                                            $tokens += [PSCustomObject]@{
+                                                From  = $from
+                                                To    = $to
+                                                Foreground = $null
+                                                Background = $PSStyle.Background.Blue
+                                            }
+                                        }
+                                        
+                                        $out += "$($s.Foreground.BrightBlack)$("$i".PadLeft(5)) | $($s.Reset)"
+                                        $out += "$(Get-ColoredString -Code $line -Tokens $tokens)`n"
+                                    }
+                                    return $out
+                                </ScriptBlock>
+                            </ExpressionBinding>
+                        </CustomItem>
+                    </CustomEntry>
+                </CustomEntries>
+            </CustomControl>
+        </View>
+    </ViewDefinitions>
+</Configuration>
+

@@ -17,16 +17,16 @@ void WinX64Assembler::ExpandCallInstructions(WorkerDeclarationContext *wk)
                 if (id < (int64_t)fn->inputs.size() && wk->content->variables[op->data[id + 1]] != fn->inputs[id].second)
                 {
                     tmp = newTemp(wk, fn->inputs[id].second);
-                    auto *castOp = new OperationBlock(OP_CAST, {tmp, op->data[id + 1]});
+                    auto *castOp = new OperationBlock(OP_CAST, {tmp, op->data[id + 1]}, {}, {}, {}, op->code_start, op->code_end);
                     connectBeforeOp(wk, op, castOp);
                 }
                 
-                auto *newOp = new OperationBlock(OP_STORE_INPUT, {tmp, offset - inputTableSize});
+                auto *newOp = new OperationBlock(OP_STORE_INPUT, {tmp, offset - inputTableSize}, {}, {}, {}, op->code_start, op->code_end);
                 connectBeforeOp(wk, op, newOp);
                 
                 if (tmp != op->data[id + 1])
                 {
-                    auto *freeOp = new OperationBlock(OP_FREE_TEMP, {tmp});
+                    auto *freeOp = new OperationBlock(OP_FREE_TEMP, {tmp}, {}, {}, {}, op->code_start, op->code_end);
                     connectOp(wk, op, freeOp);
                 }
                 
@@ -109,6 +109,15 @@ void WinX64Assembler::InsertJumpInstructions()
 
     // all jumps is now of right size - insert them
     {
+        // update addrToLine
+        for (auto &[k, v] : addrToLine)
+        {
+            int64_t opOffset1 = prev(offsets.upper_bound({assemblyCode + v.start, 0}))->second;
+            v.start += opOffset1;
+            int64_t opOffset2 = prev(offsets.upper_bound({assemblyCode + v.end, 0}))->second;
+            v.end += opOffset2;
+        }
+        
         int64_t id = JumpInstructions.size() - 1;
         BYTE *newAssmeblyEnd = assemblyEnd + totalAddSize;
         BYTE *codeDest = assemblyEnd + totalAddSize;
@@ -133,6 +142,17 @@ void WinX64Assembler::InsertJumpInstructions()
             assert(codeDest - assemblyCode == currentPosition[id] - assemblyCode);
             
             assert(printJMP(i.node, i.jmpType, opPosition[i.destOp] - currentPosition[id], shortJmp[id]) == shortJmp[id]);
+
+            if (i.jmpType == ASM_JMP)
+            {
+                // it is part of that block
+                markAddress(codeDest, assemblyEnd - codeDest, CodeSpan(i.destOp->code_start, i.destOp->code_end));
+            }
+            else
+            {
+                // it is part of 'if'
+                markAddress(codeDest, assemblyEnd - codeDest, CodeSpan(i.node->code_start, i.node->code_end));
+            }
             
             id--;
         }

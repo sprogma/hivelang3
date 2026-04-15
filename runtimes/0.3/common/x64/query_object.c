@@ -133,7 +133,7 @@ int64_t x64QueryObject(void *destination, int64_t object_id, int64_t offset, int
     struct wait_list_node *worker = universalPauseWorker(returnAddress, rbpValue, WK_STATE_QUERY_OBJECT_WAIT_X64, query);
     
     // send request
-    if (obj != NULL)
+    if (obj == NULL)
     {
         RequestObjectGet(object_id, offset, myAbs(size), worker);
     }

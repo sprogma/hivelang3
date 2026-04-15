@@ -1,4 +1,4 @@
-#include "codegen.hpp"
+#include "codegen.hpp"  
 
 
 // translation table :(
@@ -6,6 +6,8 @@
 
 void WinX64Assembler::BuildOperation()
 {
+    BYTE *opAddr = assemblyEnd;
+    
     OperationBlock *op = toBuild.back().first;
     OperationBlock *prevOp = toBuild.back().second;
     toBuild.pop_back();
@@ -13,6 +15,7 @@ void WinX64Assembler::BuildOperation()
     // return from function
     if (op == NULL)
     {
+        markAddress(opAddr, 1, CodeSpan(current->code_end));
         pbyte(0xC3);
         return;
     }
@@ -40,6 +43,7 @@ void WinX64Assembler::BuildOperation()
             InsertMove(op, op->data[0], op->data[1]); \
             printRR(op, T, Register(op->data[0]), Register(op->data[2])); \
         }
+        
     #define CMPOP(A, B) { \
         printf("%lld %lld %lld [%p %p %p]\n", op->data[0], op->data[1], op->data[2], varType(op->data[0]), varType(op->data[1]), varType(op->data[2])); \
         printRR(op, ASM_CMP, Register(op->data[1]), Register(op->data[2])); \
@@ -193,7 +197,7 @@ void WinX64Assembler::BuildOperation()
             break;
             
         case OP_NEW_FLOAT:
-            print("\tOP_NEW_FLOAT [not supported]\n"); 
+            printf("\tOP_NEW_FLOAT [not supported]\n"); 
             break;
             
         case OP_NEW_STRING:
@@ -646,6 +650,11 @@ void WinX64Assembler::BuildOperation()
             printR(op, (isSigned(op->data[0]) ? ASM_IDIV : ASM_DIV), Register(op->data[2])); // div $2
             InsertMove(op, Register(op->data[0]), {2, 8}, false);                            // mov $0, rdx ; sign doesn't matter
             break;
+    }
+
+    if (op->type != OP_FREE_TEMP)
+    {
+        markAddress(opAddr, assemblyEnd - opAddr, CodeSpan(op->code_start, op->code_end));
     }
 
     for (auto &n : views::reverse(op->next))

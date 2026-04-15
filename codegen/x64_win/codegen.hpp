@@ -139,14 +139,27 @@ struct jmpInstruction
 
 /* ---------------------------------- main class ---------------------------------- */
 
-class WinX64Assembler : public CodeAssembler
+struct CodeSpan
 {
-    
+    int64_t start, end;
+    CodeSpan(int64_t start, int64_t end) : start(start), end(end) {}
+    CodeSpan(int64_t pos) : start(pos), end(pos + 1) {}
+};
+
+class WinX64Assembler : public CodeAssembler
+{    
 public:
-    WinX64Assembler()
+    WinX64Assembler(const map<string, string> &config) : config(config)
     {}
 
 private:
+    map<string, string> config;
+    map<pair<int64_t, int64_t>, CodeSpan> addrToLine;
+    void markAddress(BYTE *from, int64_t count, CodeSpan code)
+    {
+        addrToLine.insert({{from - assemblyCode, (from - assemblyCode) + count}, code});
+    }
+
     map<int64_t, WorkerDeclarationContext *> idToWorker;
     BuildResult *ir;
     BYTE *assemblyCode, *assemblyEnd;
@@ -160,15 +173,6 @@ private:
     void pbyte(Args... args) 
     {
         ((*assemblyEnd++ = args), ...);
-    }    
-    
-    __attribute__ ((format (printf, 2, 3)))
-    void print(const char *format_string, ...)
-    {
-        va_list args;
-        va_start(args, format_string); 
-        vprintf(format_string, args);
-        va_end(args);
     }
 
     

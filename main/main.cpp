@@ -57,7 +57,8 @@ int main(int argc, char **argv)
     char *code = (char *)malloc(1024 * 1024);
     code[fread(code, 1, 1024 * 1024, f)] = 0;
     fclose(f);
-    
+
+    char *real_code = strdup(code);
 
     // TODO: better comments support
     // replace all comments with spaces
@@ -125,7 +126,7 @@ int main(int argc, char **argv)
     printf("Convering...\n");
     /* convert to intermediate language */
 
-    auto [Code, error2] = buildAst(filename, code, nodes, configs, "x64");
+    auto [Code, error2] = buildAst(filename, real_code, nodes, configs, "x64");
     if (error2)
     {
         printf("Error: building ast failed\n");
@@ -171,6 +172,7 @@ int main(int argc, char **argv)
 
     // TODO: free(newCode)
     free(code);
+    free(real_code);
 
     return 0;
 }

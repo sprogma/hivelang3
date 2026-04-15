@@ -15,6 +15,7 @@ pushd $PSScriptRoot
 mkdir obj 2>$null
 
 $FLAGS = (,"-O3") + (!$Sanitize ? @() : @(,"-fsanitize=address")) + ($IsLinux ? @(,"-Wno-format") : @())
+$FLAGS = @()
 
 # look for files & headers
 $f = (ls -r *.cpp)

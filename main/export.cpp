@@ -73,7 +73,7 @@ int64_t ExportCode(BuildResult *code, map<string, string> &configs)
         
         printf("Building for <%s>\n", name.c_str());
         if (name == "x64")
-        { assembler = new_x64_Assembler(); }
+        { assembler = new_x64_Assembler(configs); }
         else if (name == "gpu")
         { assembler = new_gpu_Assembler(); }
         else if (name == "dll")

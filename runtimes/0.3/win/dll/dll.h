@@ -1,11 +1,11 @@
 #ifndef DLL_PROVIDER_H
 #define DLL_PROVIDER_H
 
-#include "../system.h"
+#include "system.h"
 
-#include "../runtime_lib.h"
-#include "../remote.h"
-#include "../runtime.h"
+#include "runtime_lib.h"
+#include "remote.h"
+#include "runtime.h"
 
 
 struct dll_input_table

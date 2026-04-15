@@ -400,17 +400,17 @@ public:
                 
                 if (foundRead)
                 {
-                    connectBeforeOp(wk, op, new OperationBlock(OP_LOAD, {temp, to_split}));
+                    connectBeforeOp(wk, op, new OperationBlock(OP_LOAD, {temp, to_split}, {}, {}, {}, op->code_start, op->code_end));
                 }
-                connectOp(wk, op, new OperationBlock(OP_FREE_TEMP, {temp}));
+                connectOp(wk, op, new OperationBlock(OP_FREE_TEMP, {temp}, {}, {}, {}, op->code_start, op->code_end));
                 if (IS_JUMP(op->type))
                 {
-                    connectOpSecond(wk, op, new OperationBlock(OP_FREE_TEMP, {temp}));
+                    connectOpSecond(wk, op, new OperationBlock(OP_FREE_TEMP, {temp}, {}, {}, {}, op->code_start, op->code_end));
                 }
                 /* if write - add store too */
                 if (foundWrite)
                 {
-                    connectOp(wk, op, new OperationBlock(OP_STORE, {temp, to_split}));
+                    connectOp(wk, op, new OperationBlock(OP_STORE, {temp, to_split}, {}, {}, {}, op->code_start, op->code_end));
                 }
                 /* translate var id */
                 applyNamesTranslition(op, map<int64_t, int64_t>{{to_split, temp}});

@@ -1,7 +1,46 @@
+#include <print>
+#include <chrono>
 #include "codegen.hpp"
 
 pair<BYTE *, BYTE *> WinX64Assembler::ExportToFile(BYTE *header, BYTE *body, int64_t bodyOffset)
 {
+    if (config.contains("x64-debug") || config.contains("debug"))
+    {
+        /* generate debug info file */
+        FILE *f = fopen("./debug.x64.hdb", "wb");
+        if (f == NULL)
+        {
+            printf("ERROR: can't open ./debug.x64.hdb to write debug info\n");
+            exit(1);
+        }
+        print(f, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        print(f, "<database>\n");
+        print(f, "    <time>{:%FT%TZ}</time>\n", chrono::system_clock::now());
+        print(f, "    <file>{}</file>\n", xml_encode(ir->filename));
+        print(f, "    <source><![CDATA[{}]]></source>\n", ir->code);
+        print(f, "    <addressToLine>\n");
+        for (auto &[addr, line] : addrToLine)
+        {
+            print(f, "        <mapping>\n");
+            print(f, "            <address start=\"{}\" end=\"{}\" />\n", addr.first + bodyOffset, addr.second + bodyOffset);
+            print(f, "            <line start=\"{}\" end=\"{}\" />\n", line.start, line.end);
+            print(f, "        </mapping>\n");
+        }
+        print(f, "    </addressToLine>\n");
+        print(f, "    <workers>\n");
+        for (auto &[id, pos] : resultWorkerPositions)
+        {
+            WorkerDeclarationContext *wk = idToWorker[id];
+            print(f, "        <worker>\n");
+            print(f, "            <address start=\"{}\" end=\"{}\" />\n", pos + bodyOffset, pos + resultWorkerSize[id] + bodyOffset);
+            print(f, "            <line start=\"{}\" end=\"{}\" />\n", wk->code_start, wk->code_end);
+            print(f, "        </worker>\n");
+        }
+        print(f, "    </workers>\n");
+        print(f, "</database>\n");
+        fclose(f);
+    }
+
     /* add relocations */
     for (auto &[id, value] : runtimeApiHeader)
     {

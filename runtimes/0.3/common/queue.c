@@ -5,7 +5,7 @@
 #include "runtime.h"
 #include "stdatomic.h"
 
-#define RING_SIZE 1024
+#define RING_SIZE (64 * 1024)
 #define RING_MASK (RING_SIZE - 1)
 
 struct task_queue 

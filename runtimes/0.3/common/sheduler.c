@@ -29,6 +29,7 @@ thread_result_t WaitListUpdateWorker(void *data)
     while (!waitForExit)
     {
         UpdateWaitingWorkers();
+        Sleep(1);
     }
     return 0;
 }

@@ -216,7 +216,6 @@ void UpdateWaitingWorkers()
         }
         data = prev;
         log("Got %lld workers to update\n", count);
-        Sleep(1);
     }
     
 

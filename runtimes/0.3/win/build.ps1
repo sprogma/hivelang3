@@ -1,7 +1,7 @@
 param([string]$CC="clang", [switch]$Sanitize)
 pushd $PSScriptRoot
 $pseudoRelease = $true
-$FLAGS = "-I.","-fno-stack-protector", "-DUNICODE", "-D_UNICODE", "-DFREESTANDING", "-municode", "-ffreestanding", "-nostdlib", "-mno-stack-arg-probe", "-fms-extensions", "-Wno-microsoft"
+$FLAGS = "-I.", "-I../common","-fno-stack-protector", "-DUNICODE", "-D_UNICODE", "-DFREESTANDING", "-municode", "-ffreestanding", "-nostdlib", "-mno-stack-arg-probe", "-fms-extensions", "-Wno-microsoft"
 $LF = "-lgdi32", "-lshell32", "-lkernel32", "-lbcrypt", "-lws2_32", "-lOpenCL", "-Wl,-dynamicbase:no", "-Wl,-entry:entry" 
 if ($Sanitize)
 {
@@ -20,7 +20,7 @@ $jobs = @()
 $jobs += Start-ThreadJob {   
     fasm runtime.asm obj/asm.o
     $z = @()
-    $Speed = "-O3", "-mavx2"
+    #$Speed = "-O3", "-mavx2"
     $using:files | % {
         $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
         $o = "obj/$o"

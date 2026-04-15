@@ -29,7 +29,11 @@ WorkerDeclarationContext *forkWorker(WorkerDeclarationContext *wk)
     {
         ops[i] = new OperationBlock(wk->content->code[i]->type,
                                     wk->content->code[i]->data,
-                                    wk->content->code[i]->attributes);
+                                    wk->content->code[i]->attributes,
+                                    {},
+                                    {},
+                                    wk->content->code[i]->code_start,
+                                    wk->content->code[i]->code_end);
         mapTable[wk->content->code[i]] = ops[i];
     }
     for (int64_t i = 0; i < (int64_t)wk->content->code.size(); ++i)
@@ -174,5 +178,5 @@ void removeOp(WorkerDeclarationContext *wk, OperationBlock *code)
 
 void freeTemp(WorkerDeclarationContext *wk, OperationBlock *code, int64_t id)
 {
-    connectOp(wk, code, new OperationBlock(OP_FREE_TEMP, {id}));
+    connectOp(wk, code, new OperationBlock(OP_FREE_TEMP, {id}, {}, {}, {}, code->code_start, code->code_end));
 }

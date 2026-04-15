@@ -97,7 +97,7 @@
         lt <- ?plt;
         gt <- ?pgt;
 
-        match lt < r - gt
+        match lt - l < r - gt
         {
             `i32`-1 {
                 calls[calls_cnt] <- (arr, l, lt)quick_sort(*);

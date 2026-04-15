@@ -164,7 +164,7 @@ public:
                             // need to free only variables
                             if (k < FIRST_TEMP_ID && outputs.find(k) == outputs.end())
                             {
-                                connectOp(fn, fn->content->code[i], new OperationBlock(OP_FREE_TEMP, {v}));
+                                connectOp(fn, fn->content->code[i], new OperationBlock(OP_FREE_TEMP, {v}, {}, {}, {}, fn->code_end, fn->code_end + 1));
                             }
                         }
                         OperationBlock *next = fn->content->code[i]->next[0];
@@ -233,7 +233,7 @@ private:
                 }
                 else
                 {
-                    OperationBlock *res = new OperationBlock(copy->type, copy->data, copy->attributes);
+                    OperationBlock *res = new OperationBlock(copy->type, copy->data, copy->attributes, {}, {}, copy->code_start, copy->code_end);
                     fn->content->code.push_back(res);
                     codeMap[copy] = res;
                     

@@ -1,6 +1,8 @@
 #ifndef LOGGER_HPP
 #define LOGGER_HPP
 
+#include <string>
+#include <string_view>
 
 #include "inttypes.h"
 
@@ -10,5 +12,6 @@ void logError(const char *filename, const char *content, int64_t position, const
 __attribute__((format(printf, 5, 6)))
 void logError(const char *filename, const char *content, int64_t start, int64_t end, const char *format, ...);
 
+std::string xml_encode(std::string_view data);
 
 #endif

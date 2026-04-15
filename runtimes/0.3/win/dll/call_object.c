@@ -1,10 +1,10 @@
 #define _WIN32_WINNT _WIN32_WINNT_VISTA
 
-#include "../system.h"
+#include "system.h"
 
-#include "../runtime_lib.h"
-#include "../remote.h"
-#include "../runtime.h"
+#include "runtime_lib.h"
+#include "remote.h"
+#include "runtime.h"
 
 #include "dll.h"
 

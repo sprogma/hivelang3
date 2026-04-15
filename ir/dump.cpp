@@ -106,6 +106,7 @@ void dumpIRR(WorkerDeclarationContext *fn, OperationBlock *x)
     {
         printf(" [prev=%p] ", i);
     }
+    printf(" [code %lld:%lld] ", x->code_start, x->code_end);
     if (x->attributes.size() > 0)
     {
         printf(" { ");

@@ -1,6 +1,9 @@
 #ifndef CODEGEN_HPP
 #define CODEGEN_HPP
 
+#include <map>
+#include <string>
+
 #include "inttypes.h"
 
 #include "../headers/ir.hpp"
@@ -15,7 +18,7 @@ public:
 };
 
 
-CodeAssembler *new_x64_Assembler();
+CodeAssembler *new_x64_Assembler(const std::map<std::string, std::string> &config);
 CodeAssembler *new_gpu_Assembler();
 CodeAssembler *new_DLL_Assembler();
 

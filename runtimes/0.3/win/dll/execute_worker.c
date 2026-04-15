@@ -4,9 +4,9 @@
 
 #include "inttypes.h"
 #include "dll.h"
-#include "../providers.h"
-#include "../runtime_api.h"
-#include "../x64/x64.h"
+#include "providers.h"
+#include "runtime_api.h"
+#include "x64/x64.h"
 
 struct dll_input_data {
     int64_t id;

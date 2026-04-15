@@ -51,7 +51,7 @@ void WinX64Assembler::BuildFn(WorkerDeclarationContext *wk, int64_t workerId)
 
     resultWorkerPositions[workerId] = assemblyEnd - assemblyCode;
     
-    print("worker_%lld:\n", workerId);
+    printf("worker_%lld:\n", workerId);
     if (wk->content == NULL)
     {
         printf("For now, x64-win doesn't support dynamic linking\n");
