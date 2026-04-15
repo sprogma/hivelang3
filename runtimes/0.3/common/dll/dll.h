@@ -14,6 +14,7 @@ struct dll_input_table
     int64_t size;
     int64_t param;
     BYTE type;
+    BYTE __padding[7];
 };
 
 struct dll_worker_info

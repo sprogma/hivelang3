@@ -1,91 +1,650 @@
 @x64
 
+class figure
+{
+    i32 size;
+    i8[] value;
+    i32 x, y; # top left corner of this block
+    i8 type;
+}
+
+class field
+{
+    i32 hard;
+    i32 score;
+    i32 w, h, x, y;
+    i8[] value;
+    i32[] colors;
+}
+
+(figure x)copyfig(figure? res)
+{
+    figure tmp;
+    tmp <- new figure();
+    ?(tmp, x)setfig[inline:yes](*);
+    res <- tmp;
+}
+
+(figure tmp, figure x)setfig(i32? ready)
+{
+    tmp?size <- x?size;
+    tmp?x <- x?x;
+    tmp?y <- x?y;
+    tmp?type <- x?type;
+    i32 id, size;
+    i8[] a, b;
+    id <- 0;
+    b <- x?value;
+    size <- `i32`?b;
+    tmp?value <- a <- new i8[](size);
+    while id < size
+    {
+        a[id] <- b[id];
+        id <- id + 1;
+    }
+    ready <- 0;
+}
+
+(figure fig)right(i32? ready)
+{
+    ?(fig?value, fig?size)transpose[inline:yes](*);
+    ?(fig?value, fig?size)reverserow[inline:yes](*);
+    ready <- 0;
+}
+
+(figure fig)left(i32? ready)
+{
+    ?(fig?value, fig?size)reverserow[inline:yes](*);
+    ?(fig?value, fig?size)transpose[inline:yes](*);
+    ready <- 0;
+}
+
+(i8[] a, i32 size)transpose(i32? ready)
+{
+    i32 x, y;
+    i8 tmp1, tmp2;
+    x <- 0;
+    while x < size
+    {
+        y <- 0;
+        while y < x
+        {
+            tmp1 <- a[x * size + y];
+            tmp2 <- a[y * size + x];
+            a[x * size + y] <- tmp2;
+            a[y * size + x] <- tmp1;
+            y <- y + 1;
+        }
+        x <- x + 1;
+    }
+    ready <- 0;
+}
+
+(i8[] a, i32 size)reverserow(i32? ready)
+{
+    i32 x, y;
+    i8 tmp1, tmp2;
+    y <- 0;
+    while y < size
+    {
+        x <- 0;
+        while x + x < size
+        {
+            tmp1 <- a[y * size + x];
+            tmp2 <- a[y * size + size-x-1];
+            a[y * size + x] <- tmp2;
+            a[y * size + size-x-1] <- tmp1;
+            x <- x + 1;
+        }
+        y <- y + 1;
+    }
+    ready <- 0;
+}
+
+(field f, figure fig)isatbottom(i32? result)
+{
+    i32 y, ix, iy, size, bool, h;
+    i8[] a;
+    h <- f?h;
+    a <- fig?value;
+    size <- fig?size;
+    bool <- 0;
+    y <- fig?y;
+    iy <- size - 1;
+    while y + iy >= h
+    {
+        ix <- 0;
+        while ix < size
+        {
+            bool <- bool | `i32`a[iy * size + ix];
+            ix <- ix + 1;
+        }
+        iy <- iy - 1;
+    }
+    result <- -bool;
+}
+
+(field f, figure fig)ajustx(i32? newx)
+{
+    i32 w, x, ix, iy, need, size;
+    i8[] a;
+    w <- f?w;
+    a <- fig?value;
+    x <- fig?x;
+    size <- fig?size;
+    
+    # move right while need it
+    need <- 1;
+    while need > 0
+    {
+        need <- 0;
+        ix <- 0;
+        while ix < -x
+        {
+            iy <- 0;
+            while iy < size
+            {
+                need <- need | `i32`a[iy * size + ix];
+                iy <- iy + 1;
+            }
+            ix <- ix + 1;
+        }
+        match need
+        {
+            1 {
+                x <- x + 1;
+            }
+        }
+    }
+    
+    # move left while need it
+    need <- 1;
+    while need > 0
+    {
+        need <- 0;
+        ix <- size - 1;
+        while x + ix >= w
+        {
+            iy <- 0;
+            while iy < size
+            {
+                need <- need | `i32`a[iy * size + ix];
+                iy <- iy + 1;
+            }
+            ix <- ix - 1;
+        }
+        match need
+        {
+            1 {
+                x <- x - 1;
+            }
+        }
+    }
+    
+    newx <- x;
+}
+
+(field f, figure fig)intercect(i32? result)
+{
+    i32 x, y, w, pos, endx, endy, basex, bool;
+    i8[] a, dest;
+    bool <- 0;
+    a <- fig?value;
+    w <- f?w;
+    dest <- f?value;
+    pos <- 0;
+    y <- fig?y;
+    basex <- fig?x;
+    endy <- y + fig?size;
+    endx <- basex + fig?size;
+    while y < endy
+    {
+        x <- basex;
+        while x < endx
+        {
+            match dest[y * w + x] + a[pos] = `i8`2
+            {
+                -1 {
+                    bool <- -1;
+                    x <- endx; # break
+                    y <- endy; # break
+                }
+            }
+            x <- x + 1;
+            pos <- pos + 1;
+        }
+        y <- y + 1;
+    }
+    result <- bool;
+}
+
+(field f, figure fig)apply(i32? ready)
+{
+    i32 x, y, h, w, pos, endx, endy, basex;
+    i8[] a, dest;
+    i32[] colors;
+    i8 type;
+    a <- fig?value;
+    colors <- f?colors;
+    h <- f?h;
+    w <- f?w;
+    dest <- f?value;
+    type <- fig?type;
+    pos <- 0;
+    y <- fig?y;
+    basex <- fig?x;
+    endy <- y + fig?size;
+    endx <- basex + fig?size;
+    while y < endy
+    {
+        x <- basex;
+        while x < endx
+        {
+            match `i32`a[pos]
+            {
+                1 {
+                    dest[y * w + x] <- a[pos];
+                    colors[y * w + x] <- 32 + ((`i32`type + 8) << 8);
+                }
+            }
+            x <- x + 1;
+            pos <- pos + 1;
+        }
+        y <- y + 1;
+    }
+
+    # check all rows and add score
+    i32 count;
+    y <- pos <- count <- 0;
+    while y < h
+    {
+        x <- 0;
+        endx <- 0;
+        while x < w
+        {
+            endx <- endx + `i32`dest[pos];
+            x <- x + 1;
+            pos <- pos + 1;
+        }
+        match endx = w
+        {
+            -1 {
+                # add score
+                count <- count + 1;
+                # compress all previous lines
+                i32 iy;
+                iy <- y;
+                while iy > 0
+                {
+                    x <- 0;
+                    while x < w
+                    {
+                        dest[iy * w + x] <- dest[(iy - 1) * w + x];
+                        colors[iy * w + x] <- colors[(iy - 1) * w + x];
+                        x <- x + 1;
+                    }
+                    iy <- iy - 1;
+                }
+                x <- 0;
+                while x < w
+                {
+                    dest[x] <- `i8`0;
+                    colors[x] <- `i8`32;
+                    x <- x + 1;
+                }
+            }
+        }
+        y <- y + 1;
+    }
+
+    # add score
+
+    f?score <- f?score + f?hard * count * count;
+    
+    ready <- 0;
+}
+
+class randomengine
+{
+    u32 seed;
+}
+
+(randomengine gen)random32(u32? res)
+{
+    u32 x;
+    x <- gen?seed;
+    x <- x ^ (x << `u32`13);
+    x <- x ^ (x >> `u32`17);
+    x <- x ^ (x << `u32`5);
+    gen?seed <- res <- x;
+}
+
+(randomengine gen, field f)randomfig(figure? res)
+{
+    figure fig;
+    fig <- new figure();
+    # TODO: add other items, for now only T
+    fig?x <- f?w / 2;
+    fig?y <- 0;
+
+    i8[] buf;
+
+    i32 t;
+    t <- `i32`(?(gen)random32(*) % `u32`7);
+    
+    fig?type <- t;
+
+    match t
+    {
+        0 { 
+            fig?size <- 4;
+            buf <- fig?value <- new i8[]"0100010001000100"; 
+        }
+        1 { 
+            fig?size <- 2;
+            buf <- fig?value <- new i8[]"1111"; 
+        }
+        2 { 
+            fig?size <- 3;
+            buf <- fig?value <- new i8[]"010111000"; 
+        }
+        3 { 
+            fig?size <- 3;
+            buf <- fig?value <- new i8[]"010010011"; 
+        }
+        4 { 
+            fig?size <- 3;
+            buf <- fig?value <- new i8[]"010010110"; 
+        }
+        5 { 
+            fig?size <- 3;
+            buf <- fig?value <- new i8[]"110011000"; 
+        }
+        6 { 
+            fig?size <- 3;
+            buf <- fig?value <- new i8[]"011110000"; 
+        }
+    }
+
+    i32 pos, total;
+    total <- `i32`?fig?value;    
+    pos <- 0;
+    while pos < total
+    {
+        buf[pos] <- buf[pos] - `i8`48;
+        pos <- pos + 1;
+    }
+    
+    res <- fig;
+}
+
 [entry:true]
 [export:true]
 (i64[] input)main(i32? result)
 {
-    ?(new i8[]"%d %d %d\n", 100, 200, 300)printd3@dll(*);
-    result <- 0;
-# 
-#     i64 handle;
-#     i32 game_width, game_height;
-#     i32 key, timer, posy;
-# 
-#     handle <- ?()initscr@dll(*);
-#     ?()noecho@dll(*);
-#     ?()cbreak@dll(*);
-#     ?(0)curs_set@dll(*);
-#     ?(handle, 1)keypad@dll(*);
-#     ?(handle, 1)nodelay@dll(*);
-#     
-#     game_width <- ?(handle)getmaxx@dll(*);
-#     game_height <- ?(handle)getmaxy@dll(*);
-#     
-#     timer <- 0;
-#     posy <- 2;
-# 
-#     while (key <- ?(handle)wgetch@dll(*)) <> 113
-#     {
-#         match key
-#         {
-#             260 { # left
-#                 
-#             }
-# 
-#             271 { # right
-#                 
-#             }
-# 
-#             258 { # down
-#                 posy <- posy + 1;
-#             }
-#         }
-# 
-#         timer <- timer + 1;
-#         match timer
-#         {
-#             10 {
-#                 posy <- posy + 1;
-#                 timer <- 0;
-#             }
-#         }
-# 
-#         ?(handle)werase@dll(*);
-#         ?(handle, game_width, game_height)draw_frame(*);
-#         
-#         ?(handle, posy, 5, 35)mvwaddch@dll(*);
-#         
-#         ?(handle)wrefresh@dll(*);
-#         sleep 50;
-#     }
-# 
-#     ?()endwin@dll(*);
-#     result <- 0;
+
+    i64 handle;
+    i32 game_width, game_height;
+    i32 key, timer, timer_step;
+
+    handle <- ?()initscr@dll(*);
+    
+    ?()start_color@dll(*);
+    ?()noecho@dll(*);
+    ?()cbreak@dll(*);
+    ?(0)curs_set@dll(*);
+    ?(handle, 1)keypad@dll(*);
+    ?(handle, 1)nodelay@dll(*);
+
+    ?(1, 0, 7)init_pair@dll(*);
+    ?(2, 0, 8)init_pair@dll(*);
+
+    ?( 8, 0, 1)init_pair@dll(*);
+    ?( 9, 0, 2)init_pair@dll(*);
+    ?(10, 0, 3)init_pair@dll(*);
+    ?(11, 0, 4)init_pair@dll(*);
+    ?(12, 0, 5)init_pair@dll(*);
+    ?(13, 0, 6)init_pair@dll(*);
+    ?(14, 0, 9)init_pair@dll(*);
+
+
+    game_width <- ?(handle)getmaxx@dll(*);
+    game_height <- ?(handle)getmaxy@dll(*);
+    
+    timer <- 0;
+    timer_step <- 3;
+
+    field f;
+    f <- new field();
+    f?w <- 10;
+    f?h <- 20;
+    f?x <- 1;
+    f?y <- 1;
+    f?hard <- 100;
+    f?score <- 0;
+    f?value <- new i8[](f?w * f?h);
+    f?colors <- new i32[](f?w * f?h);
+
+    randomengine engine;
+    engine <- new randomengine();
+    engine?seed <- `u32`42;
+
+    figure next_fig, current, shadowfig;
+    current <- ?(engine, f)randomfig(*);
+    next_fig <- ?(engine, f)randomfig(*);
+    shadowfig <- new figure();
+
+    i32 end_game;
+    end_game <- 0;
+
+    i8[] next_fig_message, current_score_message;
+    next_fig_message <- new i8[]"next figure:";
+    current_score_message <- new i8[]"current score: %d";
+
+    while -1-end_game
+    {
+        while (key <- ?(handle)wgetch@dll(*)) <> -1 && -1-end_game
+        {
+            match key
+            {
+                113 {
+                    end_game <- -1;
+                }
+                
+                259 { 
+                    # try rotate left
+                    ?(current)left(*);
+                    current?x <- ?(f, current)ajustx(*);
+                    match ?(f, current)intercect(*) || ?(f, current)isatbottom(*)
+                    {
+                        -1 {
+                            ?(current)right(*);
+                        }
+                    }
+                }
+
+                258 {
+                    # try rotate right
+                    ?(current)right(*);
+                    current?x <- ?(f, current)ajustx(*);
+                    match ?(f, current)intercect(*) || ?(f, current)isatbottom(*)
+                    {
+                        -1 {
+                            ?(current)left(*);
+                        }
+                    }
+                }
+
+                32 { # down [space]
+                    while -1-?(f, current)intercect(*) && -1-?(f, current)isatbottom(*)
+                    {
+                        current?y <- current?y + 1;
+                    }
+                    current?y <- current?y - 1;
+                    timer <- timer_step;
+                }
+
+                261 { 
+                    # try move right
+                    i32 oldx;
+                    oldx <- current?x;
+                    current?x <- current?x + 1;
+                    current?x <- ?(f, current)ajustx(*);
+                    match ?(f, current)intercect(*)
+                    {
+                        -1 {    
+                            current?x <- oldx;
+                        }
+                    }
+                }
+
+                260 {
+                    # try move left
+                    i32 oldx;
+                    oldx <- current?x;
+                    current?x <- current?x - 1;
+                    current?x <- ?(f, current)ajustx(*);
+                    match ?(f, current)intercect(*)
+                    {
+                        -1 {    
+                            current?x <- oldx;
+                        }
+                    }
+                }
+            }
+        }
+
+        timer <- timer + 1;
+        match timer >= timer_step
+        {
+            -1 {
+                current?y <- current?y + 1;
+                match ?(f, current)intercect(*) || ?(f, current)isatbottom(*)
+                {
+                    -1 {
+                        current?y <- current?y - 1;
+                        ?(f, current)apply(*);
+                        current <- next_fig;
+                        next_fig <- ?(engine, f)randomfig(*);
+                        match ?(f, current)intercect(*) || ?(f, current)isatbottom(*)
+                        {
+                            -1 {
+                                end_game <- -1;
+                            }
+                        }
+                    }
+                }
+                timer <- 0;
+            }
+        }
+
+        ?(handle)werase@dll(*);
+        ?(handle, f)draw_field(*);
+        
+        ?(shadowfig, current)setfig(*);
+        while -1-?(f, shadowfig)intercect(*) && -1-?(f, shadowfig)isatbottom(*)
+        {
+            shadowfig?y <- shadowfig?y + 1;
+        }
+        shadowfig?y <- shadowfig?y - 1;
+        ?(handle, f?x + shadowfig?x*2, f?y + shadowfig?y, shadowfig, 544)draw_fig(*); # grey
+
+        ?(handle, f?x + current?x*2, f?y + current?y, current, 288)draw_fig(*); # white
+
+        i32 xoff;
+        xoff <- f?x + f?w * 2 + 1;
+
+        ?(handle, 3, xoff + 3, next_fig_message)mvwprintw@dll(*);
+        ?(handle, xoff + 6, 5, next_fig, 32 + ((next_fig?type + 8) << 8))draw_fig(*);
+        
+        ?(handle, 11, xoff + 2, current_score_message, f?score)mvwprintw_d32@dll(*);
+        
+        
+        ?(handle)wrefresh@dll(*);
+        # sleep 50;
+    }
+    ?()endwin@dll(*);
+
+    ?(new i8[]"Final score: %d pts.\n", f?score)printd@dll(*);
+    
+    result <- current?y;
 }
 
 
-(i64 handle, i32 w, i32 h)draw_frame(i32? result)
+(i64 handle, i32 x, i32 y, figure fig, i32 value)draw_fig(i32? ready)
 {
-    i32 i;
-    i <- 0;
-    while i < h
+    i8[] a;
+    i32 ix, iy, pos, size;
+    a <- fig?value;
+    pos <- iy <- 0;
+    size <- fig?size;
+    while iy < size
     {
-        ?(handle, i, 0, 124)mvwaddch@dll(*);
-        ?(handle, i, w - 1, 124)mvwaddch@dll(*);
-        i <- i + 1;
-    }
-    i <- 0;
-    while i < w
+        ix <- 0;
+        while ix < size
+        {
+            match `i32`a[pos]
+            {
+                1 {
+                    ?(handle, y + iy, x + ix * 2, value)mvwaddch@dll(*);
+                    ?(handle, y + iy, x + ix * 2 + 1, value)mvwaddch@dll(*);
+                }
+            }
+            pos <- pos + 1;
+            ix <- ix + 1;
+        }
+        iy <- iy + 1;
+    }    
+    ready <- 0;
+}
+
+
+(i64 handle, field f)draw_field(i32? result)
+{
+    i32 x, y, w, h;
+    w <- f?w;
+    h <- f?h;
+    y <- f?y;
+    x <- f?x;
+    
+    ?(handle, y, x - 1, 124, h)mvwvline@dll(*);
+    ?(handle, y, x + w*2, 124, h)mvwvline@dll(*);
+    ?(handle, y - 1, x - 1, 45, w * 2 + 2)mvwhline@dll(*);
+    ?(handle, y + h, x - 1, 45, w * 2 + 2)mvwhline@dll(*);
+
+    i32 ix, iy, pos;
+    i8[] a;
+    i32[] c;
+    a <- f?value;
+    c <- f?colors;
+    pos <- iy <- 0;
+    while iy < h
     {
-        ?(handle, h - 1, i, 45)mvwaddch@dll(*);
-        i <- i + 1;
+        ix <- 0;
+        while ix < w
+        {
+            match `i32`a[pos]
+            {
+                1 {
+                    ?(handle, y + iy, x + ix*2, c[pos])mvwaddch@dll(*);
+                    ?(handle, y + iy, x + ix*2+1, c[pos])mvwaddch@dll(*);
+                }
+            }
+            pos <- pos + 1;
+            ix <- ix + 1;
+        }
+        iy <- iy + 1;
     }
+    
     result <- 0;
 }
 
 
 [dllimport:libncursesw.so]
 ()initscr(i64? handle);
+
+[dllimport:libncursesw.so]
+()start_color(i32? ret);
 
 [dllimport:libncursesw.so]
 ()noecho(i32? result);
@@ -106,6 +665,12 @@
 (i64 handle, i32 y, i32 x, i32 char)mvwaddch(i32? result);
 
 [dllimport:libncursesw.so]
+(i64 handle, i32 y, i32 x, i32 char, i32 count)mvwvline(i32? result);
+
+[dllimport:libncursesw.so]
+(i64 handle, i32 y, i32 x, i32 char, i32 count)mvwhline(i32? result);
+
+[dllimport:libncursesw.so]
 (i64 handle)werase(i32? result);
 
 [dllimport:libncursesw.so]
@@ -123,6 +688,19 @@
 [dllimport:libncursesw.so]
 (i64 handle)getmaxy(i32? result);
 
+[dllimport:libncursesw.so]
+(i32 id, i32 fore, i32 back)init_pair(i32? result);
+
+[dllimport:libncursesw.so]
+[dllimport.entry:mvwprintw]
+(i64 handle, i32 y, i32 x, i8[] text)mvwprintw(i32? result);
+[dllimport:libncursesw.so]
+[dllimport.entry:mvwprintw]
+(i64 handle, i32 y, i32 x, i8[] text, i32 a)mvwprintw_d32(i32? result);
+[dllimport:libncursesw.so]
+[dllimport.entry:mvwprintw]
+(i64 handle, i32 y, i32 x, i8[] text, i32 a, i32 b)mvwprintw_d32_d32(i32? result);
+
 [dllimport:libc.so]
 (i64 zero)time(u64? time);
 
@@ -132,7 +710,3 @@
 [dllimport:libc.so]
 [dllimport.entry:printf]
 (i8[] format, i32 value)printd(u32? res);
-
-[dllimport:libc.so]
-[dllimport.entry:printf]
-(i8[] format, i32 value, i32 value, i32 value)printd3(u32? res);

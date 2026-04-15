@@ -23,11 +23,11 @@ all: a.out d.out
 
 obj/asm.o: runtime.asm
 	@mkdir -p obj
-	$(AS) -f elf64 $< -o $@
+	$(AS) -g -f elf64 $< -o $@
 
 obj/asm-dbg.o: runtime_dbg.asm runtime.asm
 	@mkdir -p obj
-	$(AS) -f elf64 $< -o $@
+	$(AS) -g -f elf64 $< -o $@
 
 obj/%.o:
 	@mkdir -p obj

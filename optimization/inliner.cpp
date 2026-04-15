@@ -6,6 +6,7 @@
 #include "../codegen/codegen.hpp"
 #include "../headers/utils.hpp"
 #include "../headers/ir.hpp"
+#include "../headers/logger.hpp"
 
 
 class InlineLayer : public OptimizationLayer
@@ -106,59 +107,79 @@ public:
                 }
 
                 bool optimize = cost[wk] < agression || (calls[wk] == 1 && cost[wk] < agression * one_call_multipler);
-                
-                if (optimize && 
-                    !wk->attributes.contains("noinline") && 
-                    !node->attributes.contains("noinline") &&
-                    AllowInlining(get<string>(node->attributes["provider"])))
+                int rule = 0;
+
+                if (wk->attributes.contains("noinline"))      { rule = -1; } 
+                else if (wk->attributes.contains("inline"))   { rule = 1; }
+
+                if (node->attributes.contains("noinline"))    { rule = -1; } 
+                else if (node->attributes.contains("inline")) { rule = 1; }
+
+                if (!AllowInlining(get<string>(node->attributes["provider"])) && rule == 1)
                 {
-                    cost[fn] += cost[wk];
-                    
-                    printf("Insert call of %s into %s...\n", wk->name.c_str(), fn->name.c_str());
-                    /* parse inputs */
-                    vector<int64_t> inputs;
-                    set<int64_t> outputs;
-                    map<int64_t, int64_t> mapTable;
-                    for (int64_t id = 0; id < (int64_t)wk->inputs.size(); ++id)
+                    logError(state->filename, state->code, node->code_start, node->code_end, "Got 'inline' instruction on provider which doen't support inlining.");
+                }
+
+                if (AllowInlining(get<string>(node->attributes["provider"])))
+                {
+                    if (rule == -1)
                     {
-                        inputs.push_back(fn->content->code[i]->data[1 + id]);
+                        optimize = false;
                     }
-                    for (int64_t id = 0; id < (int64_t)wk->outputs.size(); ++id)
+                    if (rule == 1)
                     {
-                        /* find variable used for this output - don't create temporary for it */
-                        int64_t varName = GetOutputVariable(wk, id);
-                        mapTable[varName] = fn->content->code[i]->data[1 + wk->inputs.size() + id];
-                        outputs.insert(varName);
+                        optimize = true;
                     }
-                    /* allocate temp for all variables in wk */
-                    for (auto &[id, type] : wk->content->variables)
+                    if (optimize)
                     {
-                        if (outputs.find(id) == outputs.end())
+                        cost[fn] += cost[wk];
+                        
+                        printf("Insert call of %s into %s...\n", wk->name.c_str(), fn->name.c_str());
+                        /* parse inputs */
+                        vector<int64_t> inputs;
+                        set<int64_t> outputs;
+                        map<int64_t, int64_t> mapTable;
+                        for (int64_t id = 0; id < (int64_t)wk->inputs.size(); ++id)
                         {
-                            mapTable[id] = newTemp(fn, type);
+                            inputs.push_back(fn->content->code[i]->data[1 + id]);
                         }
-                    }
-                    // free new temporaries
-                    for (auto &[k, v] : mapTable)
-                    {
-                        // need to free only variables
-                        if (k < FIRST_TEMP_ID && outputs.find(k) == outputs.end())
+                        for (int64_t id = 0; id < (int64_t)wk->outputs.size(); ++id)
                         {
-                            connectOp(fn, fn->content->code[i], new OperationBlock(OP_FREE_TEMP, {v}));
+                            /* find variable used for this output - don't create temporary for it */
+                            int64_t varName = GetOutputVariable(wk, id);
+                            mapTable[varName] = fn->content->code[i]->data[1 + wk->inputs.size() + id];
+                            outputs.insert(varName);
                         }
+                        /* allocate temp for all variables in wk */
+                        for (auto &[id, type] : wk->content->variables)
+                        {
+                            if (outputs.find(id) == outputs.end())
+                            {
+                                mapTable[id] = newTemp(fn, type);
+                            }
+                        }
+                        // free new temporaries
+                        for (auto &[k, v] : mapTable)
+                        {
+                            // need to free only variables
+                            if (k < FIRST_TEMP_ID && outputs.find(k) == outputs.end())
+                            {
+                                connectOp(fn, fn->content->code[i], new OperationBlock(OP_FREE_TEMP, {v}));
+                            }
+                        }
+                        OperationBlock *next = fn->content->code[i]->next[0];
+                        OperationBlock *entry = InsertFunction(fn, inputs, mapTable, wk->content->entry, next);
+                        // connect inserted code
+                        if (fn->content->code[i]->next[0])
+                        {
+                            fn->content->code[i]->next[0]->prev.erase(fn->content->code[i]);
+                        }
+                        fn->content->code[i]->next = {entry};
+                        entry->prev.insert(fn->content->code[i]);
+                        // remove call
+                        removeOp(fn, fn->content->code[i]);
+                        --i; /* adjust iterator */
                     }
-                    OperationBlock *next = fn->content->code[i]->next[0];
-                    OperationBlock *entry = InsertFunction(fn, inputs, mapTable, wk->content->entry, next);
-                    // connect inserted code
-                    if (fn->content->code[i]->next[0])
-                    {
-                        fn->content->code[i]->next[0]->prev.erase(fn->content->code[i]);
-                    }
-                    fn->content->code[i]->next = {entry};
-                    entry->prev.insert(fn->content->code[i]);
-                    // remove call
-                    removeOp(fn, fn->content->code[i]);
-                    --i; /* adjust iterator */
                 }
 
                 if (was_allocated)
