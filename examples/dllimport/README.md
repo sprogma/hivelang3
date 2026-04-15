@@ -47,3 +47,9 @@ int foo(int *, int, char)
 (i64 a, i32 b, i8 c)foo(i32? res) # pointer as int
 ```
 
+
+# Player
+
+This is little bit more advanced dllimport example.
+
+It use winapi to play some sound.

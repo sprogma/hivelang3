@@ -14,5 +14,7 @@ test.txt
 *.gcov
 *.gcda
 *.gcno
-*.bin
 /prof/
+
+*.hdb
+*.bin
