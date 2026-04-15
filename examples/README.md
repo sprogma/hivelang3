@@ -8,5 +8,5 @@ If you're using the wrong os (linuh (~~gnu😮~~)), please check its [directory]
 * [constructions](./constructions/) Many examples that shows constructions supported in hive language.
 * [dllimport](./dllimport/) Example of usage of dll provider, to show messagebox.
 * [dft](./dft/) Speed comparison agains C in [dft](https://en.wikipedia.org/wiki/Discrete_Fourier_transform).
-* [mergesort](./mergesort/) Speed comparison agains C in mergesort.
+* [qsort](./qsort/) Speed comparison agains C in qsort.
 * [gpu](./gpu/) Example of usage of gpu provider.

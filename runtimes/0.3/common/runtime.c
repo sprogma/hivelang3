@@ -186,14 +186,22 @@ void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
         t->rdiValue = rdi_value;
         memcpy(t->context, w->context, sizeof(t->context));
         log("Worker enqueued [id=%lld, data=%p]\n", t->id, t->data);
-        scheduler_enqueue(&glb_scheduler, 32, t);
+        struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+        int64_t number = 0;
+        if (lc_data != NULL)
+        {
+            number = lc_data->number;
+        }
+        scheduler_enqueue(&glb_scheduler, 1, t, number);
     }
 }
 
 void UpdateWaitingWorkers()
 {
     int64_t ticks = GetTicks();
-
+    int count = 0;
+    const int THRESHOLD = 16 * 1024; 
+        
     log("Update waiting workers\n");
     
     // take all workers
@@ -202,23 +210,6 @@ void UpdateWaitingWorkers()
     wait_list_len = 0; // this can be not right, but it is ok
 
     // work with them:
-    // reverse list
-    {
-        int64_t count = 0;
-        struct wait_list_node *curr = data, *prev = NULL, *tmp = NULL;
-        while (curr)
-        {
-            tmp = curr->next;
-            curr->next = prev;
-            prev = curr;
-            curr = tmp;
-            count++;
-        }
-        data = prev;
-        log("Got %lld workers to update\n", count);
-    }
-    
-
     for (struct wait_list_node *curr = data, *nxt = data ? data->next : data; curr; curr = nxt, nxt = nxt ? nxt->next : nxt)
     {
         struct waiting_worker *w = curr->worker;
@@ -263,6 +254,27 @@ void UpdateWaitingWorkers()
             EnqueueWorkerFromWaitList(w, rdiValue);
             // myFree(w); // TODO: add label counts and etc.
             myFree(curr);
+
+            if (++count >= THRESHOLD && nxt) 
+            {
+                int64_t cnt = 1;
+                struct wait_list_node *tail = nxt;
+                while (tail->next) { tail = tail->next; cnt++; };
+
+                log("returning %lld workers to wait list\n", cnt);
+
+                struct wait_list_node *old_head = atomic_load(&wait_list);
+                do {
+                    tail->next = old_head;
+                } while (!atomic_compare_exchange_weak(&wait_list, &old_head, nxt));
+
+                atomic_fetch_add(&wait_list_len, cnt);
+
+                log("got %lld workers there\n", wait_list_len);
+                
+                return;
+            }
+
         }
     }
 }

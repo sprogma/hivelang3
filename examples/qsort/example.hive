@@ -93,7 +93,7 @@
         i64 pivot_index;
         pivot_index <- (l + r) / 2;
         i64 lt, gt;
-        (arr, pivot_index, l, r)split(var plt, var pgt);
+        (arr, pivot_index, l, r)split[inline:yes](var plt, var pgt);
         lt <- ?plt;
         gt <- ?pgt;
 

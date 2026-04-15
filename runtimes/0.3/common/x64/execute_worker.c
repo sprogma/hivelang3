@@ -20,7 +20,7 @@ void x64ExecuteWorker(struct queued_worker *worker)
     );
 }
 
-int64_t x64TryStallWorker(thread_t hThread, struct thread_data *data, int64_t runnedTicks)
+int64_t x64TryStallWorker(thread_t hThread, struct thread_data *lc_data, int64_t runnedTicks)
 {
     log("Stalling worker at thread %p\n", hThread);
 
@@ -29,7 +29,7 @@ int64_t x64TryStallWorker(thread_t hThread, struct thread_data *data, int64_t ru
     ctx.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
     if (GetThreadContext(hThread, &ctx)) 
     {
-        struct x64_worker_data *wkinfo = Workers[data->runningId].data;
+        struct x64_worker_data *wkinfo = Workers[lc_data->runningId].data;
         if (ctx.Rip >= (DWORD64)wkinfo->start && ctx.Rip <= (DWORD64)wkinfo->end)
         {
             log("Success\n");
@@ -49,18 +49,18 @@ int64_t x64TryStallWorker(thread_t hThread, struct thread_data *data, int64_t ru
             t->context[11] = ctx.Rax;
             t->context[12] = ctx.Rcx; 
             t->context[13] = ctx.Rdx;
-            t->id = data->runningId;
-            t->depth = data->runningDepth / 2 - TicksToMicroseconds(runnedTicks) / 1000; // dercease priority
+            t->id = lc_data->runningId;
+            t->depth = lc_data->runningDepth / 2 - TicksToMicroseconds(runnedTicks) / 1000; // dercease priority
             t->data = (void *)ctx.Rip;
             t->rbpValue = (void *)ctx.Rbp;
             t->rdiValue = ctx.Rdi;
 
-            log("Paused worker %lld [stall]: next address: %p, depth=%lld\n", data->runningId, ctx.Rip, t->depth);
+            log("Paused worker %lld [stall]: next address: %p, depth=%lld\n", lc_data->runningId, ctx.Rip, t->depth);
 
-            scheduler_enqueue(&glb_scheduler, 32, t);
+            scheduler_enqueue(&glb_scheduler, 1, t, lc_data->number);
             
             ctx.Rip = (DWORD64)longjmpUN;
-            ctx.Rcx = (DWORD64)&data->ShedulerBuffer;
+            ctx.Rcx = (DWORD64)&lc_data->ShedulerBuffer;
             ctx.Rdx = (DWORD64)1;
 
             SetThreadContext(hThread, &ctx);

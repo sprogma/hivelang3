@@ -192,8 +192,8 @@ struct scheduler
 extern struct scheduler glb_scheduler;
 
 void scheduler_init(struct scheduler *s, size_t workers_len);
-void scheduler_enqueue(struct scheduler *s, int priority, struct queued_worker *wk);
-void scheduler_enqueue_with_affinity(struct scheduler *s, size_t affinity, int priority, struct queued_worker *wk);
+void scheduler_enqueue(struct scheduler *s, int priority, struct queued_worker *wk, size_t worker_id);
+void scheduler_enqueue_with_affinity(struct scheduler *s, size_t affinity, int priority, struct queued_worker *wk, size_t worker_id);
 struct queued_worker*scheduler_dequeue(struct scheduler *s, size_t worker_id);
 
 

@@ -44,6 +44,6 @@ void dllStartNewLocalWorker(int64_t workerId, BYTE *inputTable)
     t->rdiValue = (int64_t)data + 1024 - tableSize;
     t->rbpValue = (BYTE *)data + 1024;
     memset(t->context, 0, sizeof(t->context));
-    scheduler_enqueue(&glb_scheduler, 32, t);
+    scheduler_enqueue(&glb_scheduler, 1, t, lc_data->number);
 }
 

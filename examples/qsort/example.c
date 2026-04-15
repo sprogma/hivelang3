@@ -17,7 +17,7 @@ void insertion_sort(int64_t *arr, size_t n)
     }
 }
 
-inline void swap(int64_t *a, int64_t *b)
+static inline void swap(int64_t *a, int64_t *b)
 {
     int64_t t = *b;
     *b = *a;

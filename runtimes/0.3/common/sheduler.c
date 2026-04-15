@@ -66,7 +66,7 @@ void SheduleWorker(struct thread_data *lc_data, struct sheduler_instance_info *i
 
     struct queued_worker *curr = scheduler_dequeue(&glb_scheduler, lc_data->number);
     if (curr)
-    {
+    {        
         lc_data->executedTasks++;
         log("\nSheduling new worker\n");
         log("Continue worker %lld from data=%p [rdi=%llx] [context=%p] [rbp=%p]\n",
@@ -281,6 +281,7 @@ int64_t ShedulerStart(int64_t resCodeId)
         
         #ifdef _WIN32
         WaitForSingleObject(hContinueEvent, INFINITE);
+        ResetEvent(hContinueEvent);
         #else
         sem_wait(&hContinueEvent);
         #endif

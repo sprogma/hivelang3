@@ -5,7 +5,12 @@
 #include "runtime.h"
 #include "stdatomic.h"
 
-#define RING_SIZE (64 * 1024)
+#define ALWAYS_PUSH_FRONT
+
+// up to 64
+#define MAX_TASK_PRIORITY 16
+
+#define RING_SIZE (4 * 64 * 1024)
 #define RING_MASK (RING_SIZE - 1)
 
 struct task_queue 
@@ -23,35 +28,49 @@ static void queue_init(struct task_queue *q)
 
 static void queue_push(struct task_queue *q, void *data) 
 {
-    int64_t t = atomic_fetch_add_explicit(&q->tail, 1, memory_order_relaxed);
-    atomic_store_explicit(&q->buffer[t & RING_MASK], data, memory_order_release);
+    int64_t t = atomic_fetch_add(&q->tail, 1);
+    atomic_store(&q->buffer[t & RING_MASK], data);
+}
+
+static void queue_push_front(struct task_queue *q, void *data)
+{
+    int64_t h = atomic_fetch_add(&q->head, -1) - 1;
+    
+    // wait for data
+    void *value = NULL;
+    while (!atomic_compare_exchange_weak(&q->buffer[h & RING_MASK], &value, data))
+    {
+        value = NULL;
+        _mm_pause();
+    }
 }
 
 static void* queue_pop(struct task_queue *q) 
 {
-    int64_t h = atomic_load_explicit(&q->head, memory_order_relaxed);
+    int64_t h = atomic_load(&q->head);
 
     while (1) 
     {
-        int64_t t = atomic_load_explicit(&q->tail, memory_order_acquire);
+        int64_t t = atomic_load(&q->tail);
         if (h >= t) // empty
         {
             return NULL;
         }
         // take next cell
-        if (atomic_compare_exchange_weak_explicit(&q->head, &h, h + 1, 
-                                                 memory_order_relaxed, 
-                                                 memory_order_relaxed)) 
+        if (atomic_compare_exchange_weak(&q->head, &h, h + 1)) 
         {
             // wait for data
             void *data;
-            while ((data = atomic_load_explicit(&q->buffer[h & RING_MASK], memory_order_acquire)) == NULL) 
+            do
             {
-                _mm_pause();
+                 data = atomic_load(&q->buffer[h & RING_MASK]);
+                 while (data == NULL)
+                 {
+                    data = atomic_load(&q->buffer[h & RING_MASK]);
+                    _mm_pause();
+                 }
             }
-            
-            // clear data
-            atomic_store_explicit(&q->buffer[h & RING_MASK], NULL, memory_order_release);
+            while (!atomic_compare_exchange_weak(&q->buffer[h & RING_MASK], &data, NULL));
             return data;
         }
     }
@@ -60,23 +79,34 @@ static void* queue_pop(struct task_queue *q)
 
 struct scheduler_queue
 {
-    struct task_queue queues[64];
+    struct task_queue queues[MAX_TASK_PRIORITY];
     _Atomic uint64_t active_mask;
     _Atomic int64_t size;
 };
 
 static void scheduler_queue_init(struct scheduler_queue *s) 
 {
-    for (int i = 0; i < 64; i++) 
+    for (int i = 0; i < MAX_TASK_PRIORITY; i++) 
     {
         queue_init(&s->queues[i]);
     }
     s->active_mask = s->size, 0;
 }
 
+static void scheduler_queue_push_front(struct scheduler_queue *s, int priority, void *data) 
+{
+    assert(priority >= 0 && priority <= MAX_TASK_PRIORITY);
+    assert(data);
+
+    queue_push_front(&s->queues[priority], data);
+    
+    atomic_fetch_or_explicit(&s->active_mask, (1ULL << (uint64_t)priority), memory_order_release);
+    atomic_fetch_add_explicit(&s->size, 1, memory_order_relaxed);
+}
+
 static void scheduler_queue_push(struct scheduler_queue *s, int priority, void *data) 
 {
-    assert(priority >= 0 && priority <= 64);
+    assert(priority >= 0 && priority <= MAX_TASK_PRIORITY);
     assert(data);
 
     queue_push(&s->queues[priority], data);
@@ -130,17 +160,29 @@ void scheduler_init(struct scheduler *s, size_t workers_len)
     }
 }
 
-void scheduler_enqueue_with_affinity(struct scheduler *s, size_t affinity, int priority, struct queued_worker *wk) 
+void scheduler_enqueue_with_affinity(struct scheduler *s, size_t affinity, int priority, struct queued_worker *wk, size_t worker_id) 
 {
     s->len++;
-    scheduler_queue_push(&s->workers[affinity % s->workers_len], priority, wk);
+
+    #ifdef ALWAYS_PUSH_FRONT
+    scheduler_queue_push_front(&s->workers[affinity % s->workers_len], priority, wk);
+    #else
+    if (worker_id == affinity)
+    {
+        scheduler_queue_push_front(&s->workers[affinity % s->workers_len], priority, wk);
+    }
+    else
+    {
+        scheduler_queue_push(&s->workers[affinity % s->workers_len], priority, wk);
+    }
+    #endif
 }
 
-void scheduler_enqueue(struct scheduler *s, int priority, struct queued_worker *wk) 
+void scheduler_enqueue(struct scheduler *s, int priority, struct queued_worker *wk, size_t worker_id) 
 {
     if (Workers[wk->id].affinity != -1)
     {
-        scheduler_enqueue_with_affinity(s, Workers[wk->id].affinity, priority, wk);
+        scheduler_enqueue_with_affinity(s, Workers[wk->id].affinity, priority, wk, worker_id);
         return;
     }
     size_t i = (size_t)scheduler_rnd(&s->rnd_state) % s->workers_len;
@@ -150,7 +192,20 @@ void scheduler_enqueue(struct scheduler *s, int priority, struct queued_worker *
     int64_t sj = atomic_load_explicit(&s->workers[j].size, memory_order_relaxed);
 
     size_t target = (si < sj) ? i : j;
-    scheduler_queue_push(&s->workers[target], priority, wk);
+    
+    #ifdef ALWAYS_PUSH_FRONT
+    scheduler_queue_push_front(&s->workers[target], priority, wk);
+    #else
+    if (target == worker_id)
+    {
+        scheduler_queue_push_front(&s->workers[target], priority, wk);
+    }
+    else
+    {
+        scheduler_queue_push(&s->workers[target], priority, wk);
+    }
+    #endif
+    
     s->len++;
 }
 
