@@ -453,24 +453,30 @@ class randomengine
                 
                 259 { 
                     # try rotate left
+                    i32 oldx;
+                    oldx <- current?x;
                     ?(current)left(*);
                     current?x <- ?(f, current)ajustx(*);
                     match ?(f, current)intercect(*) || ?(f, current)isatbottom(*)
                     {
                         -1 {
                             ?(current)right(*);
+                            current?x <- oldx;
                         }
                     }
                 }
 
                 258 {
                     # try rotate right
+                    i32 oldx;
+                    oldx <- current?x;
                     ?(current)right(*);
                     current?x <- ?(f, current)ajustx(*);
                     match ?(f, current)intercect(*) || ?(f, current)isatbottom(*)
                     {
                         -1 {
                             ?(current)left(*);
+                            current?x <- oldx;
                         }
                     }
                 }
