@@ -46,4 +46,3 @@ void x64StartNewLocalWorker(int64_t workerId, BYTE *inputTable)
     memset(t->context, 0, sizeof(t->context));
     scheduler_enqueue(&glb_scheduler, 1, t, lc_data ? lc_data->number : 0);
 }
-

@@ -12,9 +12,11 @@ void gpuPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state 
 {
     /* save context and select next worker */
     struct waiting_worker *t = myMalloc(sizeof(*t));
+    log("allocated %p\n", t);
 
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
 
+    t->links = 1;
     t->id = lc_data->runningId;
     t->depth = lc_data->runningDepth;
     t->data = returnAddress;

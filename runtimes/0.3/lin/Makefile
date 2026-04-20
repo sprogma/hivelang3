@@ -6,8 +6,10 @@ LIBS = -lOpenCL -lpthread
 LDFLAGS = -fPIC $(LIBS)
 
 ifeq ($(SANITIZE),1)
-    CFLAGS += -fsanitize=address -g
-    LDFLAGS += -fsanitize=address -g
+    # CFLAGS += -fsanitize=address -g
+    # LDFLAGS += -fsanitize=address -g
+    CFLAGS += -fsanitize=leak -g
+    LDFLAGS += -fsanitize=leak -g
 endif
 
 RLS_FLAGS = -O3 -mavx2 -flto -DNDEBUG -fno-unwind-tables -fno-asynchronous-unwind-tables

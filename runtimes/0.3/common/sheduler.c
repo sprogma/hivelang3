@@ -29,7 +29,7 @@ thread_result_t WaitListUpdateWorker(void *data)
     while (!waitForExit)
     {
         UpdateWaitingWorkers();
-        Sleep(1);
+        Sleep(100);
     }
     return 0;
 }
@@ -76,12 +76,15 @@ void SheduleWorker(struct thread_data *lc_data, struct sheduler_instance_info *i
         
         lc_data->stallable = Providers[Workers[curr->id].provider].stallable;
         lc_data->lastWorkerStart = GetTicks();
+        
+        void *frameBase = curr->rbpValue - 1024;
+        \
         Providers[Workers[curr->id].provider].ExecuteWorker(curr);
         lc_data->stallable = 0;
+        
         // free current worker
         lc_data->completedTasks++;
-        myFree(curr->rbpValue - 1024);
-        myFree(curr);
+        myFree(frameBase);
     }
     else
     {

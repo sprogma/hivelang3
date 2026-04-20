@@ -15,6 +15,7 @@ void dllPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state 
 
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
 
+    t->links = 1;
     t->id = lc_data->runningId;
     t->depth = lc_data->runningDepth;
     t->data = returnAddress;
@@ -27,3 +28,8 @@ void dllPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state 
     WaitListWorker(t);
 }
 
+
+void dllFreeWaitingWorker(struct waiting_worker *wk)
+{
+    free(wk);
+}

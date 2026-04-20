@@ -18,6 +18,8 @@ void x64ExecuteWorker(struct queued_worker *worker)
         worker->rbpValue,
         (BYTE *)worker->context
     );
+
+    myFree(worker);
 }
 
 int64_t x64TryStallWorker(thread_t hThread, struct thread_data *lc_data, int64_t runnedTicks)

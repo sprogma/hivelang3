@@ -50,6 +50,7 @@ struct waiting_worker
     void *state_data;
     // lock
     _Atomic int64_t queued;
+    _Atomic int64_t links;
     // worker id
     int64_t id;
     int64_t depth;
@@ -78,6 +79,7 @@ struct queued_worker
 
 
 struct wait_list_node *WaitListWorker(struct waiting_worker *t);
+void FreeWaitingWorker(struct waiting_worker *t);
 
 
 
@@ -165,6 +167,7 @@ struct hive_provider_info
 {
     void (*ExecuteWorker)(struct queued_worker *);
     void (*NewObjectUsingPage)(int64_t type, int64_t size, int64_t param, int64_t *remote_id);
+    void (*FreeWaitingWorker)(struct waiting_worker *w);
     int64_t stallable;
     int64_t (*TryStallWorker)(thread_t hThread, struct thread_data *data, int64_t runnedTicks);
     void (*StartNewLocalWorker)(int64_t workerId, BYTE *inputTable);

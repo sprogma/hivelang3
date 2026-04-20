@@ -409,7 +409,12 @@ void UpdateWaitingQuery(int64_t object_id, int64_t query_offset, int64_t query_s
             if (res)
             {
                 EnqueueWorkerFromWaitList(w, rdiValue);
-                // myFree(w); // TODO: fix allocation
+                int64_t tmp = atomic_fetch_sub(&w->links, 1);
+                assert(tmp >= 1);
+                if (tmp == 1)
+                {
+                    FreeWaitingWorker(w);
+                }
             }
         }
         void *tmp = wlt;
@@ -463,7 +468,13 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
             if (res == 1)
             {
                 EnqueueWorkerFromWaitList(w, 0);
-                // myFree(w); // TODO: fix allocations?
+                
+                int64_t tmp = atomic_fetch_sub(&w->links, 1);
+                assert(tmp >= 1);
+                if (tmp == 1)
+                {
+                    FreeWaitingWorker(w);
+                }
             }
         }
         void *tmp = wlt;

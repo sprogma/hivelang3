@@ -12,10 +12,12 @@ struct wait_list_node *x64PauseWorker(void *returnAddress, void *rbpValue, enum 
 {
     /* save context and select next worker */
     struct waiting_worker *t = myMalloc(sizeof(*t));
+    log("allocated %p\n", t);
 
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
 
     memcpy(t->context, rbpValue - 1024, sizeof(t->context));
+    t->links = 1;
     t->id = lc_data->runningId;
     t->depth = lc_data->runningDepth;
     t->data = returnAddress;
@@ -28,3 +30,8 @@ struct wait_list_node *x64PauseWorker(void *returnAddress, void *rbpValue, enum 
     return WaitListWorker(t);
 }
 
+
+void x64FreeWaitingWorker(struct waiting_worker *wk)
+{
+    myFree(wk);
+}

@@ -282,6 +282,7 @@ void dllExecuteWorker(struct queued_worker *worker)
         }
         myFree(data->inputTable);
         myFree(data);
+        myFree(worker);
         return;
     }
 }

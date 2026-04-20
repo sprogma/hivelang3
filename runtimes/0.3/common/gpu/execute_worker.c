@@ -21,6 +21,7 @@ void gpuExecuteWorker(struct queued_worker *worker)
 {
     if (worker->data == RETURN_STATE_GPU_END)
     {
+        myFree(worker);
         return;
     }
     // TODO: set interrupt lock
@@ -117,5 +118,6 @@ void gpuExecuteWorker(struct queued_worker *worker)
     x64PushObject(promise, &value, 0, 1, RETURN_STATE_GPU_END, NULL);
 
     // return
+    myFree(worker);
 }
 

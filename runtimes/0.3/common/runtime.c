@@ -26,6 +26,7 @@ struct hive_provider_info Providers[] = {
     {
         .ExecuteWorker = x64ExecuteWorker,
         .NewObjectUsingPage = x64NewObjectUsingPage,
+        .FreeWaitingWorker = x64FreeWaitingWorker,
         .stallable = 1,
         .TryStallWorker = x64TryStallWorker,
         .StartNewLocalWorker = x64StartNewLocalWorker,
@@ -33,18 +34,21 @@ struct hive_provider_info Providers[] = {
     {
         .ExecuteWorker = gpuExecuteWorker,
         .NewObjectUsingPage = gpuNewObjectUsingPage,
+        .FreeWaitingWorker = NULL,
         .stallable = 0,
         .StartNewLocalWorker = gpuStartNewLocalWorker,
     },
     {
         .ExecuteWorker = dllExecuteWorker,
         .NewObjectUsingPage = NULL,
+        .FreeWaitingWorker = dllFreeWaitingWorker,
         .stallable = 0,
         .StartNewLocalWorker = dllStartNewLocalWorker,
     },
     {
         .ExecuteWorker = NULL,
         .NewObjectUsingPage = locNewObjectUsingPage,
+        .FreeWaitingWorker = NULL,
         .stallable = 0,
         .StartNewLocalWorker = NULL,
     }
@@ -173,6 +177,12 @@ struct wait_list_node *WaitListWorker(struct waiting_worker *t)
     return WaitListNode(node);
 }
 
+void FreeWaitingWorker(struct waiting_worker *t)
+{
+    assert(Providers[Workers[t->id].provider].FreeWaitingWorker != 0);
+    Providers[Workers[t->id].provider].FreeWaitingWorker(t);
+}
+
 void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
 {
     int64_t old = 0;
@@ -249,11 +259,19 @@ void UpdateWaitingWorkers()
                 res = x64SleepStates(w, ticks, &rdiValue); break;
             //<<--QuoteEnd-->>
         }
+                    
+        myFree(curr);
+                
         if (res)
         {
             EnqueueWorkerFromWaitList(w, rdiValue);
-            // myFree(w); // TODO: add label counts and etc.
-            myFree(curr);
+
+            int64_t tmp = atomic_fetch_sub(&w->links, 1);
+            assert(tmp >= 1);
+            if (tmp == 1)
+            {
+                FreeWaitingWorker(w);
+            }
 
             if (++count >= THRESHOLD && nxt) 
             {
