@@ -31,5 +31,5 @@ void dllPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state 
 
 void dllFreeWaitingWorker(struct waiting_worker *wk)
 {
-    free(wk);
+    myFree(wk);
 }
