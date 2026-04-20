@@ -31,6 +31,7 @@ extern gpuCallObject
 extern locNewObject
 extern dllCallObject
 extern anyCastProvider
+extern printf
 
 section .data align=64
 context: times 512 db 0
@@ -100,6 +101,11 @@ section .text
     pop r8
 %endmacro
 
+section .data
+    log_msg db "Calling c-endpoint from %p [base=%p]", 10, 0
+
+section .text
+
 %macro CWrapper 1
     mov rax, rbp
     sub rax, 1024
@@ -111,6 +117,26 @@ section .text
     
     mov r8, rax
     mov r9, rbp
+
+    %ifdef DEBUG
+    push rsi
+    push rdi
+    push rdx
+    push rcx
+    push r8
+    push r9
+    xor rax, rax
+    lea rdi, [rel log_msg]
+    mov rsi, r8
+    mov rdx, r9
+    call printf wrt ..plt
+    pop r9
+    pop r8
+    pop rcx
+    pop rdx
+    pop rdi
+    pop rsi
+    %endif
     
     call %1
     

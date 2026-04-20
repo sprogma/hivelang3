@@ -1,13 +1,13 @@
 CC = clang
 AS = nasm
 
-CFLAGS = -flto -I../common -I. -fno-stack-protector -fno-pie -mno-stack-arg-probe -D_GNU_SOURCE -std=gnu2y -fms-extensions -Wno-microsoft -Wno-format
+CFLAGS = -fPIC -I../common -I. -fno-stack-protector -mno-stack-arg-probe -D_GNU_SOURCE -std=gnu2y -fms-extensions -Wno-microsoft -Wno-format
 LIBS = -lOpenCL -lpthread
-LDFLAGS = $(LIBS)
+LDFLAGS = -fPIC $(LIBS)
 
 ifeq ($(SANITIZE),1)
-    CFLAGS += -fsanitize=address
-    LDFLAGS += -fsanitize=address
+    CFLAGS += -fsanitize=address -g
+    LDFLAGS += -fsanitize=address -g
 endif
 
 RLS_FLAGS = -O3 -mavx2 -flto -DNDEBUG -fno-unwind-tables -fno-asynchronous-unwind-tables

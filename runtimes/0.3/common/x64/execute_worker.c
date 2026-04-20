@@ -69,7 +69,7 @@ int64_t x64TryStallWorker(thread_t hThread, struct thread_data *lc_data, int64_t
     }
     #else
     (void)hThread;
-    (void)data;
+    (void)lc_data;
     (void)runnedTicks;
     // TODO: maybe add this?
     // pthread_kill(hThread, SIGUSR1);

@@ -567,7 +567,7 @@ class randomengine
         
         
         ?(handle)wrefresh@dll(*);
-        # sleep 50;
+        sleep 80;
     }
     ?()endwin@dll(*);
 
