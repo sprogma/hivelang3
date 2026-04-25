@@ -1690,7 +1690,7 @@ void RequestPathToIDBroadcast(int64_t global_id, int64_t except_this_local_id)
 }
 
 
-void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct wait_list_node *worker)
+void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiting_worker *worker)
 {
     // find object in object table
     struct known_object *obj = (void *)GetHashtable(&known_objects, (BYTE *)&object, 8, 0);

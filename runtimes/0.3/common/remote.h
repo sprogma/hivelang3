@@ -199,8 +199,8 @@ int64_t i64GetHashtableNoLock(struct i64hashtable * _Atomic *h, int64_t key, int
 void i64SetHashtable(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value);
 void i64SetHashtableNoLock(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value);
 
-void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct wait_list_node *worker);
-void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data, struct wait_list_node *worker);
+void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiting_worker *worker);
+void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data, struct waiting_worker *worker);
 void StartNewWorkerRemote(struct hive_connection *con, int64_t worker_id, int64_t global_id, void *inputTable);
 void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const void *source);
 

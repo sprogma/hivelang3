@@ -17,44 +17,51 @@ $files = @(ls -r *.c) + @(ls ../common/*.c -r)
 $h = @(ls -r *.h) + @(ls ../common/*.h -r)
 $jobs = @()
 [void](mkdir obj -Force)
+
 $jobs += Start-ThreadJob {   
     fasm runtime.asm obj/asm.o
     $z = @()
     #$Speed = "-O3", "-mavx2"
-    $using:files | % {
+    $using:files | % {$id=0}{
         $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
         $o = "obj/$o"
         $z += $o
         if ((@($_.LastWriteTime) + ($using:h).LastWriteTime) -gt (gi $o 2>$null).LastWriteTime)
         {
-            Write-Host "becouse of $((@($_) + ($using:h)) | ? {$_.LastWriteTime -gt $o.LastWriteTime} | % N*) rebuild $_"
+            Write-Host "rebuild $_" -Fore green
             & $using:CC $_ -c -o $o $Speed -g $using:rlsDef -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS $using:rlsFF || Write-Host "Error in compilation"
         }
         else
         {
-            Write-Host "skip building $_"
+            Write-Host "skip building $_" -Fore yellow
         }
+        Write-Progress -Id 1 -Activity "Building target Release" -Status "building..." -PercentComplete ([int](100.0*($id++)/($using:files).Count))
     }
+    Write-Progress -Id 1 -Activity "Building target Release" -Status "Linking..." -PercentComplete 100
     & $using:CC $z obj/asm.o -g -o a.exe $Speed "-Wl,/subsystem:console" "-Wl,/MAP:release.map" $using:LF $using:FLAGS $using:rlsLF $using:rlsFF || Write-Host "Error in compilation"
+    Write-Progress -Id 1 -Activity "Building target Release" -Completed
 }
 $jobs += Start-ThreadJob {
     fasm runtime_dbg.asm obj/asm_dbg.o
     $z = @()
-    $using:files | % {
+    $using:files | % {$id=0}{
         $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
         $o = "obj/dbg_$o"
         $z += $o
         if ((@($_.LastWriteTime) + ($using:h).LastWriteTime) -gt (gi $o 2>$null).LastWriteTime)
         {
-            Write-Host "becouse of $((@($_) + ($using:h)) | ? {$_.LastWriteTime -gt $o.LastWriteTime} | % N*) rebuild $_"
+            Write-Host "rebuild $_" -Fore green
             & $using:CC $_ -c -o $o -g $using:dbgDef -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE $using:FLAGS  || Write-Host "Error in compilation" # -fsanitize=address
         }
         else
         {
-            Write-Host "skip building $_"
+            Write-Host "skip building $_" -Fore yellow
         }
+        Write-Progress -Id 2 -Activity "Building target Debug" -Status "building..." -PercentComplete ([int](100.0*($id++)/($using:files).Count))
     }
+    Write-Progress -Id 2 -Activity "Building target Debug" -Status "Linking..." -PercentComplete 100
     & $using:CC $z obj/asm_dbg.o -g -o d.exe "-Wl,/subsystem:console" "-Wl,/MAP:debug.map" $using:LF $using:FLAGS $using:dbgLF  || Write-Host "Error in compilation" # -fsanitize=address
+    Write-Progress -Id 2 -Activity "Building target Debug" -Completed
 }
 $jobs | Receive-Job -Wait
 popd
