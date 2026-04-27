@@ -35,7 +35,7 @@ int b_send(struct bufferized_socket *s, const char *msg, int len, int flags)
     (void)flags;
     while (len > 0) 
     {
-        int c = (len < (int)sizeof(s->buffer) - s->buffer_len) ? len : (int)sizeof(s->buffer) - s->buffer_len;
+        int c = (int)((len < (int)((int64_t)sizeof(s->buffer) - s->buffer_len)) ? len : (int64_t)sizeof(s->buffer) - s->buffer_len);
         memcpy(s->buffer + s->buffer_len, msg, c);
         s->buffer_len += c; 
         msg += c; 
@@ -387,8 +387,7 @@ void UpdateWaitingQuery(int64_t object_id, int64_t query_offset, int64_t query_s
     {
         /* update wait list */
         {
-            struct wait_list_node *node = (void *)wlt->local_id;
-            struct waiting_worker *w = node->worker;
+            struct waiting_worker *w = (void *)wlt->local_id;
             log("update worker: %p\n", w);
             int64_t res = 0, rdiValue;
             switch (w->state)
@@ -451,8 +450,7 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
     {
         /* update wait list */
         {
-            struct wait_list_node *node = (void *)wlt->local_id;
-            struct waiting_worker *w = node->worker;
+            struct waiting_worker *w = (void *)wlt->local_id;
             log("update worker: %p\n", w);
             int64_t res = 0;
             switch (w->state)
@@ -1744,7 +1742,7 @@ void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiti
     unlock_write(&connection->lock);
 }
 
-void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data, struct wait_list_node *worker)
+void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data, struct waiting_worker *worker)
 {
     log("request set object=%lld\n", object_id);
     // if this is local object - simply set it and answer [to who?]

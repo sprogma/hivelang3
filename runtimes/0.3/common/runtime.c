@@ -88,7 +88,7 @@ int64_t GetNewObjectId(int64_t *result)
 }
 
 
-struct wait_list_node *universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
+struct waiting_worker *universalPauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
 {
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
     switch (Workers[lc_data->runningId].provider)
