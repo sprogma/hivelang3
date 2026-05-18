@@ -76,16 +76,9 @@ struct memory_page_request
     int64_t page_id;
     int64_t local_redirect_id;
     _Atomic int32_t answered;
-    int32_t requested;
+    _Atomic int32_t requested;
 };
 
-struct id_request
-{
-    int64_t id;
-    int64_t local_redirect_id;
-    _Atomic int32_t answered;
-    int32_t requested;
-};
 
 #define QUERY_HASHING_BYTES 24
 struct linked_node
@@ -111,12 +104,6 @@ struct push_object_request
     struct linked_node * _Atomic wait_list;
 };
 
-#define INFINITY_DISTANCE 999999
-struct known_object
-{
-    int64_t local_id;
-    int64_t distance;
-};
 struct known_hive
 {
     int64_t local_id;
@@ -124,52 +111,119 @@ struct known_hive
 };
 
 
-struct hashtable_node
+
+#include "api.h"
+
+// -------------------- hashtables declarations ------------------------
+
+//
+/// hash tables for callbacks on object set/get
+//
+#define GETSET_WAIT_LIST_VALUE_PROCESSING_TAG 0xF
+// [not more than data aligment - so use 8 bits on tagging and ~14 workers]
+#define GETSET_WAIT_LIST_PARALLEL_PROCESSING 14
+
+struct get_wait_list_key
 {
-    struct hashtable_node *next;
+    uint64_t object_id;
+    uint64_t offset;
+    uint64_t size;
+};
+struct get_wait_list_value
+{
+    struct get_wait_list_value *next; // must be first field
+    void *params;
+    void (*callback)(int64_t object_id, int64_t offset, int64_t size, BYTE *data, void *params);
+};
+extern struct hashtable * _Atomic get_wait_list;
+void callbackQueryAnswerLocalId(int64_t object_id, int64_t offset, int64_t size, BYTE *data, void *params);
+void callbackContinueWorkerFromWaitingQuery(int64_t object_id, int64_t offset, int64_t size, BYTE *data, void *params);
+
+struct set_wait_list_key
+{
+    uint64_t object_id;
+    uint64_t offset;
+    uint64_t size;
+    uint64_t hash;
+};
+struct set_wait_list_value
+{
+    struct set_wait_list_value *next; // must be first field
+    void *params;
+    void (*callback)(int64_t object_id, int64_t offset, int64_t size, int64_t hash, void *params);
+};
+extern struct hashtable * _Atomic set_wait_list;
+void callbackPushAnswerLocalId(int64_t object_id, int64_t offset, int64_t size, int64_t hash, void *params);
+void callbackContinueWorkerFromWaitingPush(int64_t object_id, int64_t offset, int64_t size, int64_t hash, void *params);
+
+
+// 
+/// hash tables used for server's ID selection
+//
+// in ids table, value is live range (result of SheduleTimeoutFromNow) - if it is outdated, 
+// broadcast will be counted as new broadcast / new id
+extern struct i64hashtable * _Atomic get_id_ids; // known requested id's.
+struct get_id_broadcasts_value
+{
     int64_t id;
-    int64_t length;
-    BYTE bytes[];
+    int64_t local_redirect_id;
+    _Atomic int32_t answered;
+    _Atomic int32_t requested;
 };
+extern struct hashtable * _Atomic get_id_broadcasts; // known broadcasts id's, key is broadcast_id of size BROADCAST_ID_LENGTH
 
-struct hashtable
+//
+/// hash tables used for memory pages allocation
+//
+extern struct i64hashtable * _Atomic get_page_ids; // known requested id's.
+struct get_page_broadcasts_value
 {
-    lock_t lock;
-    struct hashtable_node **table;
-    int64_t len;
-    int64_t alloc;
+    int64_t page_id;
+    int64_t local_redirect_id;
+    _Atomic int32_t answered;
+    _Atomic int32_t requested;
 };
+extern struct hashtable * _Atomic get_page_broadcasts;
 
+//
+/// hash tables used for path broadcasts
+//
+extern struct hashtable * _Atomic get_path_broadcasts;
 
+//
+/// hash tables used for path to servers broadcasts
+//
+extern struct hashtable * _Atomic get_path_to_id_broadcasts;
 
-// #define NOT_USE_I64HASHTABLE
+//
+/// local objects hashtable
+//
+// object_id -> object pointer or NULL if it is remote
+extern struct i64hashtable * _Atomic local_objects;
 
-#ifdef NOT_USE_I64HASHTABLE
-#define i64hashtable_node hashtable_node
-#define i64hashtable hashtable
-#else
-
-#define STATE_FREE 0
-#define STATE_BUSY 1
-#define STATE_READY 2
-
-struct i64hashtable_node
+//
+/// object paths hashtable
+//
+// stores path to object based on it's id
+#define INFINITY_DISTANCE 999999
+struct object_paths_value
 {
-    _Atomic int64_t key;
-    _Atomic int64_t value;
-    _Atomic int64_t state;
+    _Atomic int64_t local_id;
+    _Atomic int64_t distance;
 };
+extern struct i64hashtable * _Atomic object_paths;
 
-struct i64hashtable
+//
+/// global ids paths hashtable
+//
+// stores path to object based on it's id
+#define INFINITY_DISTANCE 999999
+struct global_id_paths_value
 {
-    _Atomic int64_t updating;
-    struct i64hashtable * _Atomic prev;
-    struct i64hashtable_node *table;
-    _Atomic int64_t len;
-    int64_t alloc;
+    _Atomic int64_t local_id;
+    _Atomic int64_t distance;
 };
-#endif
-
+extern struct i64hashtable * _Atomic global_id_paths;
 
 
 
@@ -182,22 +236,10 @@ extern lock_t pages_lock;
 extern struct memory_page pages[];
 extern int64_t pages_len;
 
-extern struct hashtable known_id_broadcasts;
-extern struct hashtable known_page_broadcasts;
-extern struct hashtable known_path_broadcasts;
-extern struct hashtable known_path_id_broadcasts;
+extern struct hashtable * _Atomic known_page_broadcasts;
+extern struct hashtable * _Atomic known_path_broadcasts;
+extern struct hashtable * _Atomic known_path_id_broadcasts;
 
-int64_t equal_bytes(BYTE *a, BYTE *b, int64_t len);
-
-int64_t GetHashtable(struct hashtable *h, BYTE *address, int64_t address_length, int64_t default_value);
-int64_t GetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_length, int64_t default_value);
-void SetHashtable(struct hashtable *h, BYTE *address, int64_t address_length, int64_t new_value);
-void SetHashtableNoLock(struct hashtable *h, BYTE *address, int64_t address_length, int64_t new_value);
-
-int64_t i64GetHashtable(struct i64hashtable * _Atomic *h, int64_t key, int64_t default_value);
-int64_t i64GetHashtableNoLock(struct i64hashtable * _Atomic *h, int64_t key, int64_t default_value);
-void i64SetHashtable(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value);
-void i64SetHashtableNoLock(struct i64hashtable * _Atomic *h, int64_t key, int64_t new_value);
 
 void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiting_worker *worker);
 void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data, struct waiting_worker *worker);
@@ -261,18 +303,27 @@ void RegisterPushEvent(int64_t object_id, int64_t offset, int64_t size, const vo
 #define PUSH_REPEAT_TIMEOUT (1*1000)
 #define QUERY_REPEAT_TIMEOUT (1*1000)
 
-extern struct hashtable known_objects;
-extern struct hashtable query_requests;
-extern struct hashtable push_requests;
-extern struct hashtable known_hives; // global_id -> local_id
-
-extern struct i64hashtable * _Atomic local_objects;
-
-
 // ------------- other -----------
 
 void InitInternalStructures();
 void start_remote_subsystem(int64_t noStdin);
+
+void UpdateWaitingQuery(int64_t object_id, int64_t offset, int64_t size, BYTE *data);
+void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size, int64_t hash);
+
+void SendPageAllocationConfirm(struct hive_connection *con, BYTE *broadcast_id);
+void SendIDConfirm(struct hive_connection *con, BYTE *broadcast_id);
+void ConfirmConnection(struct hive_connection *con, int64_t local_id, int64_t port);
+void RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t except_this_local_id, _Atomic int32_t *send_counter);
+void RedirectBroadcastIDQuery(int64_t want_id, BYTE *broadcast_id, int64_t except_this_local_id, _Atomic int32_t *send_counter);
+void RequestObjectPathBroadcast(int64_t object, int64_t except_this_local_id);
+void AnswerRequestObjectPath(int64_t object, int64_t distance);
+void AnswerQueryObject(struct hive_connection *con, void *shifted_buffer, int64_t object_id, int64_t offset, int64_t size);
+void AnswerPushObject(struct hive_connection *con, int64_t object_id, int64_t offset, int64_t size, int64_t hash);
+void RequestPathToIDBroadcast(int64_t global_id, int64_t except_this_local_id);
+void AnswerRequestPathToID(int64_t global_id, int64_t distance);
+
+struct hive_connection *GetConnectionById(int64_t local_id, int64_t *index);
 
 
 #endif

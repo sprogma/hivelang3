@@ -460,7 +460,7 @@ struct particle
     }
 
     ?(rect_size, players, players[0], map, mapW, mapH)Graphics[on:local](*);
-    ?(rect_size, players, players[1], map, mapW, mapH)Graphics[on:remote](*);
+    ?(rect_size, players, players[1], map, mapW, mapH)Graphics[on:local](*);
 
     while 1 # ?endProc = 0
     {

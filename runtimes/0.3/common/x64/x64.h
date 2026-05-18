@@ -12,6 +12,8 @@ struct x64_worker_data
 {
     void *start;
     void *end;
+    void *nextBuffer;
+    _Atomic int32_t spinlock;
 };
 
 

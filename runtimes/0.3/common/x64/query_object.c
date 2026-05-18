@@ -72,7 +72,7 @@ int64_t x64QueryObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *r
         
     case WK_STATE_QUERY_OBJECT_WAIT_X64:
         struct wait_query_info *info = w->state_data;
-        struct object *obj = (void *)i64GetHashtable(&local_objects, info->object_id, 0);
+        struct object *obj = (void *)i64GetHashtable(&local_objects, info->object_id);
         if (obj == 0)
         {
             // remote object, repeat request, with timeout
@@ -105,7 +105,7 @@ int64_t x64QueryObject(void *destination, int64_t object_id, int64_t offset, int
 {
     log("Query object %lld\n", object_id);
 
-    BYTE *obj = (BYTE *)i64GetHashtable(&local_objects, object_id, 0);
+    BYTE *obj = (BYTE *)i64GetHashtable(&local_objects, object_id);
 
     if (obj != NULL)
     {

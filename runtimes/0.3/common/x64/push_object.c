@@ -40,19 +40,20 @@ struct wait_push_info
     int64_t object_id; 
     int64_t offset;
     int64_t size;
+    int64_t hash;
     void *data;
     BYTE id[BROADCAST_ID_LENGTH];
     int64_t repeat_timeout;
 };
 //@regPush WK_STATE_PUSH_OBJECT_WAIT_X64 x64OnPushObject
-int64_t x64OnPushObject(struct waiting_worker *w, int64_t object, int64_t offset, int64_t size)
+int64_t x64OnPushObject(struct waiting_worker *w, int64_t object, int64_t offset, int64_t size, int64_t hash)
 {
     switch (w->state)
     {
     
     case WK_STATE_PUSH_OBJECT_WAIT_X64:
         struct wait_push_info *info = w->state_data;
-        if (info->object_id == object && info->offset == offset && myAbs(info->size) == size)
+        if (info->object_id == object && info->offset == offset && myAbs(info->size) == size && info->hash == hash)
         {
             myFree(info);
             return 1;
@@ -72,7 +73,7 @@ int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rd
     
     case WK_STATE_PUSH_OBJECT_WAIT_X64:
         struct wait_push_info *info = w->state_data;
-        struct object *obj = (void *)i64GetHashtable(&local_objects, info->object_id, 0);
+        struct object *obj = (void *)i64GetHashtable(&local_objects, info->object_id);
         if (obj == 0)
         {
             // remote object, repeat request, with timeout
@@ -87,6 +88,13 @@ int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rd
         else
         {
             x64UpdateLocalPush(obj, info->offset, info->size, info->data);
+            
+            if (((BYTE *)obj)[-1] == OBJECT_PROMISE)
+            {
+                int64_t abssize = myAbs(info->size);
+                UpdateWaitingQuery(info->object_id, info->offset, abssize, info->data);
+            }
+            
             myFree(info);
             return 1;
         }
@@ -100,7 +108,7 @@ __attribute__((sysv_abi))
 void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size, void *returnAddress, void *rbpValue)
 {
     log("push to object %p\n", object_id);
-    BYTE *obj = (BYTE *)i64GetHashtable(&local_objects, object_id, 0);
+    BYTE *obj = (BYTE *)i64GetHashtable(&local_objects, object_id);
     if (obj == 0)
     {
         struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
@@ -116,6 +124,7 @@ void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size
             .size = size,
             .offset = offset,
             .data = data,
+            .hash = GetByteStringHash(data, myAbs(size)),
             .repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT),
         };
         SECURE_RANDOM(info->id, BROADCAST_ID_LENGTH);
@@ -129,6 +138,12 @@ void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size
     else
     {
         x64UpdateLocalPush(obj, offset, size, source);
+
+        if (((BYTE *)obj)[-1] == OBJECT_PROMISE)
+        {
+            int64_t abssize = myAbs(size);
+            UpdateWaitingQuery(object_id, offset, abssize, source);
+        }
     }
 }
 

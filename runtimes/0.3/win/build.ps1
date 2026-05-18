@@ -1,6 +1,7 @@
-param([string]$CC="clang", [switch]$Sanitize)
+param([string]$CC="clang", [switch]$Sanitize, [switch]$Fast, [switch]$Atomic128)
 pushd $PSScriptRoot
 $pseudoRelease = $true
+
 $FLAGS = "-I.", "-I../common","-fno-stack-protector", "-DUNICODE", "-D_UNICODE", "-DFREESTANDING", "-municode", "-ffreestanding", "-nostdlib", "-mno-stack-arg-probe", "-fms-extensions", "-Wno-microsoft"
 $LF = "-lgdi32", "-lshell32", "-lkernel32", "-lbcrypt", "-lws2_32", "-lOpenCL", "-Wl,-dynamicbase:no", "-Wl,-entry:entry" 
 if ($Sanitize)
@@ -18,10 +19,21 @@ $h = @(ls -r *.h) + @(ls ../common/*.h -r)
 $jobs = @()
 [void](mkdir obj -Force)
 
+if ($atomic128)
+{
+    $ATOMICS = @(,"-mcx16", "-D__CX16__")
+    $FLAGS += $ATOMICS
+}
+
+if ($Fast)
+{
+    $rlsFF += @("-O3", "-mavx2")
+    $rlsLF += @("-O3", "-mavx2")
+}
+
 $jobs += Start-ThreadJob {   
     fasm runtime.asm obj/asm.o
     $z = @()
-    #$Speed = "-O3", "-mavx2"
     $using:files | % {$id=0}{
         $o = (rvpa -Path $_ -Relative -RelativeBasePath $PSScriptRoot)-replace"\.c$",".o"-replace"\\|/","-"
         $o = "obj/$o"

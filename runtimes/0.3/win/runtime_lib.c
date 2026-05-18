@@ -52,6 +52,35 @@ void *memcpy(void *_dst, const void *_src, size_t size)
     }
     return _dst;
 }
+
+int memcmp(const void *str1, const void *str2, size_t count) 
+{
+    const unsigned char *s1 = (const unsigned char *)str1;
+    const unsigned char *s2 = (const unsigned char *)str2;
+    while (count >= 8) 
+    {
+        if (*(const uint64_t *)s1 != *(const uint64_t *)s2) 
+        {
+            break;
+        }
+        s1 += 8;
+        s2 += 8;
+        count -= 8;
+    }
+    while (count > 0) 
+    {
+        if (*s1 != *s2) 
+        {
+            return (*s1 < *s2) ? -1 : 1;
+        }
+        s1++;
+        s2++;
+        count--;
+    }
+
+    return 0;
+}
+
 #endif
 
 

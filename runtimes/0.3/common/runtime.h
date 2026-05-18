@@ -225,6 +225,14 @@ void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset,
 // int64_t QueryLocalObject(void *destination, void *object, int64_t offset, int64_t size, int64_t *rdiValue);
 // void UpdateLocalPush(void *obj, int64_t offset, int64_t size, void *source);
 
+struct queued_worker *AllocateQueuedWorker();
+void FreeQueuedWorker(struct queued_worker *);
+
+
+struct waiting_worker *AllocateWaitingWorker(void);
+void FreeWaitingWorkerBase(struct waiting_worker *t);
+
+void FreeWaitingNode(struct wait_list_node *node);
 
 void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value);
 void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable);

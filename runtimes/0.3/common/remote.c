@@ -169,18 +169,6 @@ void DumpConnections()
 #endif
 
 
-void SendPageAllocationConfirm(struct hive_connection *con, BYTE *broadcast_id);
-void SendIDConfirm(struct hive_connection *con, BYTE *broadcast_id);
-void ConfirmConnection(struct hive_connection *con, int64_t local_id, int64_t port);
-int64_t RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t except_this_local_id);
-int64_t RedirectBroadcastIDQuery(int64_t want_id, BYTE *broadcast_id, int64_t except_this_local_id);
-void RequestObjectPathBroadcast(int64_t object, int64_t except_this_local_id);
-void AnswerRequestObjectPath(int64_t object, int64_t distance);
-void AnswerQueryObject(struct hive_connection *con, void *shifted_buffer, int64_t object_id, int64_t offset, int64_t size);
-void AnswerPushObject(struct hive_connection *con, int64_t object_id, int64_t offset, int64_t size);
-void RequestPathToIDBroadcast(int64_t global_id, int64_t except_this_local_id);
-void AnswerRequestPathToID(int64_t global_id, int64_t distance);
-
 
 void ConfirmPage(int64_t page_id)
 {
@@ -358,127 +346,86 @@ static void *ConnectionListnerWorker(void *param)
     return 0;
 }
 
-void UpdateWaitingQuery(int64_t object_id, int64_t query_offset, int64_t query_size, BYTE *data)
+
+void GetsetInsertTagged(struct hashtable * _Atomic *table, void *key, void *new_node)
 {    
-    /* for each local_id requesting this query - answer */
-    lock_write(&query_requests.lock);
-    struct query_object_request key = { object_id, query_offset, query_size, NULL, NULL };
-    struct query_object_request *q = (void *)GetHashtableNoLock(&query_requests, (BYTE *)&key, QUERY_HASHING_BYTES, 0);
-    struct linked_node *cur = NULL;
-    struct linked_node *wlt = NULL;
-    if (q != NULL)
+    // select all data on this query from hashtable
+    while (1)
     {
-        cur = atomic_exchange(&q->local_ids, NULL);
-        wlt = atomic_exchange(&q->wait_list, NULL);
-    }
-    unlock_write(&query_requests.lock);
-
-    /* redirect answer */
-    while (cur)
-    {
-        AnswerQueryObject(GetConnectionById(cur->local_id, NULL), data, object_id, query_offset, query_size);
-        void *tmp = cur;
-        cur = cur->next;
-        myFree(tmp);
-    }
-
-    /**/
-    while (wlt)
-    {
-        /* update wait list */
+        int64_t value = GetHashtable(table, key);
+        int64_t tag = value & GETSET_WAIT_LIST_VALUE_PROCESSING_TAG;
+        *(void **)new_node = (void *)(value & (~GETSET_WAIT_LIST_VALUE_PROCESSING_TAG)); // set next pointer, and remove tag from it
+        int64_t tagged_new_node = tag + (int64_t)new_node;
+        if (SetHashtable(&get_wait_list, key, tagged_new_node, value) == value)
         {
-            struct waiting_worker *w = (void *)wlt->local_id;
-            log("update worker: %p\n", w);
-            int64_t res = 0, rdiValue;
-            switch (w->state)
-            {
-            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regQuery\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*16)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);"}})-join"`n"
-    int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
-    int64_t castOnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
-    int64_t x64OnQueryObject(struct waiting_worker *, int64_t, int64_t, int64_t, void *, int64_t *);
-            //<<--QuoteEnd-->>
-            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regQuery\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*16)case $($_.a):"};"$(" "*20)res = $($n.Name)(w, object_id, query_offset, query_size, data, &rdiValue); break;"})-join"`n"
-    case WK_STATE_GET_OBJECT_SIZE:
-    case WK_STATE_GET_OBJECT_DATA:
-        res = castOnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
-    case WK_STATE_QUERY_OBJECT_WAIT_X64:
-        res = x64OnQueryObject(w, object_id, query_offset, query_size, data, &rdiValue); break;
-            //<<--QuoteEnd-->>
-            }
-            if (res)
-            {
-                EnqueueWorkerFromWaitList(w, rdiValue);
-                int64_t tmp = atomic_fetch_sub(&w->links, 1);
-                assert(tmp >= 1);
-                if (tmp == 1)
-                {
-                    FreeWaitingWorker(w);
-                }
-            }
+            // node updated, tag copied.
+            return;
         }
-        void *tmp = wlt;
-        wlt = wlt->next;
+    }
+}
+
+
+static void UpdateWaitingQueryList(int64_t object_id, int64_t offset, int64_t size, BYTE *data, struct get_wait_list_value *q)
+{
+    // call callbacks on each wait item
+    while (q != NULL)
+    {
+        q->callback(object_id, offset, size, data, q->params);
+        void *tmp = q;
+        q = q->next;
         myFree(tmp);
     }
 }
 
-void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
+void UpdateWaitingQuery(int64_t object_id, int64_t offset, int64_t size, BYTE *data)
+{    
+    struct get_wait_list_key key = { object_id, offset, size };
+    
+    int64_t value = TakeTaggedHashtable(&get_wait_list, &key, GETSET_WAIT_LIST_VALUE_PROCESSING_TAG, GETSET_WAIT_LIST_PARALLEL_PROCESSING);
+    struct get_wait_list_value *q = (void *)(value & (~GETSET_WAIT_LIST_VALUE_PROCESSING_TAG));
+    // ! is q is null, no tag will be created
+
+    // now, q is top pointer, and hashtable is tagged
+    if (q != NULL)
+    {
+        UpdateWaitingQueryList(object_id, offset, size, data, q);
+        // and now, release tag
+        AddHashtable(&get_wait_list, &key, -1);
+    }
+    
+    return;
+}
+
+static void UpdateWaitingPushList(int64_t object_id, int64_t offset, int64_t size, int64_t hash, struct set_wait_list_value *q)
 {
-    /* for each local_id requesting this query - answer */
-    lock_read(&push_requests.lock);
-    struct push_object_request key = { object_id, offset, size, NULL, NULL };
-    struct push_object_request *p = (void *)GetHashtableNoLock(&push_requests, (BYTE *)&key, PUSH_HASHING_BYTES, 0);
-    struct linked_node *cur = NULL;
-    struct linked_node *wlt = NULL;
-    if (p != NULL)
+    // call callbacks on each wait item
+    while (q != NULL)
     {
-        cur = atomic_exchange(&p->local_ids, NULL);
-        wlt = atomic_exchange(&p->wait_list, NULL);
-    }
-    unlock_read(&push_requests.lock);
-
-    /* redirect answer */
-    while (cur)
-    {
-        AnswerPushObject(GetConnectionById(cur->local_id, NULL), object_id, offset, size);
-        void *tmp = cur;
-        cur = cur->next;
+        q->callback(object_id, offset, size, hash, q->params);
+        void *tmp = q;
+        q = q->next;
         myFree(tmp);
     }
+    
+    return;
+}
 
-    while (wlt)
+void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size, int64_t hash)
+{
+    struct set_wait_list_key key = { object_id, offset, size, hash };
+
+    int64_t value = TakeTaggedHashtable(&set_wait_list, &key, GETSET_WAIT_LIST_VALUE_PROCESSING_TAG, GETSET_WAIT_LIST_PARALLEL_PROCESSING);
+    struct set_wait_list_value *q = (void *)(value & (~GETSET_WAIT_LIST_VALUE_PROCESSING_TAG));
+    // ! is q is null, no tag will be created
+    
+    // now, q is top pointer, and hashtable is tagged
+    if (q != NULL)
     {
-        /* update wait list */
-        {
-            struct waiting_worker *w = (void *)wlt->local_id;
-            log("update worker: %p\n", w);
-            int64_t res = 0;
-            switch (w->state)
-            {
-            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regPush\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*8)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t, int64_t);"}})-join"`n"
-    int64_t x64OnPushObject(struct waiting_worker *, int64_t, int64_t, int64_t);
-            //<<--QuoteEnd-->>
-            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@regPush\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"        case $($_.a):"};"            res = $($n.Name)(w, object_id, offset, size); break;"})-join"`n"
-    case WK_STATE_PUSH_OBJECT_WAIT_X64:
-        res = x64OnPushObject(w, object_id, offset, size); break;
-            //<<--QuoteEnd-->>
-            }
-            if (res == 1)
-            {
-                EnqueueWorkerFromWaitList(w, 0);
-                
-                int64_t tmp = atomic_fetch_sub(&w->links, 1);
-                assert(tmp >= 1);
-                if (tmp == 1)
-                {
-                    FreeWaitingWorker(w);
-                }
-            }
-        }
-        void *tmp = wlt;
-        wlt = wlt->next;
-        myFree(tmp);
+        UpdateWaitingPushList(object_id, offset, size, hash, q);
+        // and now, release tag
+        AddHashtable(&get_wait_list, &key, -1);
     }
+    return;
 }
 
 #define API_REQUEST_CONNECTION 0x00
@@ -583,7 +530,7 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size)
             8 byte: object_id
             8 byte: offset
             8 byte: size
-            27 byte: push ID [if API_ANSWER_PUSH_PIPE]
+            8 byte: hash
 
         API_ANSWER_REQUEST_PATH
             8 byte: object_id
@@ -652,51 +599,51 @@ static int64_t HandleApiCall(struct hive_connection *con)
                 return 1;
             }
             
-            lock_write(&known_id_broadcasts.lock);            
-            for (int64_t i = 0; i < known_id_broadcasts.alloc; ++i)
+            // if we know anybody who also want's to use this id, say no
+            int64_t timeout = i64GetHashtable(&get_id_ids, want_id);
+            if (timeout != 0 && GetTicks() < timeout)
             {
-                struct hashtable_node *cur = known_id_broadcasts.table[i];
-                while (cur != NULL)
-                {
-                    if (!equal_bytes(cur->bytes, broadcast_id, BROADCAST_ID_LENGTH) &&
-                        ((struct id_request *)cur->id)->id == want_id)
-                    {
-                        // refuse
-                        log("Refuse id\n");
-                        unlock_write(&known_id_broadcasts.lock);
-                        return 1;
-                    }
-                    cur = cur->next;
-                }
+                // also refuse
+                log("Refuse becouse it is repeated request\n");
+                return 1;
             }
+            
             // check - if we already answering this broadcast
-            struct id_request *broadcast = (struct id_request *)GetHashtableNoLock(&known_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 0);
-            if (broadcast == NULL)
+            struct get_id_broadcasts_value *broadcast = (void *)GetHashtable(&get_id_broadcasts, broadcast_id);
+            
+            if (broadcast == NULL) // new, create it in table
             {
-                // create local broadcast entry
                 broadcast = myMalloc(sizeof(*broadcast));
                 broadcast->id = want_id;
                 broadcast->local_redirect_id = con->local_id;
                 broadcast->answered = 0;
                 broadcast->requested = 0;
-                SetHashtableNoLock(&known_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, (int64_t)broadcast);
-
-                // redirect queries
-                broadcast->requested = RedirectBroadcastIDQuery(want_id, broadcast_id, con->local_id);
-            }
-            else
-            {
-                if (broadcast->local_redirect_id != con->local_id)
+                if (SetHashtable(&get_id_broadcasts, broadcast_id, (int64_t)broadcast, 0) == 0)
                 {
-                    /* simply answer yes */
-                    log("Confirmed becouse local_id differs\n");
-                    SendIDConfirm(con, broadcast_id);
+                    // all is good, broadcast created, redirect it and end processing
+                    RedirectBroadcastIDQuery(want_id, broadcast_id, con->local_id, &broadcast->requested);
+                    return 1;
                 }
+                
+                myFree(broadcast);
+                
+                // somebody already created same broadcast, so, use it
+                broadcast = (void *)GetHashtable(&get_id_broadcasts, broadcast_id);
+                
+                assert(broadcast != NULL);
+            }
+            
+            // to disable circular requests, if this request is not from itiniator of this broadcast on this
+            // hive, we answer yes.
+            if (broadcast->local_redirect_id != con->local_id)
+            {
+                log("Confirmed becouse this is not initiator.\n");
+                SendIDConfirm(con, broadcast_id);
+                return 1;
             }
 
             int64_t answered = broadcast->answered;
             int64_t requested = broadcast->requested;
-            unlock_write(&known_id_broadcasts.lock);
 
             // is broadcast accepted by all neibours?
             if (answered == requested)
@@ -713,33 +660,38 @@ static int64_t HandleApiCall(struct hive_connection *con)
             BYTE *broadcast_id = ctx->res_buffer;
             // get broadcast
             log("Get broadcast answer [prefix=%llx]\n", *(int64_t *)broadcast_id);
-            lock_read(&known_id_broadcasts.lock);
-            struct id_request *broadcast = (struct id_request *)GetHashtableNoLock(&known_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 0);
-            if (broadcast != NULL)
+            
+            
+            struct get_id_broadcasts_value *broadcast = (void *)GetHashtable(&get_id_broadcasts, broadcast_id);
+            
+            if (broadcast == NULL) return 1; // ignore incorrect answers == refuse them
+            
+            int64_t new_count = ++broadcast->answered;
+            
+            // if this was last answer from neibours,
+            // answer to initiator of this broadcast.
+            if (new_count == broadcast->requested)
             {
-                int64_t new_count = ++broadcast->answered;
-                if (new_count == broadcast->requested) // answer query
+                // if initiator is this hive, update server's id
+                if (broadcast->local_redirect_id == -1)
                 {
-                    log("Broadcast confirmed\n");
-                    if (broadcast->local_redirect_id == -1)
+                    log("local id broadcast confirmed\n");
+                    ConfirmID(broadcast->id);
+                }
+                else
+                {
+                    log("remote id broadcast confirmed\n");
+                    
+                    lock_read(&connections_lock);
+                    struct hive_connection *ansCon = GetConnectionById(broadcast->local_redirect_id, NULL);
+                    unlock_read(&connections_lock);
+                    if (ansCon)
                     {
-                        // request confirmed
-                        // all is ok - start working server
-                        ConfirmID(broadcast->id);
-                    }
-                    else
-                    {
-                        lock_read(&connections_lock);
-                        struct hive_connection *ansCon = GetConnectionById(broadcast->local_redirect_id, NULL);
-                        unlock_read(&connections_lock);
-                        if (ansCon)
-                        {
-                            SendIDConfirm(ansCon, broadcast_id);
-                        }
+                        SendIDConfirm(ansCon, broadcast_id);
                     }
                 }
             }
-            unlock_read(&known_id_broadcasts.lock);
+            
             return 1;
         }
         case API_REQUEST_MEM_PAGE:
@@ -764,56 +716,52 @@ static int64_t HandleApiCall(struct hive_connection *con)
             }
             unlock_read(&pages_lock);
 
-            // check - if any other broadcast waiting for this page
-            // TODO: change to check only this server created broadcasts, to not refuse if same page trying to allocate twice from one server
-            // TODO: maybe use Shared access here, and only if page isn't requested - use exclusive?
-            lock_write(&known_page_broadcasts.lock);
             
-            for (int64_t i = 0; i < known_page_broadcasts.alloc; ++i)
+            // if we know anybody who also want's to use this id, say no
+            int64_t timeout = i64GetHashtable(&get_page_ids, page_id);
+            if (timeout != 0 && GetTicks() < timeout)
             {
-                struct hashtable_node *cur = known_page_broadcasts.table[i];
-                while (cur != NULL)
-                {
-                    if (!equal_bytes(cur->bytes, broadcast_id, BROADCAST_ID_LENGTH) &&
-                        ((struct memory_page_request *)cur->id)->page_id == page_id)
-                    {
-                        // refuse
-                        log("Refuse allocation\n");
-                        unlock_write(&known_page_broadcasts.lock);
-                        return 1;
-                    }
-                    cur = cur->next;
-                }
+                // also refuse
+                log("Refuse becouse it is repeated request\n");
+                return 1;
             }
             
             // check - if we already answering this broadcast
-            struct memory_page_request *broadcast = (struct memory_page_request *)GetHashtableNoLock(&known_page_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 0);
-            if (broadcast == NULL)
+            struct get_page_broadcasts_value *broadcast = (void *)GetHashtable(&get_page_broadcasts, broadcast_id);
+            
+            if (broadcast == NULL) // new, create it in table
             {
-                // create local broadcast entry
                 broadcast = myMalloc(sizeof(*broadcast));
                 broadcast->page_id = page_id;
                 broadcast->local_redirect_id = con->local_id;
                 broadcast->answered = 0;
                 broadcast->requested = 0;
-                SetHashtableNoLock(&known_page_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, (int64_t)broadcast);
-
-                // redirect queries
-                broadcast->requested = RedirectBroadcastQuery(page_id, broadcast_id, con->local_id);
-            }
-            else
-            {
-                if (broadcast->local_redirect_id != con->local_id)
+                if (SetHashtable(&get_id_broadcasts, broadcast_id, (int64_t)broadcast, 0) == 0)
                 {
-                    /* simply answer yes */
-                    log("Confirmed becouse local_id differs\n");
-                    SendPageAllocationConfirm(con, broadcast_id);
+                    // all is good, broadcast created, redirect it and end processing
+                    RedirectBroadcastQuery(page_id, broadcast_id, con->local_id, &broadcast->requested);
+                    return 1;
                 }
+                
+                myFree(broadcast);
+                
+                // somebody already created same broadcast, so, use it
+                broadcast = (void *)GetHashtable(&get_id_broadcasts, broadcast_id);
+                
+                assert(broadcast != NULL);
             }
-
+            
+            // to disable circular requests, if this request is not from itiniator of this broadcast on this
+            // hive, we answer yes.
+            if (broadcast->local_redirect_id != con->local_id)
+            {
+                log("Confirmed becouse this is not initiator.\n");
+                SendPageAllocationConfirm(con, broadcast_id);
+                return 1;
+            }
+                        
             int64_t answered = broadcast->answered;
             int64_t requested = broadcast->requested;
-            unlock_write(&known_page_broadcasts.lock);
 
             // is broadcast accepted by all neibours?
             if (answered == requested)
@@ -829,74 +777,64 @@ static int64_t HandleApiCall(struct hive_connection *con)
         {
             BYTE *broadcast_id = ctx->res_buffer;
             // get broadcast
-            log("Get broadcast answer [prefix=%llx]\n", *(int64_t *)broadcast_id);
-            lock_read(&known_page_broadcasts.lock);
-            struct memory_page_request *broadcast = (struct memory_page_request *)GetHashtableNoLock(&known_page_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 0);
-            if (broadcast != NULL)
+            log("Get page broadcast answer [prefix=%llx]\n", *(int64_t *)broadcast_id);
+            
+            
+            struct get_page_broadcasts_value *broadcast = (void *)GetHashtable(&get_page_broadcasts, broadcast_id);
+            
+            if (broadcast == NULL) return 1; // ignore incorrect answers == refuse them
+            
+            int64_t new_count = ++broadcast->answered;
+            
+            // if this was last answer from neibours,
+            // answer to initiator of this broadcast.
+            if (new_count == broadcast->requested)
             {
-                int64_t new_count = ++broadcast->answered;
-                if (new_count == broadcast->requested) // answer query
+                // if initiator is this hive, update server's id
+                if (broadcast->local_redirect_id == -1)
                 {
-                    log("Broadcast confirmed\n");
-                    if (broadcast->local_redirect_id == -1)
+                    log("local id broadcast confirmed\n");
+                    ConfirmPage(broadcast->page_id);
+                }
+                else
+                {
+                    log("remote id broadcast confirmed\n");
+                    
+                    lock_read(&connections_lock);
+                    struct hive_connection *ansCon = GetConnectionById(broadcast->local_redirect_id, NULL);
+                    unlock_read(&connections_lock);
+                    if (ansCon)
                     {
-                        // request confirmed
-                        ConfirmPage(broadcast->page_id);
-                    }
-                    else
-                    {
-                        lock_read(&connections_lock);
-                        struct hive_connection *ansCon = GetConnectionById(broadcast->local_redirect_id, NULL);
-                        unlock_read(&connections_lock);
-                        if (ansCon)
-                        {
-                            SendPageAllocationConfirm(ansCon, broadcast_id);
-                        }
+                        SendPageAllocationConfirm(ansCon, broadcast_id);
                     }
                 }
             }
-            unlock_read(&known_page_broadcasts.lock);
             return 1;
         }
         case API_QUERY_OBJECT:
         {
             glbStatRemoteInputRequests++;
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
-            int64_t query_offset = *(int64_t *)(ctx->res_buffer+8);
-            int64_t query_size = *(int64_t *)(ctx->res_buffer+16);
-            /* if this is local object - answer query */
-            struct object *obj = (void *)i64GetHashtable(&local_objects, object_id, 0);
+            int64_t offset = *(int64_t *)(ctx->res_buffer+8);
+            int64_t size = *(int64_t *)(ctx->res_buffer+16);
+            
+            // is this object local?
+            struct object *obj = (void *)i64GetHashtable(&local_objects, object_id);
             if (obj != NULL)
             {
-                AnswerQueryObject(con, (BYTE *)obj + query_offset, object_id, query_offset, query_size);
+                AnswerQueryObject(con, (BYTE *)obj + offset, object_id, offset, size);
                 return 1;
             }
-            /* else - add request to global request hashtable */
-            struct linked_node *new_node = myMalloc(sizeof(*new_node));
-            new_node->local_id = con->local_id;
             
-            lock_write(&query_requests.lock);
+            struct get_wait_list_value *new_value = myMalloc(sizeof(*new_value));
+            new_value->params = (void *)con->local_id;
+            new_value->callback =  callbackQueryAnswerLocalId;
             
-            struct query_object_request key = { object_id, query_offset, query_size, NULL, NULL };
-            struct query_object_request *q = (void *)GetHashtableNoLock(&query_requests, (BYTE *)&key, QUERY_HASHING_BYTES, 0);
-            if (q == NULL)
-            {
-                q = myMalloc(sizeof(*q));
-                *q = key;
-                SetHashtableNoLock(&query_requests, (BYTE *)q, QUERY_HASHING_BYTES, (int64_t)q);
-            }
-            /* update q's linked list */
-            struct linked_node *old_head = q->local_ids;
-            do 
-            {
-                new_node->next = old_head;
-            } 
-            while (!atomic_compare_exchange_weak(&q->local_ids, &old_head, new_node));
+            struct get_wait_list_key key = { object_id, offset, size };
+            GetsetInsertTagged(&get_wait_list, &key, new_value);
             
-            unlock_write(&query_requests.lock);
-
-            /* repeat request */            
-            RequestObjectGet(object_id, query_offset, query_size, NULL);
+            // repeat request, (to 100% find destination hive)
+            RequestObjectGet(object_id, offset, size, NULL);
             
             return 1;
         }
@@ -907,8 +845,6 @@ static int64_t HandleApiCall(struct hive_connection *con)
             int64_t query_size = *(int64_t *)(ctx->res_buffer+16);
             BYTE *data = ctx->res_buffer+24;
             
-            /* for each program in waiting list - continue if this is it's request */
-            /* for each waiting local_id - answer */
             UpdateWaitingQuery(object_id, query_offset, query_size, data);
             
             return 1;
@@ -921,47 +857,33 @@ static int64_t HandleApiCall(struct hive_connection *con)
             int64_t size = *(int64_t *)(ctx->res_buffer+16);
             BYTE *data = ctx->res_buffer + 24;
             
-            log("get push object %lld\n", object_id);
+            int64_t hash = GetByteStringHash(data, size);
             
-            /* if this is local object - answer */
-            struct object *obj = (void *)i64GetHashtable(&local_objects, object_id, 0);
+            // is this object local?
+            struct object *obj = (void *)i64GetHashtable(&local_objects, object_id);
             if (obj != NULL)
             {
-                log("local-pushed\n");
+                log("remote push - local\n");
                 universalUpdateLocalPush(obj, offset, size, data);
-                AnswerPushObject(con, object_id, offset, size);
-                UpdateWaitingPush(object_id, offset, size);
+                AnswerPushObject(con, object_id, offset, size, hash);
+                UpdateWaitingPush(object_id, offset, size, hash);
                 return 1;
             }
-            log("remote-redirected\n");
+            log("remote push - redirect\n");
             
-            /* else - add request to global request hashtable */
-            struct linked_node *new_node = myMalloc(sizeof(*new_node));
-            new_node->local_id = con->local_id;
+            struct set_wait_list_value *new_value = myMalloc(sizeof(*new_value) + 16);
+            new_value->params = (void *)con->local_id;
+            new_value->callback = callbackPushAnswerLocalId;
             
-            lock_write(&push_requests.lock);
-            struct push_object_request key = { object_id, offset, size, NULL, NULL };
-            struct push_object_request *p = (void *)GetHashtableNoLock(&push_requests, (BYTE *)&key, PUSH_HASHING_BYTES, 0);
-            if (p == NULL)
-            {
-                p = myMalloc(sizeof(*p));
-                *p = key;
-                SetHashtableNoLock(&push_requests, (BYTE *)p, PUSH_HASHING_BYTES, (int64_t)p);
-            }
-            /* update p's linked list */
-            struct linked_node *old_head = p->local_ids;
-            do 
-            {
-                new_node->next = old_head;
-            } 
-            while (!atomic_compare_exchange_weak(&p->local_ids, &old_head, new_node));
-            unlock_write(&push_requests.lock);
+            struct set_wait_list_key key = { object_id, offset, size, hash };
+            GetsetInsertTagged(&get_wait_list, &key, new_value);
             
-            /* and forward this push futher */
+            // repeat request, (to 100% find destination hive)
+            RequestObjectGet(object_id, offset, size, NULL);
+            
             // TODO: store data in some place, and repeat call manually after some time
             //       [now this makes server who want this push...]
             RequestObjectSet(object_id, offset, size, data, NULL);
-            
             return 1;
         }
         case API_ANSWER_PUSH_OBJECT:
@@ -969,10 +891,11 @@ static int64_t HandleApiCall(struct hive_connection *con)
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             int64_t offset = *(int64_t *)(ctx->res_buffer+8);
             int64_t size = *(int64_t *)(ctx->res_buffer+16);
+            int64_t hash = *(int64_t *)(ctx->res_buffer+24);
             
             /* for each program in waiting list - continue if this is it's request */
             /* for each waiting local_id - answer */
-            UpdateWaitingPush(object_id, offset, size);
+            UpdateWaitingPush(object_id, offset, size, hash);
             
             return 1;
         }
@@ -981,59 +904,75 @@ static int64_t HandleApiCall(struct hive_connection *con)
             glbStatRemoteInputRequests++;
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             BYTE *broadcast_id = ctx->res_buffer + 8;
-            /* if object is our - send answers */
-            void *obj = (void *)i64GetHashtable(&local_objects, object_id, 0);
+            
+            
+            // is this object local?
+            struct object *obj = (void *)i64GetHashtable(&local_objects, object_id);
             if (obj != NULL)
             {
-                /* send answers */
                 AnswerRequestObjectPath(object_id, 1);
                 return 1;
             }
-            /* else - if broadcast is new, redirect it */
-            lock_write(&known_path_broadcasts.lock);
-            if (GetHashtableNoLock(&known_path_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 0) == 0)
+            
+            // else - if broadcast is new, redirect it, else - ignore
+            if (GetHashtable(&get_path_broadcasts, broadcast_id) == 0)
             {
                 RequestObjectPathBroadcast(object_id, con->local_id);
-                SetHashtableNoLock(&known_path_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 1);
+                
+                // here it is not interesting for us if there was more than one hashtable update.
+                if (SetHashtable(&get_path_broadcasts, broadcast_id, 1, 0) != 0)
+                {
+                    // somebody was already created this path, but this don't change something.
+                }
             }
-            unlock_write(&known_path_broadcasts.lock);
             return 1;
         }
         case API_ANSWER_REQUEST_PATH:
         {
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             int64_t distance = *(int64_t *)(ctx->res_buffer + 8);
-            /* get object - if it is local - don't update anything, and don't send answers */
-            void *loc_obj = (void *)i64GetHashtable(&local_objects, object_id, 0);
-            if (loc_obj != NULL)
+            
+            
+            // get object - if it is local - don't update anything, and don't send answers
+            struct object *obj = (void *)i64GetHashtable(&local_objects, object_id);
+            if (obj != NULL)
             {
                 return 1;
             }
+            
+            
             /* update known objects base */
-            lock_write(&known_objects.lock);
-            struct known_object *obj = (void *)GetHashtableNoLock(&known_objects, (BYTE *)&object_id, 8, 0);
-            if (obj != NULL && obj->distance > distance)
+            while (1)
             {
-                log("UPDATE PATH 1 TO %lld [distance=%lld, local_id=%lld]\n", object_id, distance, con->local_id);
-                obj->local_id = con->local_id;
-                obj->distance = distance;
-                SetHashtableNoLock(&known_objects, (BYTE *)&object_id, 8, (int64_t)obj);
-                unlock_write(&known_objects.lock);
-                AnswerRequestObjectPath(object_id, distance + 1);
-                return 1;
+                struct object_paths_value *path = (void *)i64GetHashtable(&object_paths, object_id);
+                if (path != NULL && path->distance > distance)
+                {
+                    log("UPDATE PATH 1 TO %lld [distance=%lld, local_id=%lld]\n", object_id, distance, con->local_id);
+                    path->local_id = con->local_id;
+                    path->distance = distance;
+                    break;
+                }
+                else if (path == NULL)
+                {
+                    log("UPDATE PATH 2 TO %lld [distance=%lld, local_id=%lld]\n", object_id, distance, con->local_id);
+                    path = myMalloc(sizeof(*path));
+                    path->local_id = con->local_id;
+                    path->distance = distance + 1;
+                    if (i64SetHashtable(&object_paths, object_id, (int64_t)path, 0) != 0)
+                    {
+                        // path to this object was changed
+                        myFree(path);
+                        continue;
+                    }
+                }
+                else
+                {
+                    // this path is bad, ignore it
+                    return 1;
+                }
             }
-            else if (obj == NULL)
-            {
-                log("UPDATE PATH 2 TO %lld [distance=%lld, local_id=%lld]\n", object_id, distance, con->local_id);
-                obj = myMalloc(sizeof(*obj));
-                obj->local_id = con->local_id;
-                obj->distance = distance + 1;
-                SetHashtableNoLock(&known_objects, (BYTE *)&object_id, 8, (int64_t)obj);
-                unlock_write(&known_objects.lock);
-                AnswerRequestObjectPath(object_id, distance + 1);
-                return 1;
-            }
-            unlock_write(&known_objects.lock);
+            
+            AnswerRequestObjectPath(object_id, distance + 1);
             return 1;
         }
         case API_REQUEST_PATH_TO_ID:
@@ -1041,56 +980,69 @@ static int64_t HandleApiCall(struct hive_connection *con)
             glbStatRemoteInputRequests++;
             int64_t global_id = *(int64_t *)(ctx->res_buffer);
             BYTE *broadcast_id = ctx->res_buffer + 8;
-            /* if object is our - send answers */
+            
+            // if this is our server id - answer
             if (global_id == thisServerId)
             {
                 AnswerRequestPathToID(global_id, 1);
                 return 1;
             }
-            /* else - if broadcast is new, redirect it */
-            lock_write(&known_path_id_broadcasts.lock);
-            if (GetHashtableNoLock(&known_path_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 0) == 0)
+            
+            // redirect broadcast if it is new.
+            if (GetHashtable(&get_path_to_id_broadcasts, broadcast_id) == 0)
             {
-                RequestPathToIDBroadcast(global_id, con->local_id);
-                SetHashtableNoLock(&known_path_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, 1);
+                RequestObjectPathBroadcast(global_id, con->local_id);
+                
+                // here it is not interesting for us if there was more than one hashtable update.
+                if (SetHashtable(&get_path_to_id_broadcasts, broadcast_id, 1, 0) != 0)
+                {
+                    // somebody was already created this path, but this don't change something.
+                }
             }
-            unlock_write(&known_path_id_broadcasts.lock);
             return 1;
         }
         case API_ANSWER_REQUEST_PATH_TO_ID:
         {
             int64_t global_id = *(int64_t *)(ctx->res_buffer);
             int64_t distance = *(int64_t *)(ctx->res_buffer + 8);
-            /* get object - if it is local - don't update anything, and don't send answers */
+            
+            // get update of id - if it is ours - don't update anything, and don't send answers
             if (global_id == thisServerId)
             {
                 return 1;
             }
-            /* update known objects base */
-            lock_write(&known_hives.lock);
-            struct known_hive *obj = (void *)GetHashtableNoLock(&known_hives, (BYTE *)&global_id, 8, 0);
-            if (obj != NULL && obj->distance > distance)
+            
+            while (1)
             {
-                log("UPDATE ID PATH 1 TO %lld [distance=%lld, local_id=%lld]\n", global_id, distance, con->local_id);
-                obj->local_id = con->local_id;
-                obj->distance = distance;
-                SetHashtableNoLock(&known_hives, (BYTE *)&global_id, 8, (int64_t)obj);
-                unlock_write(&known_hives.lock);
-                AnswerRequestPathToID(global_id, distance + 1);
-                return 1;
+                struct object_paths_value *path = (void *)i64GetHashtable(&global_id_paths, global_id);
+                if (path != NULL && path->distance > distance)
+                {
+                    log("UPDATE ID PATH 1 TO %lld [distance=%lld, local_id=%lld]\n", global_id, distance, con->local_id);
+                    path->local_id = con->local_id;
+                    path->distance = distance;
+                    break;
+                }
+                else if (path == NULL)
+                {
+                    log("UPDATE ID PATH 2 TO %lld [distance=%lld, local_id=%lld]\n", global_id, distance, con->local_id);
+                    path = myMalloc(sizeof(*path));
+                    path->local_id = con->local_id;
+                    path->distance = distance + 1;
+                    if (i64SetHashtable(&global_id_paths, global_id, (int64_t)path, 0) != 0)
+                    {
+                        // path to this object was changed
+                        myFree(path);
+                        continue;
+                    }
+                }
+                else
+                {
+                    // this path is bad, ignore it
+                    return 1;
+                }
             }
-            else if (obj == NULL)
-            {
-                log("UPDATE ID PATH 2 TO %lld [distance=%lld, local_id=%lld]\n", global_id, distance, con->local_id);
-                obj = myMalloc(sizeof(*obj));
-                obj->local_id = con->local_id;
-                obj->distance = distance + 1;
-                SetHashtableNoLock(&known_hives, (BYTE *)&global_id, 8, (int64_t)obj);
-                unlock_write(&known_hives.lock);
-                AnswerRequestPathToID(global_id, distance + 1);
-                return 1;
-            }
-            unlock_write(&known_hives.lock);
+            
+            AnswerRequestPathToID(global_id, distance + 1);
             return 1;
         }
         case API_CALL_WORKER:
@@ -1297,13 +1249,12 @@ void SendIDConfirm(struct hive_connection *con, BYTE *broadcast_id)
 }
 
 
-int64_t RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t except_this_local_id)
+void RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t except_this_local_id, _Atomic int32_t *send_counter)
 {
     lock_read(&connections_lock);
     BYTE message[8+5+27] = {API_REQUEST_MEM_PAGE, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     memcpy(message + 8,  &page_id, 5);
     memcpy(message + 8+5, broadcast_id, BROADCAST_ID_LENGTH);
-    int64_t send_cnt = 0;
     for (int64_t i = 0; i < connections_len; ++i)
     {
         if (connections[i]->ctx != NULL && connections[i]->local_id != except_this_local_id)
@@ -1312,21 +1263,19 @@ int64_t RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t exce
             lock_write(&connections[i]->lock);
             emitData(connections[i]->outgoing, (char *)message, sizeof(message), 0);
             unlock_write(&connections[i]->lock);
-            send_cnt++;
+            (*send_counter)++;
         }
     }
     unlock_read(&connections_lock);
-    return send_cnt;
 }
 
 
-int64_t RedirectBroadcastIDQuery(int64_t want_id, BYTE *broadcast_id, int64_t except_this_local_id)
+void RedirectBroadcastIDQuery(int64_t want_id, BYTE *broadcast_id, int64_t except_this_local_id, _Atomic int32_t *send_counter)
 {
     lock_read(&connections_lock);
     BYTE message[8+8+27] = {API_REQUEST_ID, 8+27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     memcpy(message + 8,  &want_id, 8);
     memcpy(message + 8+8, broadcast_id, BROADCAST_ID_LENGTH);
-    int64_t send_cnt = 0;
     for (int64_t i = 0; i < connections_len; ++i)
     {
         if (connections[i]->ctx != NULL && connections[i]->local_id != except_this_local_id)
@@ -1335,11 +1284,10 @@ int64_t RedirectBroadcastIDQuery(int64_t want_id, BYTE *broadcast_id, int64_t ex
             lock_write(&connections[i]->lock);
             emitData(connections[i]->outgoing, (char *)message, sizeof(message), 0);
             unlock_write(&connections[i]->lock);
-            send_cnt++;
+            (*send_counter)++;
         }
     }
     unlock_read(&connections_lock);
-    return send_cnt;
 }
 
 
@@ -1357,7 +1305,6 @@ void ConfirmConnection(struct hive_connection *ctx, int64_t reply_id, int64_t po
         log("socket() failed [error=%lld]\n", (int64_t)GetLastError());
         return;
     }
-
     
     if (ctx->address.ss_family == AF_INET) 
     {
@@ -1489,25 +1436,24 @@ void RequestMemoryPage(int64_t page_id)
     BYTE broadcast_id[BROADCAST_ID_LENGTH];
     SECURE_RANDOM(broadcast_id, BROADCAST_ID_LENGTH);
     
-    lock_write(&known_page_broadcasts.lock);
-
     // request page from all neibours
     struct memory_page_request *broadcast = myMalloc(sizeof(*broadcast));
     broadcast->page_id = page_id;
     broadcast->local_redirect_id = -1; // this hive
     broadcast->answered = 0;
     broadcast->requested = 0;
-    SetHashtableNoLock(&known_page_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, (int64_t)broadcast);
+    
+    while (SetHashtable(&get_page_broadcasts, broadcast_id, (int64_t)broadcast, 0) != 0)
+    {
+        // this id is already used - create another one
+        SECURE_RANDOM(broadcast_id, BROADCAST_ID_LENGTH);
+    }
     
     log("Created broadcast with prefix=%llx\n", *(int64_t *)broadcast_id);
 
     // redirect queries
-    broadcast->requested = RedirectBroadcastQuery(page_id, broadcast_id, -1);
-
-    int64_t requested = broadcast->requested;
-    unlock_write(&known_page_broadcasts.lock);
-
-    if (requested == 0)
+    RedirectBroadcastQuery(page_id, broadcast_id, -1, &broadcast->requested);
+    if (broadcast->requested == 0)
     {
         // confirm page alloaction
         ConfirmPage(page_id);
@@ -1522,37 +1468,39 @@ void RequestServerId(int64_t new_id)
     BYTE broadcast_id[BROADCAST_ID_LENGTH];
     SECURE_RANDOM(broadcast_id, BROADCAST_ID_LENGTH);
     
-    lock_write(&known_id_broadcasts.lock);
-
-    struct id_request *broadcast = myMalloc(sizeof(*broadcast));
+    struct get_id_broadcasts_value *broadcast = myMalloc(sizeof(*broadcast));
     broadcast->id = new_id;
     broadcast->local_redirect_id = -1; // this hive
     broadcast->answered = 0;
     broadcast->requested = 0;
-    SetHashtableNoLock(&known_id_broadcasts, broadcast_id, BROADCAST_ID_LENGTH, (int64_t)broadcast);
+    
+    
+    while (SetHashtable(&get_id_broadcasts, broadcast_id, (int64_t)broadcast, 0) != 0)
+    {
+        SECURE_RANDOM(broadcast_id, BROADCAST_ID_LENGTH);
+    }
 
     log("Created broadcast with prefix=%llx\n", *(int64_t *)broadcast_id);
 
     // redirect queries
-    broadcast->requested = RedirectBroadcastIDQuery(new_id, broadcast_id, -1);
-    int64_t requested = broadcast->requested;
-    unlock_write(&known_id_broadcasts.lock);
-    if (requested == 0)
+    RedirectBroadcastIDQuery(new_id, broadcast_id, -1, &broadcast->requested);
+    if (broadcast->requested == 0)
     {
         ConfirmID(new_id);
     }
 }
 
 
-void AnswerPushObject(struct hive_connection *con, int64_t object_id, int64_t offset, int64_t size)
+void AnswerPushObject(struct hive_connection *con, int64_t object_id, int64_t offset, int64_t size, int64_t hash)
 {    
     log("Answer Push Object to localid=%lld [%lld+%lld:%lld]\n", con->local_id, object_id, offset, size);
-    BYTE header[8] = {API_ANSWER_PUSH_OBJECT, 24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    BYTE header[8] = {API_ANSWER_PUSH_OBJECT, 32, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     lock_write(&con->lock);
     emitData(con->outgoing, (char *) header, sizeof(header), 0);
     emitData(con->outgoing, (char *)&object_id, 8, 0);
     emitData(con->outgoing, (char *)&offset, 8, 0);
     emitData(con->outgoing, (char *)&size,   8, 0);
+    emitData(con->outgoing, (char *)&hash,   8, 0);
     unlock_write(&con->lock);
 }
 
@@ -1594,19 +1542,12 @@ void AnswerRequestObjectPath(int64_t object, int64_t distance)
 void RequestObjectPathBroadcast(int64_t object, int64_t except_this_local_id)
 {
     // update known_object structure
-    lock_write(&known_objects.lock);
-    struct known_object *obj = (void *)GetHashtableNoLock(&known_objects, (BYTE *)&object, 8, 0);
-    if (obj == NULL)
-    {
-        obj = myMalloc(sizeof(*obj));
-        obj->distance = INFINITY_DISTANCE;
-        obj->local_id = -1;
-    }
-    else
+    
+    struct object_paths_value *obj = (void *)i64GetHashtable(&object_paths, object);
+    if (obj != NULL)
     {
         obj->distance = INFINITY_DISTANCE;
     }
-    unlock_write(&known_objects.lock);
 
     BYTE broadcast_id[BROADCAST_ID_LENGTH];
     SECURE_RANDOM(broadcast_id, BROADCAST_ID_LENGTH);
@@ -1653,19 +1594,12 @@ void AnswerRequestPathToID(int64_t global_id, int64_t distance)
 void RequestPathToIDBroadcast(int64_t global_id, int64_t except_this_local_id)
 {
     // update known_object structure
-    lock_write(&known_hives.lock);
-    struct known_object *obj = (void *)GetHashtableNoLock(&known_hives, (BYTE *)&global_id, 8, 0);
-    if (obj == NULL)
-    {
-        obj = myMalloc(sizeof(*obj));
-        obj->distance = INFINITY_DISTANCE;
-        obj->local_id = -1;
-    }
-    else
+    
+    struct global_id_paths_value *obj = (void *)i64GetHashtable(&global_id_paths, global_id);
+    if (obj != NULL)
     {
         obj->distance = INFINITY_DISTANCE;
     }
-    unlock_write(&known_hives.lock);
 
     BYTE broadcast_id[BROADCAST_ID_LENGTH];
     SECURE_RANDOM(broadcast_id, BROADCAST_ID_LENGTH);
@@ -1688,16 +1622,16 @@ void RequestPathToIDBroadcast(int64_t global_id, int64_t except_this_local_id)
 }
 
 
-void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiting_worker *worker)
+void RequestObjectGet(int64_t object_id, int64_t offset, int64_t size, struct waiting_worker *worker)
 {
     // find object in object table
-    struct known_object *obj = (void *)GetHashtable(&known_objects, (BYTE *)&object, 8, 0);
+    struct object_paths_value *obj = (void *)i64GetHashtable(&object_paths, object_id);
     if (obj == NULL || obj->local_id == -1)
     {
         // we need to find path
-        log("Sending broadcast to find object=%lld\n", object);
+        log("Sending broadcast to find object=%lld\n", object_id);
         glbStatRemotePathMisses++;
-        RequestObjectPathBroadcast(object, -1);
+        RequestObjectPathBroadcast(object_id, -1);
         // now, we can't resolve request
         return;
     }
@@ -1709,23 +1643,13 @@ void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiti
         struct linked_node *new_node = myMalloc(sizeof(*new_node));
         new_node->local_id = (int64_t)worker;
         
-        lock_write(&query_requests.lock);
-        struct push_object_request key = { object, offset, size, NULL, NULL };
-        struct push_object_request *p = (void *)GetHashtableNoLock(&query_requests, (BYTE *)&key, PUSH_HASHING_BYTES, 0);
-        if (p == NULL)
-        {
-            p = myMalloc(sizeof(*p));
-            *p = key;
-            SetHashtableNoLock(&query_requests, (BYTE *)p, PUSH_HASHING_BYTES, (int64_t)p);
-        }
-        /* update p's linked list */
-        struct linked_node *old_head = p->wait_list;
-        do
-        {
-            new_node->next = old_head;
-        } 
-        while (!atomic_compare_exchange_weak(&p->wait_list, &old_head, new_node));
-        unlock_write(&query_requests.lock);
+        struct get_wait_list_value *new_value = myMalloc(sizeof(*new_value));
+        new_value->params = (void *)worker;
+        new_value->callback = callbackContinueWorkerFromWaitingQuery;
+        
+        struct get_wait_list_key key = { object_id, offset, size };
+        
+        GetsetInsertTagged(&get_wait_list, &key, new_value);
     }
 
     glbStatRemoteOutputRequests++;
@@ -1736,7 +1660,7 @@ void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiti
     BYTE header[8] = {API_QUERY_OBJECT, 24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     lock_write(&connection->lock);
     emitData(connection->outgoing, (char *) header, sizeof(header), 0);
-    emitData(connection->outgoing, (char *)&object, 8, 0);
+    emitData(connection->outgoing, (char *)&object_id, 8, 0);
     emitData(connection->outgoing, (char *)&offset, 8, 0);
     emitData(connection->outgoing, (char *)&size,   8, 0);
     unlock_write(&connection->lock);
@@ -1745,51 +1669,43 @@ void RequestObjectGet(int64_t object, int64_t offset, int64_t size, struct waiti
 void RequestObjectSet(int64_t object_id, int64_t offset, int64_t size, void *data, struct waiting_worker *worker)
 {
     log("request set object=%lld\n", object_id);
+    
+    int64_t hash = GetByteStringHash(data, size);
+    
     // if this is local object - simply set it and answer [to who?]
-    struct object *loc = (void *)i64GetHashtable(&local_objects, object_id, 0);
+    struct object *loc = (void *)i64GetHashtable(&local_objects, object_id);
     if (loc != NULL)
     {
         log("local object - answer\n");
         universalUpdateLocalPush(loc, offset, size, data);
         /* update all local waiting processes */
-        UpdateWaitingPush(object_id, offset, size);
+        UpdateWaitingPush(object_id, offset, size, hash);
         // it was found
         return;
     }
 
-    // add worker as waiting for push
+    // add worker as waiting for push on this path
     if (worker)
     {
         log("Wait hashtable list insert %p worker [write]\n", worker);
+        
         struct linked_node *new_node = myMalloc(sizeof(*new_node));
         new_node->local_id = (int64_t)worker;
         
-        lock_write(&push_requests.lock);
-        struct push_object_request key = { object_id, offset, size, NULL, NULL };
-        struct push_object_request *p = (void *)GetHashtableNoLock(&push_requests, (BYTE *)&key, PUSH_HASHING_BYTES, 0);
-        if (p == NULL)
-        {
-            p = myMalloc(sizeof(*p));
-            *p = key;
-            SetHashtableNoLock(&push_requests, (BYTE *)p, PUSH_HASHING_BYTES, (int64_t)p);
-        }
-        /* update p's linked list */
-        struct linked_node *old_head = p->wait_list;
-        do 
-        {
-            new_node->next = old_head;
-        } 
-        while (!atomic_compare_exchange_weak(&p->wait_list, &old_head, new_node));
-        unlock_write(&push_requests.lock);
+        struct set_wait_list_value *new_value = myMalloc(sizeof(*new_value));
+        new_value->params = (void *)worker;
+        new_value->callback = callbackContinueWorkerFromWaitingPush;
+        
+        struct set_wait_list_key key = { object_id, offset, size, hash };
+        
+        GetsetInsertTagged(&set_wait_list, &key, new_value);
     }
 
     glbStatRemoteOutputRequests++;
     
-    // find object in object table
-    struct known_object *obj = (void *)GetHashtable(&known_objects, (BYTE *)&object_id, 8, 0);
+    struct object_paths_value *obj = (void *)i64GetHashtable(&object_paths, object_id);
     if (obj == NULL || obj->local_id == -1)
     {
-        log("don't know path\n");
         // we need to find path
         log("Sending broadcast to find object=%lld\n", object_id);
         glbStatRemotePathMisses++;

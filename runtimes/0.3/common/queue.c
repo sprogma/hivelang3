@@ -104,7 +104,7 @@ static void scheduler_queue_push_front(struct scheduler_queue *s, int priority, 
     atomic_fetch_add_explicit(&s->size, 1, memory_order_relaxed);
 }
 
-static void scheduler_queue_push(struct scheduler_queue *s, int priority, void *data) 
+void scheduler_queue_push(struct scheduler_queue *s, int priority, void *data) 
 {
     assert(priority >= 0 && priority <= MAX_TASK_PRIORITY);
     assert(data);
@@ -162,6 +162,8 @@ void scheduler_init(struct scheduler *s, size_t workers_len)
 
 void scheduler_enqueue_with_affinity(struct scheduler *s, size_t affinity, int priority, struct queued_worker *wk, size_t worker_id) 
 {
+    (void)worker_id;
+    
     s->len++;
 
     #ifdef ALWAYS_PUSH_FRONT

@@ -19,7 +19,24 @@ void x64ExecuteWorker(struct queued_worker *worker)
         (BYTE *)worker->context
     );
 
-    myFree(worker);
+    struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
+    struct x64_worker_data *wk_data = Workers[lc_data->runningId].data;
+
+    int32_t expect = 0;
+    while (!atomic_compare_exchange_weak(&wk_data->spinlock, &expect, 1))
+    {
+        _mm_pause();
+        expect = 0;
+    }
+
+    void *basebuffer = (BYTE *)worker->rbpValue - 1024;
+    
+    *(void **)basebuffer = wk_data->nextBuffer;
+    wk_data->nextBuffer = basebuffer;
+    
+    atomic_store_explicit(&wk_data->spinlock, 0, memory_order_release);
+        
+    FreeQueuedWorker(worker);
 }
 
 int64_t x64TryStallWorker(thread_t hThread, struct thread_data *lc_data, int64_t runnedTicks)

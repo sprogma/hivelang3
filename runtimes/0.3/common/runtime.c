@@ -61,7 +61,8 @@ _Atomic int64_t wait_list_len = 0;
 
 void RegisterObjectWithId(int64_t id, void *object)
 {
-    i64SetHashtable(&local_objects, id, (int64_t)object);
+    int64_t result = i64SetHashtable(&local_objects, id, (int64_t)object, 0);
+    assert(result == 0);
 }
 
 int64_t GetNewObjectId(int64_t *result)
@@ -155,40 +156,12 @@ void PrintObject(struct object *object_ptr)
 }
 
 
-struct wait_list_node *WaitListNode(struct wait_list_node *node)
-{
-    struct wait_list_node *old_head = atomic_load_explicit(&wait_list, memory_order_acquire);
-    do 
-    {
-        node->next = old_head;
-    } 
-    while (!atomic_compare_exchange_weak(&wait_list, &old_head, node));
-
-    atomic_fetch_add_explicit(&wait_list_len, 1, memory_order_relaxed);
-
-    return node;
-}
-
-struct wait_list_node *WaitListWorker(struct waiting_worker *t)
-{
-    struct wait_list_node *node = myMalloc(sizeof(*node));
-    node->worker = t;
-    log("Worker add to wait list [id=%lld data=%p]\n", t->id, t->data);
-    return WaitListNode(node);
-}
-
-void FreeWaitingWorker(struct waiting_worker *t)
-{
-    assert(Providers[Workers[t->id].provider].FreeWaitingWorker != 0);
-    Providers[Workers[t->id].provider].FreeWaitingWorker(t);
-}
-
 void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
 {
     int64_t old = 0;
     if (atomic_compare_exchange_strong(&w->queued, &old, 1)) // to lock it only once
     {
-        struct queued_worker *t = myMalloc(sizeof(*t));
+        struct queued_worker *t = AllocateQueuedWorker();
         t->id = w->id;
         t->depth = w->depth;
         t->data = w->data;
@@ -206,13 +179,100 @@ void EnqueueWorkerFromWaitList(struct waiting_worker *w, int64_t rdi_value)
     }
 }
 
+int64_t UpdateSingleWorker(int64_t ticks, struct waiting_worker *w)
+{
+    int64_t res = 0;
+    int64_t rdiValue = 0;
+    log("worker [data=%p]: wait for %lld\n", w, w->state);
+    switch (w->state)
+    {
+        // declarations
+        //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@reg\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*12)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t *);"}}|s -u)-join"`n"
+        int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
+        int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
+        int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
+        int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
+        int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
+        int64_t x64NewObjectStates(struct waiting_worker *, int64_t, int64_t *);
+        int64_t x64PushObjectStates(struct waiting_worker *, int64_t, int64_t *);
+        int64_t x64QueryObjectStates(struct waiting_worker *, int64_t, int64_t *);
+        int64_t x64SleepStates(struct waiting_worker *, int64_t, int64_t *);
+        //<<--QuoteEnd-->>
+        // calls
+        //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@reg\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"            case $($_.a):"};"                res = $($n.Name)(w, ticks, &rdiValue); break;"})-join"`n"
+        case WK_STATE_GET_OBJECT_SIZE:
+        case WK_STATE_GET_OBJECT_SIZE_RESULT:
+        case WK_STATE_GET_OBJECT_DATA:
+        case WK_STATE_GET_OBJECT_DATA_RESULT:
+        case WK_STATE_CAST_WAIT_PAGES:
+            res = anyCastStates(w, ticks, &rdiValue); break;
+        case WK_STATE_NEW_OBJECT_WAIT_PAGES_X64:
+            res = x64NewObjectStates(w, ticks, &rdiValue); break;
+        case WK_STATE_PUSH_OBJECT_WAIT_X64:
+            res = x64PushObjectStates(w, ticks, &rdiValue); break;
+        case WK_STATE_QUERY_OBJECT_WAIT_X64:
+            res = x64QueryObjectStates(w, ticks, &rdiValue); break;
+        case WK_STATE_TIMER_WAIT_X64:
+            res = x64SleepStates(w, ticks, &rdiValue); break;
+        //<<--QuoteEnd-->>
+    }
+       
+    if (res)
+    {
+        EnqueueWorkerFromWaitList(w, rdiValue);
+
+        int64_t tmp = atomic_fetch_sub(&w->links, 1);
+        assert(tmp >= 1);
+        if (tmp == 1)
+        {
+            FreeWaitingWorker(w);
+        }
+    }
+
+    return res;
+}
+
+void UpdateWaitingQueryWorkers(int64_t ticks)
+{
+    struct hashtable *h = atomic_load(&get_wait_list);
+    for (int i = 0; i < h->alloc; ++i)
+    {
+        if (h->table[i].key_ptr != NULL)
+        {
+            void *key = h->table[i].key_ptr;
+            
+            int64_t value = TakeTaggedHashtable(&get_wait_list, &key, GETSET_WAIT_LIST_VALUE_PROCESSING_TAG, GETSET_WAIT_LIST_PARALLEL_PROCESSING);
+            struct get_wait_list_value *q = (void *)(value & (~GETSET_WAIT_LIST_VALUE_PROCESSING_TAG));
+            // ! is q is null, no tag will be created
+
+            // now, q is top pointer, and hashtable is tagged
+            if (q != NULL)
+            {
+                if (q->callback == callbackContinueWorkerFromWaitingQuery)
+                {
+                    struct waiting_worker *w = q->params;
+                    UpdateSingleWorker(ticks, w);
+                }
+                // and now, release tag
+                AddHashtable(&get_wait_list, &key, -1);
+            }
+        }
+    }
+}
+
 void UpdateWaitingWorkers()
 {
     int64_t ticks = GetTicks();
     int count = 0;
     const int THRESHOLD = 16 * 1024; 
         
-    log("Update waiting workers\n");
+    // log("Update waiting workers\n");
+
+    // update waiting for requests workers...
+    if ((ticks & 0xFF) < 40)
+    {
+        UpdateWaitingQueryWorkers(ticks);
+    }
     
     // take all workers
     struct wait_list_node *data = NULL;
@@ -223,77 +283,30 @@ void UpdateWaitingWorkers()
     for (struct wait_list_node *curr = data, *nxt = data ? data->next : data; curr; curr = nxt, nxt = nxt ? nxt->next : nxt)
     {
         struct waiting_worker *w = curr->worker;
+
+        count += UpdateSingleWorker(ticks, w);        
         
-        int64_t res = 0;
-        int64_t rdiValue = 0;
-        log("worker [data=%p]: wait for %lld\n", w, w->state);
-        switch (w->state)
+        if (count >= THRESHOLD && nxt) 
         {
-            // declarations
-            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@reg\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"$(" "*12)int64_t $($n.Name)(struct waiting_worker *, int64_t, int64_t *);"}})-join"`n"
-            int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
-            int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
-            int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
-            int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
-            int64_t anyCastStates(struct waiting_worker *, int64_t, int64_t *);
-            int64_t x64NewObjectStates(struct waiting_worker *, int64_t, int64_t *);
-            int64_t x64PushObjectStates(struct waiting_worker *, int64_t, int64_t *);
-            int64_t x64QueryObjectStates(struct waiting_worker *, int64_t, int64_t *);
-            int64_t x64SleepStates(struct waiting_worker *, int64_t, int64_t *);
-            //<<--QuoteEnd-->>
-            // calls
-            //<<--Quote-->> from::(ls *.c -r|sls "^\s*//@reg\s+(\w+)\s+(\w+)$"|% Matches|%{[pscustomobject]@{a=$_.Groups[1];b=$_.Groups[2]}}|group b|%{$n=$_;$_.Group|%{"            case $($_.a):"};"                res = $($n.Name)(w, ticks, &rdiValue); break;"})-join"`n"
-            case WK_STATE_GET_OBJECT_SIZE:
-            case WK_STATE_GET_OBJECT_SIZE_RESULT:
-            case WK_STATE_GET_OBJECT_DATA:
-            case WK_STATE_GET_OBJECT_DATA_RESULT:
-            case WK_STATE_CAST_WAIT_PAGES:
-                res = anyCastStates(w, ticks, &rdiValue); break;
-            case WK_STATE_NEW_OBJECT_WAIT_PAGES_X64:
-                res = x64NewObjectStates(w, ticks, &rdiValue); break;
-            case WK_STATE_PUSH_OBJECT_WAIT_X64:
-                res = x64PushObjectStates(w, ticks, &rdiValue); break;
-            case WK_STATE_QUERY_OBJECT_WAIT_X64:
-                res = x64QueryObjectStates(w, ticks, &rdiValue); break;
-            case WK_STATE_TIMER_WAIT_X64:
-                res = x64SleepStates(w, ticks, &rdiValue); break;
-            //<<--QuoteEnd-->>
+            int64_t cnt = 1;
+            struct wait_list_node *tail = nxt;
+            while (tail->next) { tail = tail->next; cnt++; };
+
+            log("returning %lld workers to wait list\n", cnt);
+
+            struct wait_list_node *old_head = atomic_load(&wait_list);
+            do {
+                tail->next = old_head;
+            } while (!atomic_compare_exchange_weak(&wait_list, &old_head, nxt));
+
+            atomic_fetch_add(&wait_list_len, cnt);
+
+            log("got %lld workers there\n", wait_list_len);
+            
+            return;
         }
-                    
-        myFree(curr);
                 
-        if (res)
-        {
-            EnqueueWorkerFromWaitList(w, rdiValue);
-
-            int64_t tmp = atomic_fetch_sub(&w->links, 1);
-            assert(tmp >= 1);
-            if (tmp == 1)
-            {
-                FreeWaitingWorker(w);
-            }
-
-            if (++count >= THRESHOLD && nxt) 
-            {
-                int64_t cnt = 1;
-                struct wait_list_node *tail = nxt;
-                while (tail->next) { tail = tail->next; cnt++; };
-
-                log("returning %lld workers to wait list\n", cnt);
-
-                struct wait_list_node *old_head = atomic_load(&wait_list);
-                do {
-                    tail->next = old_head;
-                } while (!atomic_compare_exchange_weak(&wait_list, &old_head, nxt));
-
-                atomic_fetch_add(&wait_list_len, cnt);
-
-                log("got %lld workers there\n", wait_list_len);
-                
-                return;
-            }
-
-        }
+        FreeWaitingNode(curr);
     }
 }
 
@@ -646,6 +659,8 @@ void *LoadWorker(BYTE *file, int64_t fileLength, int64_t *res_len, int64_t *Proc
                     *info = (struct x64_worker_data){
                         .start = ptr,
                         .end = ptr + size,
+                        .nextBuffer = NULL,
+                        .spinlock = 0,
                     };
                     Workers[id] = (struct worker_info){PROVIDER_X64, info, tableSize, affinity};
                     log("Worker %lld [x64] have been loaded to %p [offset %llx] with input table of size %lld\n", id, ptr, offset, tableSize);
@@ -1045,7 +1060,7 @@ int main(int argc, char **argv)
     pthread_key_delete(dwTlsIndex);
     #endif
 
-    struct object_promise *p = (void *)i64GetHashtable(&local_objects, resCodeId, 0);
+    struct object_promise *p = (void *)i64GetHashtable(&local_objects, resCodeId);
     if (p == NULL)
     {
         print("Result promise not found on machine\n");

@@ -77,14 +77,11 @@ void SheduleWorker(struct thread_data *lc_data, struct sheduler_instance_info *i
         lc_data->stallable = Providers[Workers[curr->id].provider].stallable;
         lc_data->lastWorkerStart = GetTicks();
         
-        void *frameBase = curr->rbpValue - 1024;
-        \
         Providers[Workers[curr->id].provider].ExecuteWorker(curr);
         lc_data->stallable = 0;
         
         // free current worker
         lc_data->completedTasks++;
-        myFree(frameBase);
     }
     else
     {
@@ -198,7 +195,7 @@ thread_result_t MasterSheduler(void *vparam)
         // if resCodeId is ready - print it and return
         if (!sent)
         {
-            struct object_promise *p = (void *)i64GetHashtable(&local_objects, info->resCodeId, 0);
+            struct object_promise *p = (void *)i64GetHashtable(&local_objects, info->resCodeId);
             if (p != NULL)
             {
                 p = (void *)((BYTE *)p - DATA_OFFSET(*p));

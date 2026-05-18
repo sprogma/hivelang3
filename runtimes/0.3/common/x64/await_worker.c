@@ -11,7 +11,7 @@
 struct waiting_worker *x64PauseWorker(void *returnAddress, void *rbpValue, enum worker_wait_state state, void *state_data)
 {
     /* save context and select next worker */
-    struct waiting_worker *t = myMalloc(sizeof(*t));
+    struct waiting_worker *t = AllocateWaitingWorker();
     log("allocated %p\n", t);
 
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);

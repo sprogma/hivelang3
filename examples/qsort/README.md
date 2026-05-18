@@ -50,7 +50,7 @@ Start-Process "a.exe" -RedirectStandardInput "test.txt" -NoNewWindow -Wait
 
 run hive program: in `runtimes/0.3/win`
 ```
-Start-Process "a.exe" -ArgumentList 'p10000000' -RedirectStandardInput "../../../examples/qsort/test.txt" -NoNewWindow -Wait
+Start-Process "a.exe" -ArgumentList 'p10000000', 'l' -RedirectStandardInput "../../../examples/qsort/test.txt" -NoNewWindow -Wait
 ```
 
 on my machine i have
@@ -67,12 +67,24 @@ Build hive program: in root of project
 
 run hive program: in `runtimes/0.3/win`
 ```
-gc -Raw "../../../examples/qsort/test.txt" | ./a.exe p10000000
+Start-Process "a.exe" -ArgumentList 'p10000000', 'l', 'j8' -RedirectStandardInput "../../../examples/qsort/test.txt" -NoNewWindow -Wait
 ```
 
-and i have 173 ms on my pc (!! THIS includes compying from slow @x64 array to local !!)
+and i have 173 ms.
 
-fully optimized version from clang gives `50ms` - so hive code is only 3 times slower than optimized c! (with copy to local array)
+Here is some table:
+
+j1 = 500ms
+j2 = 400ms
+j4 = 300ms
+j8 = 200ms
+j16 = 173ms
+
+fully optimized version from clang gives `70ms` - so hive code is only 3 times slower than optimized c!
+
+
+The main problem of this test, is that my functions doesn't have any stack, so they allocated large amount of memory on each
+call (may be I will add arena allocator later)
 
 
 ## Conclusion

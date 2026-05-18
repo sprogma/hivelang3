@@ -29,15 +29,38 @@ void x64CallObject(int64_t moditifer, BYTE *args, int64_t workerId, int64_t _, v
 
 void x64StartNewLocalWorker(int64_t workerId, BYTE *inputTable)
 {
-    // TODO: remove 2048 body size constant
+    struct x64_worker_data *wk_data = Workers[workerId].data;
+
     int64_t tableSize = Workers[workerId].inputSize;
-    void *data = myMalloc(1024 + 2048);
+    void *data;
+
+    int32_t expect = 0;
+    while (!atomic_compare_exchange_weak(&wk_data->spinlock, &expect, 1))
+    {
+        _mm_pause();
+        expect = 0;
+    }
+    
+    if (wk_data->nextBuffer != NULL)
+    {
+        data = wk_data->nextBuffer;
+        wk_data->nextBuffer = *(void **)wk_data->nextBuffer;
+        
+        atomic_store_explicit(&wk_data->spinlock, 0, memory_order_release);    
+    }
+    else
+    {
+        atomic_store_explicit(&wk_data->spinlock, 0, memory_order_release);
+        
+        // TODO: remove 2048 body size constant
+        data = myMalloc(1024 + 2048);
+    }
+
     memcpy(data + 1024 - tableSize, inputTable, tableSize);
 
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
-    struct x64_worker_data *wk_data = Workers[workerId].data;
     
-    struct queued_worker *t = myMalloc(sizeof(*t));
+    struct queued_worker *t = AllocateQueuedWorker();
     t->id = workerId;
     t->depth = lc_data ? lc_data->runningDepth : 0; // (lc_data ? lc_data->runningDepth + 1 : 0);
     t->data = wk_data->start;

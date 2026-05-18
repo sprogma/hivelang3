@@ -47,7 +47,8 @@ int64_t x64Sleep(int64_t time, int64_t _1, int64_t _2, int64_t _3, void *returnA
     *query = (struct wait_timer){
         .endTime = SheduleTimeoutFromNow(time*1000),
     };
-    universalPauseWorker(returnAddress, rbpValue, WK_STATE_TIMER_WAIT_X64, query);
+    struct waiting_worker *w = universalPauseWorker(returnAddress, rbpValue, WK_STATE_TIMER_WAIT_X64, query);
+    WaitListWorker(w);
     struct thread_data* lc_data = TlsGetValue(dwTlsIndex);
     longjmpUN(&lc_data->ShedulerBuffer, 1);
 }
