@@ -45,7 +45,7 @@ struct particle
     particles <- new particle[]@loc(512);
     particles_len <- 0;
     
-    ?(0, new i16[]@loc"Hello client!", new i16[]@loc"Hello!", 0x40)MessageBox@dll(*);
+    # ?(0, new i16[]@loc"Hello client!", new i16[]@loc"Hello!", 0x40)MessageBox@dll(*);
     
     (0)GetModuleHandle@dll(var hInstance);
 
@@ -158,8 +158,8 @@ struct particle
     i16[]@loc text;
     text <- new i16[]@loc"Text!";
 
-    # ?(new i16[]@loc"open \"C:\\Windows\\Media\\onestop.mid\" type sequencer alias music", 0, 0, 0)mciSendString@dll(*);
-    # ?(new i16[]@loc"play music", 0, 0, 0)mciSendString@dll(*);
+    ?(new i16[]@loc"open \"C:\\Windows\\Media\\onestop.mid\" type sequencer alias music", 0, 0, 0)mciSendString@dll(*);
+    ?(new i16[]@loc"play music", 0, 0, 0)mciSendString@dll(*);
     
     player@loc[]@loc locPlayers;
     locPlayers <- new player@loc[]@loc(?players);
@@ -396,8 +396,8 @@ struct particle
         sleep 16;
     }
 
-    # ?(new i16[]@loc"stop music", 0, 0, 0)mciSendString@dll(*);
-    # ?(new i16[]@loc"close music", 0, 0, 0)mciSendString@dll(*);
+    ?(new i16[]@loc"stop music", 0, 0, 0)mciSendString@dll(*);
+    ?(new i16[]@loc"close music", 0, 0, 0)mciSendString@dll(*);
 
     # TODO: update this part
     # SelectObject(allocator, oldFont);
