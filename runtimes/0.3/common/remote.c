@@ -1991,7 +1991,7 @@ void start_remote_subsystem(int64_t noStdin)
 
     log("sleeping\n");
 
-    // Sleep(1000);
+    Sleep(1000);
     
     DumpConnections();
 

@@ -1,6 +1,7 @@
 param(
     [switch]$Release,
-    [switch]$Debugger
+    [switch]$Debugger,
+    [int]$J
 )
 
 if ($Debugger)
@@ -8,8 +9,8 @@ if ($Debugger)
     $exe = "cmd"
     if ($Release)
     {
-        $ag = "/k", "type `@ & lldb a.exe -o ""process launch -i @ -- c j1"""
-        $agMain = "/k", "type `@ & lldb a.exe -o ""process launch -i @ -- j1"""
+        $ag = "/k", "type `@ & lldb a.exe -o ""process launch -i @ -- c j$J"""
+        $agMain = "/k", "type `@ & lldb a.exe -o ""process launch -i @ -- j$J"""
     }
     else
     {
@@ -22,8 +23,8 @@ else
     $exe = "cmd"
     if ($Release)
     {
-        $ag = "/k", "type `@ & type `@ | a.exe c j1 p1000"
-        $agMain = "/k", "type `@ & type `@ | a.exe j1 p1000"
+        $ag = "/k", "type `@ & type `@ | a.exe c j$J"
+        $agMain = "/k", "type `@ & type `@ | a.exe j$J"
     }
     else
     {

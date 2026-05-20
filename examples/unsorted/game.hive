@@ -37,15 +37,15 @@ struct particle
 
 (i32 rect_size, player[] players, player me, i32[] endProc, rect[] map, i32 mapW, i32 mapH)Graphics(i32? res)
 {
+    res <- 0;
+    
     # local particles
     particle[]@loc particles;
     i32 particles_len;
     particles <- new particle[]@loc(512);
     particles_len <- 0;
-
-    res <- 0;
     
-    # ?(0, new i16[]@loc"Hello client!", new i16[]@loc"Hello!", 0x40)MessageBox@dll(*);
+    ?(0, new i16[]@loc"Hello client!", new i16[]@loc"Hello!", 0x40)MessageBox@dll(*);
     
     (0)GetModuleHandle@dll(var hInstance);
 
@@ -467,7 +467,7 @@ struct particle
     endProcB[0] <- 0;
 
     ?(rect_size, players, players[0], endProcA, map, mapW, mapH)Graphics[on:local](*);
-    ?(rect_size, players, players[1], endProcB, map, mapW, mapH)Graphics[on:local](*);
+    ?(rect_size, players, players[1], endProcB, map, mapW, mapH)Graphics[on:remote](*);
 
     while endProcA[0] = 0 && endProcB[0] = 0
     {
