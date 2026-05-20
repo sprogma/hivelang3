@@ -842,8 +842,7 @@ int main(int argc, char **argv)
     init_lib();
     if (init_gpu_subsystem())
     {
-        print("Gpu sussystem initialization failed\n");
-        return 1;
+        print("WARING: Gpu sussystem initialization failed\n");
     }
 
     #ifdef _WIN32

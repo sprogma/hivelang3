@@ -20,6 +20,7 @@
 #endif
 
 #include "stdatomic.h"
+#include "immintrin.h"
 
 #include "state.h"
 #include "runtime_lib.h"

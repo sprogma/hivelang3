@@ -7,6 +7,7 @@
 #include "../runtime.h"
 
 #include "x64.h"
+#include "immintrin.h"
 
 __attribute__((sysv_abi))
 void x64CallObject(int64_t moditifer, BYTE *args, int64_t workerId, int64_t _, void *returnAddress, void *rbpValue)
