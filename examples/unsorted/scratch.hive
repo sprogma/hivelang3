@@ -1,34 +1,49 @@
 @x64
 
 
-class point
+[noinline:true]
+()print1(i32? res)
 {
-    i32 x;
+    i64 handle;
+    handle <- ?(-11)GetStdHandle@dll(*); # get stdout handle
+    i16[] msg;
+    msg <- new i16[]"Hello Remote World!\n"; # create message
+    res <- ?(handle, msg, `i32`?msg, `i64`0, `i64`0)WriteConsole@dll(*); # print it
 }
 
 [noinline:true]
-(i64 tmp)f(i32? res)
+()print2(i32? res)
 {
-    res <- 1;
-}
-
-[noinline:true]
-(point x)g(i32? res)
-{
-    x?x <- 10;
-    res <- 1 + ?(1)f[on:remote](*);
+    i64 handle;
+    handle <- ?(-11)GetStdHandle@dll(*); # get stdout handle
+    i16[] msg;
+    msg <- new i16[]"Hello Local World!\n"; # create message
+    res <- ?(handle, msg, `i32`?msg, `i64`0, `i64`0)WriteConsole@dll(*); # print it
 }
 
 [export:yes]
 [entry:yes]
 (i64[] input)main(i32? res) 
 {
-    point ptr;
-    ptr <- new point();
-    ptr?x <- 1;
-    i32 tmp;
-    tmp <- (?(0)f[on:local](*)) + (?(ptr)g[on:remote](*));
-    res <- tmp + ptr?x;
+    while -1
+    {
+        ?()print1[on:remote](*);
+        ?()print2[on:local](*);
+        sleep 1000;
+    }
 }
-    
+
+[dllimport:kernel32.dll]
+[dllimport.entry:GetStdHandle]
+(i32 nStdHandle)GetStdHandle(i64? hHandle);
+
+[dllimport:kernel32.dll]
+[dllimport.entry:WriteConsoleW]
+(
+    i64     hConsoleOutput,
+    i16[]   lpBuffer,
+    i32     nNumberOfCharsToWrite,
+    i32?    lpNumberOfCharsWritten,
+    i64     lpReserved
+)WriteConsole(i32? result);
 

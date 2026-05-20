@@ -85,7 +85,7 @@ void SheduleWorker(struct thread_data *lc_data, struct sheduler_instance_info *i
     }
     else
     {
-        log("-- No queued workers\n");
+        // log("-- No queued workers\n");
         // if there is no tasks - try to find some new tasks
         UpdateWaitingWorkers(0);
     }

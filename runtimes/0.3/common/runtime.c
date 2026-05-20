@@ -183,7 +183,7 @@ int64_t UpdateSingleWorker(int64_t ticks, struct waiting_worker *w)
 {
     int64_t res = 0;
     int64_t rdiValue = 0;
-    log("worker [data=%p]: wait for %lld\n", w, w->state);
+    // log("worker [data=%p]: wait for %lld\n", w, w->state);
     switch (w->state)
     {
         // declarations
@@ -308,23 +308,23 @@ void UpdateWaitingWorkers(int full_scan)
     int count = 0;
     const int THRESHOLD = 16 * 1024; 
         
-    log("Update waiting workers\n");
+    // log("Update waiting workers\n");
 
     // update waiting for requests workers...
     if (full_scan)
     {
         if ((ticks & 0xFF) < 30)
         {
-            log("start A\n");
+            // log("start A\n");
             UpdateWaitingQueryWorkers(ticks);
         }
         if (((ticks + 179) & 0xFF) < 30)
         {
-            log("start B\n");
+            // log("start B\n");
             UpdateWaitingPushWorkers(ticks);
         }
         
-        log("2/3 completed\n");
+        // log("2/3 completed\n");
     }
     
     // take all workers
@@ -362,12 +362,13 @@ void UpdateWaitingWorkers(int full_scan)
         FreeWaitingNode(curr);
     }
     
-    log("3/3 completed.\n");
+    // log("3/3 completed.\n");
 }
 
 void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)
 {
     /* if we are running too many tasks - redirect new worker to another hive */
+    log("Run worker %lld on requested = %lld\n", workerId, global_id);
     int64_t rnd = 0;
     SECURE_RANDOM(&rnd, 8);
     rnd = myAbs(rnd);

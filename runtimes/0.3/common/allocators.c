@@ -123,7 +123,7 @@ struct wait_list_node *WaitListWorker(struct waiting_worker *t)
         node = myMalloc(sizeof(*node));
     }
     node->worker = t;
-    log("Worker add to wait list [id=%lld data=%p]\n", t->id, t->data);
+    // log("Worker add to wait list [id=%lld data=%p]\n", t->id, t->data);
     return WaitListNode(node);
 }
 

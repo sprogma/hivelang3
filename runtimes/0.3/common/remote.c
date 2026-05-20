@@ -596,7 +596,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
             log("Got API_REQUEST_ID\n");
             int64_t want_id = *(int64_t *)ctx->res_buffer;
             BYTE *broadcast_id = ctx->res_buffer + 8;
-            log("API_REQUEST_ID page=%lld [prefix=%llx]\n", want_id, *(int64_t *)broadcast_id);
+            log("API_REQUEST_ID id=%lld [prefix=%llx]\n", want_id, *(int64_t *)broadcast_id);
             // check - is id used [or we want to use this id]
             if (thisServerId == want_id)
             {
@@ -1275,7 +1275,7 @@ void SendPageAllocationConfirm(struct hive_connection *con, BYTE *broadcast_id)
 
 void SendIDConfirm(struct hive_connection *con, BYTE *broadcast_id)
 {
-    log("Send confirmation of page allocation to local_id=%lld\n", con->local_id);
+    log("Send confirmation of id allocation to local_id=%lld\n", con->local_id);
     BYTE message[8+27] = {API_ANSWER_REQUEST_ID, BROADCAST_ID_LENGTH, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     memcpy(message + 8, broadcast_id, BROADCAST_ID_LENGTH);
     lock_write(&con->lock);
