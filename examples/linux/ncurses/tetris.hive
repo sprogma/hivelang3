@@ -382,7 +382,8 @@ class randomengine
 [export:true]
 (i64[] input)main(i32? result)
 {
-
+    ?(new i8[]"yes | xargs -n 1 sh -c 'command -v paplay >/dev/null 2>&1 && paplay \"../../../examples/linux/ncurses/kbk.wav\" || aplay \"../../../examples/linux/ncurses/kbk.wav\"' &")system@dll(*);
+    
     i64 handle;
     i32 game_width, game_height;
     i32 key, timer, timer_step;
@@ -569,7 +570,10 @@ class randomengine
         ?(handle)wrefresh@dll(*);
         sleep 80;
     }
+    
     ?()endwin@dll(*);
+
+    ?(new i8[]"killall xargs paplay aplay 2>/dev/null")system@dll(*);
 
     ?(new i8[]"Final score: %d pts.\n", f?score)printd@dll(*);
     
@@ -716,3 +720,6 @@ class randomengine
 [dllimport:libc.so]
 [dllimport.entry:printf]
 (i8[] format, i32 value)printd(u32? res);
+
+[dllimport:libc.so]
+(i8[] command)system(u32? res);
