@@ -417,7 +417,6 @@ static inline int64_t hashtable_take_tagged(struct hashtable *h, const void *key
                 }
                 int64_t res_val = actual->value & (~mask);
                 if (res_val == 0) return 0; // if there is NULL, don't increment tag
-                if ((actual->value & mask) + 1 != 1) ExitProcess(57);
                 union hashtable_node_128 update_node = {{actual->key_ptr, (actual->value & mask) + 1}}; // set to NULL pointer
                 if (atomic_compare_exchange_strong(&node->t, &expected, update_node.t))
                 {
@@ -564,7 +563,6 @@ int64_t hashtable_add(struct hashtable *h, const void *key, int64_t delta)
             {
                 node_value.t = old_value;
                 node_value.value += delta;
-                if ((node_value.value & 0xF) != 0) ExitProcess(179);
             } 
             while (!atomic_compare_exchange_weak(&node->t, &old_value, node_value.t));
 
