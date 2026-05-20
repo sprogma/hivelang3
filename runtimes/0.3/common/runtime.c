@@ -270,7 +270,6 @@ void UpdateWaitingQueryWorkers(int64_t ticks)
 void UpdateWaitingPushWorkers(int64_t ticks)
 {
     struct hashtable *h = atomic_load(&set_wait_list);
-    Sleep(50);
     while (h)
     {
         for (int i = 0; i < h->alloc; ++i)
@@ -303,7 +302,7 @@ void UpdateWaitingPushWorkers(int64_t ticks)
     }
 }
 
-void UpdateWaitingWorkers()
+void UpdateWaitingWorkers(int full_scan)
 {
     int64_t ticks = GetTicks();
     int count = 0;
@@ -312,18 +311,21 @@ void UpdateWaitingWorkers()
     log("Update waiting workers\n");
 
     // update waiting for requests workers...
-    if ((ticks & 0xFF) < 30)
+    if (full_scan)
     {
-        log("start A\n");
-        UpdateWaitingQueryWorkers(ticks);
+        if ((ticks & 0xFF) < 30)
+        {
+            log("start A\n");
+            UpdateWaitingQueryWorkers(ticks);
+        }
+        if (((ticks + 179) & 0xFF) < 30)
+        {
+            log("start B\n");
+            UpdateWaitingPushWorkers(ticks);
+        }
+        
+        log("2/3 completed\n");
     }
-    if (((ticks + 179) & 0xFF) < 30)
-    {
-        log("start B\n");
-        UpdateWaitingPushWorkers(ticks);
-    }
-    
-    log("2/3 completed\n");
     
     // take all workers
     struct wait_list_node *data = NULL;

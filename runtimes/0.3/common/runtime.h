@@ -214,7 +214,7 @@ struct queued_worker*scheduler_dequeue(struct scheduler *s, size_t worker_id);
 
 
 
-void UpdateWaitingWorkers();
+void UpdateWaitingWorkers(int full_scan);
 void RegisterObjectWithId(int64_t id, void *object);
 int64_t GetNewObjectId(int64_t *result);
 void UpdateFromQueryResult(void *destination, int64_t object_id, int64_t offset, int64_t size, BYTE *result_data, int64_t *rdiValue);

@@ -162,7 +162,7 @@ void x64PushObject(int64_t object_id, void *source, int64_t offset, int64_t size
         if (((BYTE *)obj)[-1] == OBJECT_PROMISE)
         {
             int64_t abssize = myAbs(size);
-            UpdateWaitingQuery(object_id, offset, abssize, source);
+            UpdateWaitingQuery(object_id, offset, abssize, (size < 0 ? &source : source));
         }
     }
 }

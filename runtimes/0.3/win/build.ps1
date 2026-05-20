@@ -12,7 +12,7 @@ if ($Sanitize)
 $dbgLF = , "-Wl,/debug"
 $rlsLF = ,"-flto", "-fuse-ld=lld"
 $rlsFF = ,"-fno-unwind-tables", "-fno-asynchronous-unwind-tables"
-$rlsDef = , "-DNDEBUG"
+$rlsDef = @()
 $dbgDef = , "-D_DEBUG"
 $files = @(ls -r *.c) + @(ls ../common/*.c -r)
 $h = @(ls -r *.h) + @(ls ../common/*.h -r)
@@ -29,6 +29,7 @@ if ($Fast)
 {
     $rlsFF += @("-O3", "-mavx2")
     $rlsLF += @("-O3", "-mavx2")
+    $rlsDef += ,"-DNDEBUG"
 }
 
 $jobs += Start-ThreadJob {   

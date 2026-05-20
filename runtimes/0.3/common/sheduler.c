@@ -28,8 +28,8 @@ thread_result_t WaitListUpdateWorker(void *data)
     volatile int *waitForExit = data;
     while (!waitForExit)
     {
-        UpdateWaitingWorkers();
-        Sleep(100);
+        UpdateWaitingWorkers(1);
+        Sleep(50);
     }
     return 0;
 }
@@ -86,9 +86,8 @@ void SheduleWorker(struct thread_data *lc_data, struct sheduler_instance_info *i
     else
     {
         log("-- No queued workers\n");
-        Sleep(10);
         // if there is no tasks - try to find some new tasks
-        UpdateWaitingWorkers();
+        UpdateWaitingWorkers(0);
     }
 }
 
@@ -188,7 +187,7 @@ thread_result_t MasterSheduler(void *vparam)
                 int64_t rpmiss = atomic_exchange(&glbStatRemotePathMisses, 0);
                 int64_t roreq = atomic_exchange(&glbStatRemoteOutputRequests, 0);
                 int64_t rireq = atomic_exchange(&glbStatRemoteInputRequests, 0);
-                print(" %5lld | %5lld | %6lld | %5lld | %5lld |\n", wait_list_len, glb_scheduler.len, rpmiss, roreq, rireq);
+                print(" %5lld | %5lld | %6lld | %5lld | %5lld | <- %lld\n", wait_list_len, glb_scheduler.len, rpmiss, roreq, rireq, get_wait_list->len);
                 prevPrint = now;
             }
         }

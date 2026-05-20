@@ -355,7 +355,8 @@ void GetsetInsertTagged(struct hashtable * _Atomic *table, void *key, void *new_
         int64_t value = GetHashtable(table, key);
         int64_t tag = value & GETSET_WAIT_LIST_VALUE_PROCESSING_TAG;
         *(void **)new_node = (void *)(value & (~GETSET_WAIT_LIST_VALUE_PROCESSING_TAG)); // set next pointer, and remove tag from it
-        int64_t tagged_new_node = tag + (int64_t)new_node;
+        assert(((int64_t)new_node & 0xF) == 0);
+        int64_t tagged_new_node = tag | (int64_t)new_node;
         if (SetHashtable(table, key, tagged_new_node, value) == value)
         {
             // node updated, tag copied.
@@ -1990,7 +1991,7 @@ void start_remote_subsystem(int64_t noStdin)
 
     log("sleeping\n");
 
-    Sleep(1000);
+    // Sleep(1000);
     
     DumpConnections();
 

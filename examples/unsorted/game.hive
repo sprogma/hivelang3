@@ -35,7 +35,7 @@ struct particle
 }
 
 
-(i32 rect_size, player[] players, player me, rect[] map, i32 mapW, i32 mapH)Graphics(i32? endProc)
+(i32 rect_size, player[] players, player me, i32[] endProc, rect[] map, i32 mapW, i32 mapH)Graphics(i32? res)
 {
     # local particles
     particle[]@loc particles;
@@ -43,7 +43,7 @@ struct particle
     particles <- new particle[]@loc(512);
     particles_len <- 0;
 
-    endProc <- 0;
+    res <- 0;
     
     # ?(0, new i16[]@loc"Hello client!", new i16[]@loc"Hello!", 0x40)MessageBox@dll(*);
     
@@ -412,7 +412,7 @@ struct particle
 
     # DestroyWindow(hwnd);
 
-    endProc <- 1;
+    endProc[0] <- 1;
 }
 
 
@@ -459,10 +459,17 @@ struct particle
         i <- i + 1;
     }
 
-    ?(rect_size, players, players[0], map, mapW, mapH)Graphics[on:local](*);
-    ?(rect_size, players, players[1], map, mapW, mapH)Graphics[on:local](*);
+    i32[] endProcA, endProcB;
+    endProcA <- new i32[](1);
+    endProcB <- new i32[](1);
 
-    while 1 # ?endProc = 0
+    endProcA[0] <- 0;
+    endProcB[0] <- 0;
+
+    ?(rect_size, players, players[0], endProcA, map, mapW, mapH)Graphics[on:local](*);
+    ?(rect_size, players, players[1], endProcB, map, mapW, mapH)Graphics[on:local](*);
+
+    while endProcA[0] = 0 && endProcB[0] = 0
     {
         i <- 0;
         while i < `i32`?players

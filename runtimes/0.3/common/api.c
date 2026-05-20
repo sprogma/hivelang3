@@ -385,6 +385,7 @@ static inline int64_t hashtable_raw_update(struct hashtable *h, const void *key,
     return 0;
 }
 
+static int64_t hashtable_get(struct hashtable *h, const void *key);
 
 static inline int64_t hashtable_take_tagged(struct hashtable *h, const void *key, int64_t mask, int64_t compareto)
 {    
@@ -416,6 +417,7 @@ static inline int64_t hashtable_take_tagged(struct hashtable *h, const void *key
                 }
                 int64_t res_val = actual->value & (~mask);
                 if (res_val == 0) return 0; // if there is NULL, don't increment tag
+                if ((actual->value & mask) + 1 != 1) ExitProcess(57);
                 union hashtable_node_128 update_node = {{actual->key_ptr, (actual->value & mask) + 1}}; // set to NULL pointer
                 if (atomic_compare_exchange_strong(&node->t, &expected, update_node.t))
                 {
@@ -467,28 +469,26 @@ static inline int64_t hashtable_take_tagged(struct hashtable *h, const void *key
 
     if (h->prev) 
     {
-        int64_t val = hashtable_take_tagged(h->prev, key, mask, compareto);
-        if (val != 0) 
+        // copy to this layer?
+        int64_t val = hashtable_get(h->prev, key);
+        if (val != 0)
         {
             int64_t res = hashtable_raw_update(h, key, val, 0);
             if (res != 0)
             {
-                print("Error: TODO - handle this race condition in hashtable\n");
-                #ifdef _WIN32
-                ExitProcess(1);
-                #else
-                exit(1);
-                #endif
+                // was copied by someone else - ok
             }
+            // repeat call, now, key will be 100% found
+            return hashtable_take_tagged(h, key, mask, compareto);
         }
-        return val;
+        return 0;
     }
 
     return 0;
 }
 
 
-int64_t hashtable_get(struct hashtable *h, const void *key)
+static int64_t hashtable_get(struct hashtable *h, const void *key)
 {
     int64_t alloc = h->alloc;
     int64_t key_len = h->key_size;
@@ -564,6 +564,7 @@ int64_t hashtable_add(struct hashtable *h, const void *key, int64_t delta)
             {
                 node_value.t = old_value;
                 node_value.value += delta;
+                if ((node_value.value & 0xF) != 0) ExitProcess(179);
             } 
             while (!atomic_compare_exchange_weak(&node->t, &old_value, node_value.t));
 
@@ -595,10 +596,14 @@ int64_t hashtable_add(struct hashtable *h, const void *key, int64_t delta)
         int64_t val = hashtable_get(h->prev, key);
         if (val != 0) 
         {
-            int64_t res = hashtable_raw_update(h, key, val, 0);
-            if (res != 0) return res; 
+            int64_t res = hashtable_raw_update(h, key, val + delta, 0);
+            if (res != 0)
+            {
+                return hashtable_add(h, key, delta);
+            }
+            return val + delta;
         }
-        return val;
+        return 0;
     }
 
     return 0;
@@ -629,7 +634,7 @@ int64_t SetHashtable(struct hashtable * _Atomic *ph, void *key, int64_t new_valu
     struct hashtable *h = atomic_load(ph);
     int64_t result = hashtable_raw_update(h, key, new_value, old_value);
     
-    if (result == 0 && old_value == 0 && atomic_load(&h->len) > h->alloc / 4) 
+    if (result == 0 && old_value == 0 && atomic_load(&h->len) > h->alloc / 4)
     {
         int64_t expected = 0;
         if (atomic_compare_exchange_strong(&h->updating, &expected, 1)) 
