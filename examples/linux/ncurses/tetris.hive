@@ -573,7 +573,7 @@ class randomengine
     
     ?()endwin@dll(*);
 
-    ?(new i8[]"killall xargs paplay aplay 2>/dev/null")system@dll(*);
+    ?(new i8[]"killall yes xargs paplay aplay 2>/dev/null")system@dll(*);
 
     ?(new i8[]"Final score: %d pts.\n", f?score)printd@dll(*);
     
