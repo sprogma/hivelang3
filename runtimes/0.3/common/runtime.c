@@ -235,28 +235,71 @@ int64_t UpdateSingleWorker(int64_t ticks, struct waiting_worker *w)
 void UpdateWaitingQueryWorkers(int64_t ticks)
 {
     struct hashtable *h = atomic_load(&get_wait_list);
-    for (int i = 0; i < h->alloc; ++i)
+    while (h)
     {
-        if (h->table[i].key_ptr != NULL)
+        for (int i = 0; i < h->alloc; ++i)
         {
-            void *key = h->table[i].key_ptr;
-            
-            int64_t value = TakeTaggedHashtable(&get_wait_list, &key, GETSET_WAIT_LIST_VALUE_PROCESSING_TAG, GETSET_WAIT_LIST_PARALLEL_PROCESSING);
-            struct get_wait_list_value *q = (void *)(value & (~GETSET_WAIT_LIST_VALUE_PROCESSING_TAG));
-            // ! is q is null, no tag will be created
-
-            // now, q is top pointer, and hashtable is tagged
-            if (q != NULL)
+            if (h->table[i].key_ptr != NULL)
             {
-                if (q->callback == callbackContinueWorkerFromWaitingQuery)
+                log("looping... [i=%lld/%lld]", (int64_t)i, h->alloc);
+                log("taking...");
+                int64_t value = TakeTaggedHashtable(&get_wait_list, h->table[i].key_ptr, GETSET_WAIT_LIST_VALUE_PROCESSING_TAG, GETSET_WAIT_LIST_PARALLEL_PROCESSING);
+                log("done.");
+                struct get_wait_list_value *q = (void *)value;
+                // ! is q is null, no tag will be created
+
+                // now, q is top pointer, and hashtable is tagged
+                if (q != NULL)
                 {
-                    struct waiting_worker *w = q->params;
-                    UpdateSingleWorker(ticks, w);
+                    log("Upadting waiting query worker...\n");
+                    if (q->callback == callbackContinueWorkerFromWaitingQuery)
+                    {
+                        struct waiting_worker *w = q->params;
+                        UpdateSingleWorker(ticks, w);
+                    }
+                    // and now, release tag
+                    AddHashtable(&get_wait_list, h->table[i].key_ptr, -1);
+                    log("released.");
                 }
-                // and now, release tag
-                AddHashtable(&get_wait_list, &key, -1);
             }
         }
+        h = h->prev;
+    }
+}
+
+void UpdateWaitingPushWorkers(int64_t ticks)
+{
+    struct hashtable *h = atomic_load(&set_wait_list);
+    Sleep(50);
+    while (h)
+    {
+        for (int i = 0; i < h->alloc; ++i)
+        {
+            if (h->table[i].key_ptr != NULL)
+            {
+                log("looping... [i=%lld/%lld]", (int64_t)i, h->alloc);
+                log("taking...", (int64_t)i, h->alloc);
+                int64_t value = TakeTaggedHashtable(&set_wait_list, h->table[i].key_ptr, GETSET_WAIT_LIST_VALUE_PROCESSING_TAG, GETSET_WAIT_LIST_PARALLEL_PROCESSING);
+                log("done.");
+                struct set_wait_list_value *q = (void *)value;
+                // ! is q is null, no tag will be created
+
+                // now, q is top pointer, and hashtable is tagged
+                if (q != NULL)
+                {
+                    log("Upadting waiting push worker...\n");
+                    if (q->callback == callbackContinueWorkerFromWaitingPush)
+                    {
+                        struct waiting_worker *w = q->params;
+                        UpdateSingleWorker(ticks, w);
+                    }
+                    // and now, release tag
+                    AddHashtable(&set_wait_list, h->table[i].key_ptr, -1);
+                    log("released.");
+                }
+            }
+        }
+        h = h->prev;
     }
 }
 
@@ -266,13 +309,21 @@ void UpdateWaitingWorkers()
     int count = 0;
     const int THRESHOLD = 16 * 1024; 
         
-    // log("Update waiting workers\n");
+    log("Update waiting workers\n");
 
     // update waiting for requests workers...
-    if ((ticks & 0xFF) < 40)
+    if ((ticks & 0xFF) < 30)
     {
+        log("start A\n");
         UpdateWaitingQueryWorkers(ticks);
     }
+    if (((ticks + 179) & 0xFF) < 30)
+    {
+        log("start B\n");
+        UpdateWaitingPushWorkers(ticks);
+    }
+    
+    log("2/3 completed\n");
     
     // take all workers
     struct wait_list_node *data = NULL;
@@ -308,6 +359,8 @@ void UpdateWaitingWorkers()
                 
         FreeWaitingNode(curr);
     }
+    
+    log("3/3 completed.\n");
 }
 
 void StartNewWorker(int64_t workerId, int64_t global_id, BYTE *inputTable)

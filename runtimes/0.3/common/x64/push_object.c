@@ -58,7 +58,16 @@ int64_t x64OnPushObject(struct waiting_worker *w, int64_t object, int64_t offset
             myFree(info);
             return 1;
         }
-        WaitListWorker(w);
+
+        // return object to linked list
+        struct set_wait_list_key key = { info->object_id, info->offset, myAbs(info->size), info->hash };
+
+        struct set_wait_list_value *new_value = myMalloc(sizeof(*new_value));
+        new_value->params = (void *)w;
+        new_value->callback = callbackContinueWorkerFromWaitingPush;
+
+        GetsetInsertTagged(&set_wait_list, &key, new_value);
+        
         return 0;
         
     }
@@ -82,6 +91,17 @@ int64_t x64PushObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *rd
             {
                 RequestObjectSet(info->object_id, info->offset, myAbs(info->size), info->data, w);
                 info->repeat_timeout = SheduleTimeoutFromNow(PUSH_REPEAT_TIMEOUT);
+            }
+            else
+            {
+                // return object to linked list
+                struct set_wait_list_key key = { info->object_id, info->offset, myAbs(info->size), info->hash };
+
+                struct set_wait_list_value *new_value = myMalloc(sizeof(*new_value));
+                new_value->params = (void *)w;
+                new_value->callback = callbackContinueWorkerFromWaitingPush;
+                
+                GetsetInsertTagged(&set_wait_list, &key, new_value);
             }
             return 0;
         }

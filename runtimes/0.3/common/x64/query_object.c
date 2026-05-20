@@ -55,7 +55,16 @@ int64_t x64OnQueryObject(struct waiting_worker *w, int64_t object, int64_t offse
             myFree(info);
             return 1;
         }
-        WaitListWorker(w);        
+
+        // return object to linked list
+        struct get_wait_list_key key = { info->object_id, info->offset, myAbs(info->size) };
+
+        struct get_wait_list_value *new_value = myMalloc(sizeof(*new_value));
+        new_value->params = (void *)w;
+        new_value->callback = callbackContinueWorkerFromWaitingQuery;
+
+        GetsetInsertTagged(&get_wait_list, &key, new_value);
+        
         return 0;
     }
         
@@ -82,6 +91,17 @@ int64_t x64QueryObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *r
                 RequestObjectGet(info->object_id, info->offset, myAbs(info->size), w);
                 info->repeat_timeout = SheduleTimeoutFromNow(QUERY_REPEAT_TIMEOUT);
             }
+            else
+            {        
+                // return object to linked list
+                struct get_wait_list_key key = { info->object_id, info->offset, myAbs(info->size) };
+
+                struct get_wait_list_value *new_value = myMalloc(sizeof(*new_value));
+                new_value->params = (void *)w;
+                new_value->callback = callbackContinueWorkerFromWaitingQuery;
+
+                GetsetInsertTagged(&get_wait_list, &key, new_value);
+            }
             return 0;
         }
         else
@@ -91,7 +111,15 @@ int64_t x64QueryObjectStates(struct waiting_worker *w, int64_t ticks, int64_t *r
                 myFree(info);
                 return 1;
             }
-            WaitListWorker(w);
+            
+            // return object to linked list
+            struct get_wait_list_key key = { info->object_id, info->offset, myAbs(info->size) };
+
+            struct get_wait_list_value *new_value = myMalloc(sizeof(*new_value));
+            new_value->params = (void *)w;
+            new_value->callback = callbackContinueWorkerFromWaitingQuery;
+
+            GetsetInsertTagged(&get_wait_list, &key, new_value);
         }
         return 0;
         

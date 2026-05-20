@@ -356,9 +356,10 @@ void GetsetInsertTagged(struct hashtable * _Atomic *table, void *key, void *new_
         int64_t tag = value & GETSET_WAIT_LIST_VALUE_PROCESSING_TAG;
         *(void **)new_node = (void *)(value & (~GETSET_WAIT_LIST_VALUE_PROCESSING_TAG)); // set next pointer, and remove tag from it
         int64_t tagged_new_node = tag + (int64_t)new_node;
-        if (SetHashtable(&get_wait_list, key, tagged_new_node, value) == value)
+        if (SetHashtable(table, key, tagged_new_node, value) == value)
         {
             // node updated, tag copied.
+            log("Tagged insertion completed [h=%p], new length = %lld\n", (*table), (*table)->len);
             return;
         }
     }
@@ -382,7 +383,7 @@ void UpdateWaitingQuery(int64_t object_id, int64_t offset, int64_t size, BYTE *d
     struct get_wait_list_key key = { object_id, offset, size };
     
     int64_t value = TakeTaggedHashtable(&get_wait_list, &key, GETSET_WAIT_LIST_VALUE_PROCESSING_TAG, GETSET_WAIT_LIST_PARALLEL_PROCESSING);
-    struct get_wait_list_value *q = (void *)(value & (~GETSET_WAIT_LIST_VALUE_PROCESSING_TAG));
+    struct get_wait_list_value *q = (void *)value;
     // ! is q is null, no tag will be created
 
     // now, q is top pointer, and hashtable is tagged
@@ -415,7 +416,7 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size, int64_t 
     struct set_wait_list_key key = { object_id, offset, size, hash };
 
     int64_t value = TakeTaggedHashtable(&set_wait_list, &key, GETSET_WAIT_LIST_VALUE_PROCESSING_TAG, GETSET_WAIT_LIST_PARALLEL_PROCESSING);
-    struct set_wait_list_value *q = (void *)(value & (~GETSET_WAIT_LIST_VALUE_PROCESSING_TAG));
+    struct set_wait_list_value *q = (void *)value;
     // ! is q is null, no tag will be created
     
     // now, q is top pointer, and hashtable is tagged
@@ -423,7 +424,7 @@ void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size, int64_t 
     {
         UpdateWaitingPushList(object_id, offset, size, hash, q);
         // and now, release tag
-        AddHashtable(&get_wait_list, &key, -1);
+        AddHashtable(&set_wait_list, &key, -1);
     }
     return;
 }
@@ -554,17 +555,19 @@ static int64_t HandleApiCall(struct hive_connection *con)
     {
         case API_REQUEST_CONNECTION:
         {
+            log("Got API_REQUEST_CONNECTION\n");
             // simply reply to same host
             int64_t reply_id = *(int64_t *)ctx->res_buffer;
             int64_t port = *(int64_t *)(ctx->res_buffer + 8);
             ConfirmConnection(con, reply_id, port);
-            log("API_REQUEST_CONNECTION answered\n");
+            log("--< api request connection answered\n");
             return 1;
         }
         case API_ANSWER_REQUEST_CONNECTION:
         {
+            log("Got API_ANSWER_REQUEST_CONNECTION\n");
             int64_t local_id = *(int64_t *)ctx->res_buffer;
-            log("API_ANSWER_REQUEST_CONNECTION updating using local_id=%lld\n", local_id);
+            log("--< updating using local_id=%lld\n", local_id);
             
             // update that id
             lock_write(&connections_lock);
@@ -589,6 +592,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_REQUEST_ID:
         {
+            log("Got API_REQUEST_ID\n");
             int64_t want_id = *(int64_t *)ctx->res_buffer;
             BYTE *broadcast_id = ctx->res_buffer + 8;
             log("API_REQUEST_ID page=%lld [prefix=%llx]\n", want_id, *(int64_t *)broadcast_id);
@@ -622,6 +626,13 @@ static int64_t HandleApiCall(struct hive_connection *con)
                 {
                     // all is good, broadcast created, redirect it and end processing
                     RedirectBroadcastIDQuery(want_id, broadcast_id, con->local_id, &broadcast->requested);
+                    
+                    if (broadcast->requested == 0)
+                    {
+                        log("Confirm id becouze zero hives requested\n");
+                        SendIDConfirm(con, broadcast_id);
+                    }
+                    
                     return 1;
                 }
                 
@@ -657,6 +668,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_ANSWER_REQUEST_ID:
         {
+            log("Got API_ANSWER_REQUEST_ID\n");
             BYTE *broadcast_id = ctx->res_buffer;
             // get broadcast
             log("Get broadcast answer [prefix=%llx]\n", *(int64_t *)broadcast_id);
@@ -696,12 +708,13 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_REQUEST_MEM_PAGE:
         {
+            log("Got API_REQUEST_MEM_PAGE\n");
             glbStatRemoteInputRequests++;
             int64_t page_id;
             memcpy(&page_id, ctx->res_buffer, 5);
             BYTE *broadcast_id = ctx->res_buffer + 5;
             
-            log("API_REQUEST_MEM_PAGE page=%lld [prefix=%llx]\n", page_id, *(int64_t *)broadcast_id);
+            log("got API_REQUEST_MEM_PAGE page=%lld [prefix=%llx]\n", page_id, *(int64_t *)broadcast_id);
             // check - is page used?
             lock_read(&pages_lock);
             for (int64_t i = 0; i < pages_len; ++i)
@@ -738,8 +751,15 @@ static int64_t HandleApiCall(struct hive_connection *con)
                 broadcast->requested = 0;
                 if (SetHashtable(&get_id_broadcasts, broadcast_id, (int64_t)broadcast, 0) == 0)
                 {
+                    log("Redirecting answers on this request\n");
                     // all is good, broadcast created, redirect it and end processing
                     RedirectBroadcastQuery(page_id, broadcast_id, con->local_id, &broadcast->requested);
+
+                    if (broadcast->requested == 0)
+                    {
+                        log("Confirm page from zero requests.\n");
+                        SendPageAllocationConfirm(con, broadcast_id);
+                    }
                     return 1;
                 }
                 
@@ -766,6 +786,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
             // is broadcast accepted by all neibours?
             if (answered == requested)
             {
+                log("Got answers, confirm allocation.\n");
                 SendPageAllocationConfirm(con, broadcast_id);
                 return 1;
             }
@@ -775,6 +796,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_ANSWER_REQUEST_MEM_PAGE:
         {
+            log("Got API_ANSWER_REQUEST_MEM_PAGE\n");
             BYTE *broadcast_id = ctx->res_buffer;
             // get broadcast
             log("Get page broadcast answer [prefix=%llx]\n", *(int64_t *)broadcast_id);
@@ -813,6 +835,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_QUERY_OBJECT:
         {
+            log("Got API_QUERY_OBJECT\n");
             glbStatRemoteInputRequests++;
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             int64_t offset = *(int64_t *)(ctx->res_buffer+8);
@@ -840,6 +863,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_ANSWER_QUERY_OBJECT:
         {
+            log("Got API_ANSWER_QUERY_OBJECT\n");
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             int64_t query_offset = *(int64_t *)(ctx->res_buffer+8);
             int64_t query_size = *(int64_t *)(ctx->res_buffer+16);
@@ -851,6 +875,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_PUSH_OBJECT:
         {
+            log("Got API_PUSH_OBJECT\n");
             glbStatRemoteInputRequests++;
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             int64_t offset = *(int64_t *)(ctx->res_buffer+8);
@@ -888,10 +913,12 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_ANSWER_PUSH_OBJECT:
         {
+            log("Got API_ANSWER_PUSH_OBJECT\n");
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             int64_t offset = *(int64_t *)(ctx->res_buffer+8);
             int64_t size = *(int64_t *)(ctx->res_buffer+16);
             int64_t hash = *(int64_t *)(ctx->res_buffer+24);
+
             
             /* for each program in waiting list - continue if this is it's request */
             /* for each waiting local_id - answer */
@@ -901,6 +928,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_REQUEST_PATH:
         {
+            log("Got API_REQUEST_PATH\n");
             glbStatRemoteInputRequests++;
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             BYTE *broadcast_id = ctx->res_buffer + 8;
@@ -929,6 +957,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_ANSWER_REQUEST_PATH:
         {
+            log("Got API_ANSWER_REQUEST_PATH\n");
             int64_t object_id = *(int64_t *)(ctx->res_buffer);
             int64_t distance = *(int64_t *)(ctx->res_buffer + 8);
             
@@ -964,6 +993,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
                         myFree(path);
                         continue;
                     }
+                    break;
                 }
                 else
                 {
@@ -977,6 +1007,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_REQUEST_PATH_TO_ID:
         {
+            log("Got API_REQUEST_PATH_TO_ID\n");
             glbStatRemoteInputRequests++;
             int64_t global_id = *(int64_t *)(ctx->res_buffer);
             BYTE *broadcast_id = ctx->res_buffer + 8;
@@ -1003,6 +1034,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_ANSWER_REQUEST_PATH_TO_ID:
         {
+            log("Got API_ANSWER_REQUEST_PATH_TO_ID\n");
             int64_t global_id = *(int64_t *)(ctx->res_buffer);
             int64_t distance = *(int64_t *)(ctx->res_buffer + 8);
             
@@ -1047,6 +1079,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_CALL_WORKER:
         {
+            log("Got API_CALL_WORKER\n");
             glbStatRemoteInputRequests++;
             int64_t worker_id = *(int64_t *)(ctx->res_buffer+0);
             int64_t global_id = *(int64_t *)(ctx->res_buffer+8);
@@ -1063,6 +1096,7 @@ static int64_t HandleApiCall(struct hive_connection *con)
         }
         case API_GET_HIVE_STATE:
         {
+            log("Got API_GET_HIVE_STATE\n");
             int64_t it_wait_list_len = *(int64_t *)(ctx->res_buffer);
             int64_t it_queue_len = *(int64_t *)(ctx->res_buffer + 8);
             int64_t it_idle_time = *(int64_t *)(ctx->res_buffer + 16);
@@ -1257,6 +1291,7 @@ void RedirectBroadcastQuery(int64_t page_id, BYTE *broadcast_id, int64_t except_
     memcpy(message + 8+5, broadcast_id, BROADCAST_ID_LENGTH);
     for (int64_t i = 0; i < connections_len; ++i)
     {
+        log("Check connection %lld, but %p %lld=?=%lld\n", i, connections[i]->ctx, connections[i]->local_id, except_this_local_id);
         if (connections[i]->ctx != NULL && connections[i]->local_id != except_this_local_id)
         {
             log("Redirecting page query to local_id=%lld\n", connections[i]->local_id);
@@ -1507,7 +1542,7 @@ void AnswerPushObject(struct hive_connection *con, int64_t object_id, int64_t of
 void AnswerQueryObject(struct hive_connection *con, void *shifted_buffer, int64_t object_id, int64_t offset, int64_t size)
 {    
     log("Answer Query Object to localid=%lld [%lld+%lld:%lld]\n", con->local_id, object_id, offset, size);
-    BYTE header[8] = {API_ANSWER_QUERY_OBJECT, 24+size, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    BYTE header[8] = {API_ANSWER_QUERY_OBJECT, 24+size, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // TODO: fix large queries
     lock_write(&con->lock);
     emitData(con->outgoing, (char *) header, sizeof(header), 0);
     emitData(con->outgoing, (char *)&object_id, 8, 0);
@@ -1624,18 +1659,6 @@ void RequestPathToIDBroadcast(int64_t global_id, int64_t except_this_local_id)
 
 void RequestObjectGet(int64_t object_id, int64_t offset, int64_t size, struct waiting_worker *worker)
 {
-    // find object in object table
-    struct object_paths_value *obj = (void *)i64GetHashtable(&object_paths, object_id);
-    if (obj == NULL || obj->local_id == -1)
-    {
-        // we need to find path
-        log("Sending broadcast to find object=%lld\n", object_id);
-        glbStatRemotePathMisses++;
-        RequestObjectPathBroadcast(object_id, -1);
-        // now, we can't resolve request
-        return;
-    }
-
     // add worker as waiting for request
     if (worker)
     {
@@ -1650,6 +1673,18 @@ void RequestObjectGet(int64_t object_id, int64_t offset, int64_t size, struct wa
         struct get_wait_list_key key = { object_id, offset, size };
         
         GetsetInsertTagged(&get_wait_list, &key, new_value);
+    }
+
+    // find object in object table
+    struct object_paths_value *obj = (void *)i64GetHashtable(&object_paths, object_id);
+    if (obj == NULL || obj->local_id == -1)
+    {
+        // we need to find path
+        log("Sending broadcast to find object=%lld\n", object_id);
+        glbStatRemotePathMisses++;
+        RequestObjectPathBroadcast(object_id, -1);
+        // now, we can't resolve request
+        return;
     }
 
     glbStatRemoteOutputRequests++;

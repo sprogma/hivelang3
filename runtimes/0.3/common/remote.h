@@ -120,8 +120,8 @@ struct known_hive
 /// hash tables for callbacks on object set/get
 //
 #define GETSET_WAIT_LIST_VALUE_PROCESSING_TAG 0xF
-// [not more than data aligment - so use 8 bits on tagging and ~14 workers]
-#define GETSET_WAIT_LIST_PARALLEL_PROCESSING 14
+// [not more than data aligment - so use 8 bits on tagging and 1 worker can update results at one time]
+#define GETSET_WAIT_LIST_PARALLEL_PROCESSING 1
 
 struct get_wait_list_key
 {
@@ -310,6 +310,8 @@ void start_remote_subsystem(int64_t noStdin);
 
 void UpdateWaitingQuery(int64_t object_id, int64_t offset, int64_t size, BYTE *data);
 void UpdateWaitingPush(int64_t object_id, int64_t offset, int64_t size, int64_t hash);
+
+void GetsetInsertTagged(struct hashtable * _Atomic *table, void *key, void *new_node);
 
 void SendPageAllocationConfirm(struct hive_connection *con, BYTE *broadcast_id);
 void SendIDConfirm(struct hive_connection *con, BYTE *broadcast_id);

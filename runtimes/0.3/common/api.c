@@ -408,56 +408,18 @@ static inline int64_t hashtable_take_tagged(struct hashtable *h, const void *key
             // want to swap X with X+1 if X < compareto, so use:
             while (1)
             {
-                if ((actual->value & mask) > compareto)
+                if ((actual->value & mask) >= compareto) // wait while tag will be ok
                 {
                     _mm_pause();
                     expected = atomic_load(&node->t);
                     continue;
                 }
-                union hashtable_node_128 update_node = {{actual->key_ptr, actual->value + 1}};
+                int64_t res_val = actual->value & (~mask);
+                if (res_val == 0) return 0; // if there is NULL, don't increment tag
+                union hashtable_node_128 update_node = {{actual->key_ptr, (actual->value & mask) + 1}}; // set to NULL pointer
                 if (atomic_compare_exchange_strong(&node->t, &expected, update_node.t))
                 {
-                    return actual->value;
-                }
-            }
-        }
-        hash = (hash + 1 == (uint64_t)alloc ? 0 : hash + 1);
-    }
-
-    // now, try to create new item this this key
-    
-    void *allocated_key = hashtable_alloc_key_space(h);
-    memcpy(allocated_key, key, key_len);
-    union hashtable_node_128 new_node = {{0, 0}};
-
-    while (1)
-    {
-        uint64_t idx = hash;
-        unsigned __int128 expected = 0;
-        union hashtable_node_128 *node = (void *)&h->table[idx];
-
-        if (atomic_compare_exchange_strong(&node->t, &expected, new_node.t))
-        {
-            return 0;
-        }
-        else
-        {
-            union hashtable_node_128 *actual = (union hashtable_node_128 *)&expected;
-            if (actual->key_ptr != NULL && memcmp(actual->key_ptr, key, key_len) == 0)
-            {
-                while (1)
-                {
-                    if ((actual->value & mask) > compareto)
-                    {
-                        _mm_pause();
-                        expected = atomic_load(&node->t);
-                        continue;
-                    }
-                    union hashtable_node_128 update_node = {{actual->key_ptr, actual->value + 1}};
-                    if (atomic_compare_exchange_strong(&node->t, &expected, update_node.t))
-                    {
-                        return actual->value;
-                    }
+                    return res_val;
                 }
             }
         }
@@ -466,43 +428,62 @@ static inline int64_t hashtable_take_tagged(struct hashtable *h, const void *key
 #else
     while (1)
     {
-        uint64_t idx = hash;
-        struct hashtable_node *node = &h->table[idx];
-        int64_t expected = STATE_FREE;
+        struct hashtable_node *node = &h->table[hash];
+        int64_t state = atomic_load(&node->state);
 
-        if (atomic_compare_exchange_strong(&node->state, &expected, STATE_FREE)) 
+        if (state == STATE_FREE) break;
+        
+        while (atomic_load(&node->state) == STATE_BUSY)
         {
-            return 0;
+            _mm_pause();
         }
-        else
+
+        void *actual_key_ptr = atomic_load(&node->key_ptr);
+        if (actual_key_ptr != NULL && memcmp(actual_key_ptr, key, key_len) == 0)
         {
-            if (expected == STATE_BUSY)
+            int64_t expected_val = atomic_load(&node->value), new_value;
+            while (1)
             {
-                while (atomic_load(&node->state) == STATE_BUSY) _mm_pause();
-            }
-            void *actual_key_ptr = atomic_load(&node->key_ptr);
-            if (actual_key_ptr != NULL && memcmp(actual_key_ptr, key, key_len) == 0)
-            {
-                int64_t expected_val = atomic_load(&node->value), new_value;
-                while (1)
+                if ((expected_val & mask) >= compareto) // wait while tag will be ok
                 {
-                    if ((expected_val & mask) > compareto)
-                    {
-                        _mm_pause();
-                        expected_val = atomic_load(&node->value);
-                        continue;
-                    }
-                    new_value = expected_val + 1;
-                    if (atomic_compare_exchange_strong(&node->value, &expected_val, new_value))
-                    {
-                        return expected_val;
-                    }                    
+                    _mm_pause();
+                    expected_val = atomic_load(&node->value);
+                    continue;
                 }
+                int64_t res_val = expected_val & (~mask);
+                if (res_val == 0) return 0; // if there is NULL, don't increment tag
+                new_value = (expected_val & mask) + 1; // set to NULL pointer
+                if (atomic_compare_exchange_strong(&node->value, &expected_val, new_value))
+                {
+                    return res_val;
+                }                    
             }
         }
+        
         hash = (hash + 1 == (uint64_t)alloc ? 0 : hash + 1);
     }
 #endif
+
+
+    if (h->prev) 
+    {
+        int64_t val = hashtable_take_tagged(h->prev, key, mask, compareto);
+        if (val != 0) 
+        {
+            int64_t res = hashtable_raw_update(h, key, val, 0);
+            if (res != 0)
+            {
+                print("Error: TODO - handle this race condition in hashtable\n");
+                #ifdef _WIN32
+                ExitProcess(1);
+                #else
+                exit(1);
+                #endif
+            }
+        }
+        return val;
+    }
+
     return 0;
 }
 
